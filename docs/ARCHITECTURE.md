@@ -1,0 +1,102 @@
+# Architecture
+
+## Components
+
+### Express API
+
+`server.js` is now a small composition/compatibility entrypoint. It creates the app, starts the local listener, and re-exports the helpers used by tests and Electron. The actual server implementation lives under `src/server/`:
+
+- `app.js`: Express app factory and middleware/route registration;
+- `config.js`: process-env derived configuration, paths, and ID patterns;
+- `middleware/security.js`: security headers, origin checks, CORS policy, and optional extension-token enforcement;
+- `routes/`: route-level HTTP wiring for health, active-session, folders, sessions/messages/search, and trash;
+- `services/`: session orchestration, search, export formatting, and summary formatting;
+- `storage/`: JSON-file reads/writes, atomic writes, file locks, folder/state/session queries;
+- `validation.js`, `ids.js`, and `errors.js`: shared validation, ID/date helpers, and error handling.
+
+The API exposes endpoints for folders, sessions, messages, trash, search, export, and active-session state.
+
+Current hardening includes:
+
+- loopback host binding by default;
+- trusted-origin checks before CORS;
+- optional extension token via `LOCAL_CHAT_AUTH_TOKEN`;
+- route ID validation;
+- atomic JSON writes;
+- per-file write locks around read-modify-write operations;
+- idempotency keys for extension auto-save messages.
+
+### Web UI
+
+`public/` is a vanilla JavaScript single-page UI served by Express. It is intentionally dependency-light and uses the same API as the extension. The old monolithic `public/app.js` has been replaced by native ES modules under `public/app/` and a single browser entrypoint:
+
+- `main.mjs`: small browser bootstrap/composition root;
+- `api.mjs`: fetch wrapper and API error handling;
+- `state.mjs`: initial state, DOM element lookup, formatting helpers, and sender-name helpers;
+- `render.mjs`: folder/session/trash/message rendering and sidebar state;
+- `export.mjs`: chat export text and continuation-context wrapping;
+- `modals.mjs`: edit-message and text-prompt modal state;
+- `clipboard.mjs`: copy helpers, selected-message Markdown extraction, and full-chat copy;
+- `controllers.mjs`: small controller composition root;
+- `controllers/sessions.mjs`: session open/create/rename/pin/trash/restore workflows;
+- `controllers/folders.mjs`: folder create/rename/delete/select and trash-section toggle behavior;
+- `controllers/messages.mjs`: message create/edit/delete and edit-modal coordination;
+- `controllers/active-session.mjs`: local/extension active-session persistence and external sync;
+- `events.mjs`: event delegation and keyboard wiring;
+- `markdown.mjs`: escaping, URL sanitization, tables, lists, code blocks, and inline formatting.
+
+`public/index.html` loads only `<script type="module" src="./app/main.mjs"></script>`, so browser execution no longer depends on global `window.LocalChat*` script ordering.
+
+### Browser extension
+
+The extension is split into:
+
+- `background.js`: local API calls, extension storage, and message routing;
+- `providers/*.js`: provider-specific host matching, turn selectors, content selectors, and sender/container preferences;
+- `content-providers.js`: provider adapter registry used by Node tests and the browser runtime;
+- `content-dom.js`: shared DOM/extraction orchestration used by tests and the runtime;
+- `content-message-save.js`: selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message-container filtering for manual/autosave extraction;
+- `content-autosave.js`: autosave state, assistant-readiness tracking, idempotency-key generation, prompt-capture scheduling, and outgoing/assistant save dedupe;
+- `content-sidebar.js`: local sidebar replacement, provider-sidebar hiding/restoration, folder/session rendering, refresh, and session-selection behavior;
+- `content-composer.js`: composer detection, transcript insertion, pasted-text attachment fallbacks, Load past conversations modal/search behavior, and top active-folder controls;
+- `content-runtime.js`: local-app availability checks, auto-save toggle state/UI, Save local button target selection/injection, and content-script runtime scheduling;
+- `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, and runtime modules together;
+- `popup.*`: local API URL and optional token configuration.
+
+The content-script runtime remains the largest maintenance risk because provider UIs change often. Reduced DOM fixtures cover provider extraction and Save local injection behavior. Provider-specific selectors and sender/container preferences now live in `providers/*.js`, `content-dom.js` keeps shared extraction and markdown conversion testable, `content-message-save.js` isolates clipboard/manual extraction behavior, `content-autosave.js` isolates autosave timing/dedupe state, `content-sidebar.js` isolates local sidebar replacement, `content-composer.js` isolates composer loading plus modal/search behavior, and `content-runtime.js` isolates app availability, auto-send toggle coordination, and Save local injection from the bootstrap coordinator.
+
+### Electron shell
+
+`electron/main.js` starts the same Express server on `127.0.0.1`, stores user data in Electron's app data directory, and opens the local UI in a sandboxed BrowserWindow.
+
+## Storage layout
+
+```text
+data/
+  app-state.json
+  folders.json
+  YYYY-MM-DD/
+    chat_<timestamp>_<random>.json
+  trash/
+    chat_<timestamp>_<random>.json
+```
+
+The format is intentionally inspectable and portable. Every chat file contains metadata and a `messages` array.
+
+## Recommended next refactor
+
+The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
+
+The next architecture improvement should be to add stricter quality gates around the public portfolio repo: ESLint/Prettier, mutation-resistant fixture snapshots for provider DOM changes, and a small Playwright or browser-runner smoke test against a live local server. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
+
+The current test suite covers server API/storage behavior, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
+
+## Quality gates
+
+The repo now has public-portfolio quality gates:
+
+- ESLint flat config in `eslint.config.mjs` for Node, browser, WebExtension, CommonJS, and native ES module files.
+- Prettier config in `.prettierrc.json` with `.prettierignore` for generated/runtime artifacts.
+- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, and the Playwright smoke test.
+- `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium.
+- CI installs Chromium with Playwright before running `npm run verify`.

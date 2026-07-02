@@ -1,0 +1,60 @@
+# API Overview
+
+All endpoints are served from the local Express server.
+
+## Health
+
+`GET /api/health`
+
+Returns `{ ok: true, authRequired: boolean }`.
+
+## Active session
+
+- `GET /api/active-session`
+- `PUT /api/active-session` with `{ "sessionId": "chat_..." }`
+- `DELETE /api/active-session`
+
+The browser extension uses this to determine where manual saves should go when no explicit target session is supplied.
+
+## Sessions
+
+- `GET /api/sessions`
+- `POST /api/sessions`
+- `GET /api/sessions/:sessionId`
+- `PATCH /api/sessions/:sessionId`
+- `DELETE /api/sessions/:sessionId`
+- `GET /api/sessions/:sessionId/export`
+- `PATCH /api/sessions/:sessionId/pin`
+
+## Messages
+
+- `POST /api/sessions/:sessionId/messages`
+- `PATCH /api/sessions/:sessionId/messages/:messageId`
+- `DELETE /api/sessions/:sessionId/messages/:messageId`
+
+`POST /messages` accepts an optional `Idempotency-Key` header or `idempotencyKey` body field. When the same key is seen again for the same session, the existing message is returned instead of appending a duplicate.
+
+## Folders
+
+- `GET /api/folders`
+- `POST /api/folders`
+- `PATCH /api/folders/:folderId`
+- `DELETE /api/folders/:folderId`
+
+## Search and recent chats
+
+- `GET /api/recent-chats?limit=100`
+- `GET /api/search-chats?q=query&limit=100`
+
+## Trash
+
+- `GET /api/trash`
+- `POST /api/trash/:sessionId/restore`
+- `DELETE /api/trash/:sessionId`
+
+## Validation and consistency notes
+
+- Route IDs must match the generated `chat_...`, `msg_...`, or `folder_...` formats. Invalid IDs return `400` before any file path is touched.
+- `pinnedFolderId` is optional, but when provided it must refer to an existing folder. Missing folders return `404`.
+- Message bodies require non-empty `text`.
+- Search and recent endpoints clamp large `limit` values to keep local requests bounded.
