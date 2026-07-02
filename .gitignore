@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+release/
+
+# Local runtime data and secrets
+data/
+.env
+.env.*
+*.log
+
+# OS/editor artifacts
+.DS_Store
+__MACOSX/
+.vscode/
+.idea/
+
+# Test/runtime temp files
+coverage/
+.tmp/

@@ -1,0 +1,88 @@
+{
+  "name": "local-chat-app",
+  "version": "1.0.0",
+  "description": "Local-first desktop chat archive with browser-extension capture for AI chat apps.",
+  "author": {
+    "name": "Dusan Rajcevic",
+    "email": "dusanrajcevic@hotmail.com",
+    "url": "https://github.com/dusanrajcevic"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "dev:desktop": "electron .",
+    "build:desktop": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "check:syntax": "node scripts/check-syntax.js",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "verify": "npm run lint && npm run format:check && npm run check:syntax && npm test && npm run test:smoke",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:smoke": "node --test e2e/playwright-smoke.mjs"
+  },
+  "keywords": [
+    "local-first",
+    "chat-archive",
+    "electron",
+    "browser-extension"
+  ],
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.4"
+  },
+  "build": {
+    "appId": "com.localchat.app",
+    "productName": "Local Chat App",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "server.js",
+      "public/**/*",
+      "browser-extension/**/*",
+      "electron/**/*",
+      "build/**/*",
+      "package.json",
+      "README.md",
+      "DESKTOP_BUILD.md",
+      "LICENSE",
+      "src/server/**/*",
+      "scripts/check-syntax.js"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    }
+  }
+}
