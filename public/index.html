@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Chat App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="appShell" class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">✦</div>
+          <div>
+            <h1>Local Chat</h1>
+            <p>JSON archive</p>
+          </div>
+        </div>
+
+        <button id="newChatBtn" class="primary-btn">+ New session</button>
+        <button id="newFolderBtn" class="ghost-btn">+ Create folder</button>
+
+        <div class="sidebar-section folder-section">
+          <div class="section-title">Folders</div>
+          <div id="folderList" class="list"></div>
+        </div>
+
+        <div class="sidebar-section grow">
+          <div class="section-title">Conversations</div>
+          <div id="sessionList" class="list"></div>
+        </div>
+
+        <div class="sidebar-section trash-section">
+          <button id="toggleTrashBtn" class="ghost-btn full">Trash</button>
+          <div id="trashList" class="list hidden"></div>
+        </div>
+      </aside>
+
+      <main class="chat-panel">
+        <header class="chat-header">
+          <div class="title-row">
+            <button
+              id="sidebarToggleBtn"
+              class="sidebar-toggle"
+              type="button"
+              aria-label="Hide sidebar"
+              aria-expanded="true"
+            >
+              ←
+            </button>
+            <div class="title-group">
+              <p id="chatEyebrow" class="eyebrow">Current session</p>
+              <h2 id="chatTitle">No session selected</h2>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="renameBotBtn" class="ghost-btn compact" disabled>Set AI name</button>
+            <button id="renameSessionBtn" class="ghost-btn compact" disabled>Rename session</button>
+            <button id="copyChatBtn" class="ghost-btn compact" disabled>Copy entire chat</button>
+            <select id="pinSelect" class="pin-select" disabled>
+              <option value="">No pinned folder</option>
+            </select>
+          </div>
+        </header>
+
+        <section id="messages" class="messages empty-state">
+          <div class="empty-card">
+            <span>☁</span>
+            <h3>Start a new local chat</h3>
+            <p>Your conversations are stored as JSON files by date.</p>
+          </div>
+        </section>
+
+        <footer class="composer">
+          <label class="checkbox-row">
+            <input id="isMeCheckbox" type="checkbox" checked />
+            <span>Sent by me</span>
+          </label>
+          <div class="input-row">
+            <textarea id="messageInput" placeholder="Type your message..." rows="2"></textarea>
+            <button id="sendBtn" class="send-btn" disabled>Send</button>
+          </div>
+        </footer>
+      </main>
+    </div>
+
+    <div id="editMessageModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="editMessageTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Edit message</p>
+            <h3 id="editMessageTitle">Update message text</h3>
+          </div>
+        </div>
+        <textarea
+          id="editMessageTextarea"
+          class="modal-textarea"
+          placeholder="Edit your message..."
+          rows="10"
+        ></textarea>
+        <div class="modal-actions">
+          <span class="modal-hint">Press Esc to cancel · Ctrl/⌘ + Enter to save</span>
+          <button id="cancelEditMessageBtn" class="ghost-btn compact" type="button">Cancel</button>
+          <button id="saveEditMessageBtn" class="primary-btn compact" type="button">Save changes</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="appPromptModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card prompt-modal-card" role="dialog" aria-modal="true" aria-labelledby="appPromptTitle">
+        <div class="modal-header">
+          <div>
+            <p id="appPromptEyebrow" class="eyebrow">Name required</p>
+            <h3 id="appPromptTitle">Enter a name</h3>
+          </div>
+        </div>
+        <label id="appPromptLabel" class="modal-label" for="appPromptInput">Name</label>
+        <input id="appPromptInput" class="modal-input" type="text" autocomplete="off" />
+        <div class="modal-actions">
+          <span class="modal-hint">Press Esc to cancel · Enter to save</span>
+          <button id="cancelAppPromptBtn" class="ghost-btn compact" type="button">Cancel</button>
+          <button id="saveAppPromptBtn" class="primary-btn compact" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app/main.mjs"></script>
+  </body>
+</html>
