@@ -1,0 +1,47 @@
+# Local AI Chat Saver Extension
+
+This browser extension adds Local Chat controls to supported AI chat websites and sends selected messages to the local app running on your machine.
+
+## Supported sites
+
+- ChatGPT
+- Claude
+- DeepSeek
+- Gemini
+
+Support is best-effort. The extension relies on provider DOM structures and copy/composer controls, so provider UI changes can break capture.
+
+## Setup
+
+1. Start Local Chat App with `npm start` or the desktop app.
+2. Open `chrome://extensions`.
+3. Enable Developer mode.
+4. Click **Load unpacked**.
+5. Select this `browser-extension/` directory.
+6. Open the extension popup and confirm the local URL, usually `http://localhost:3000`.
+
+If the server was started with `LOCAL_CHAT_AUTH_TOKEN`, paste the same token into the popup.
+
+## Behavior
+
+- `providers/*.js` define provider-specific host matching, turn selectors, content selectors, and sender/container preferences.
+- `content-providers.js` loads those adapters and exposes the registry.
+- `content-dom.js` owns shared DOM/message extraction orchestration.
+- `content-message-save.js` owns selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message-container filtering for manual/autosave extraction.
+- `content-autosave.js` owns autosave state, assistant-readiness tracking, idempotency-key generation, prompt-capture scheduling, and outgoing/assistant save dedupe.
+- `content-sidebar.js` owns local sidebar replacement, provider-sidebar hiding/restoration, folder/session rendering, refresh, and session-selection behavior.
+- `content-composer.js` owns composer detection, transcript insertion, pasted-text attachment fallbacks, Load past conversations modal/search behavior, and top active-folder controls.
+- `content-runtime.js` owns local-app availability checks, auto-save toggle UI/state, Save local target selection/injection, and content-script scheduling.
+- `content.js` is the small bootstrap/coordinator that wires the modules together.
+- The background worker owns all API calls to the local app.
+- Autosave captures submitted user prompts and completed assistant responses when enabled.
+- Autosave sends idempotency keys so repeated DOM events do not append the same message multiple times. This behavior is covered by unit tests in `test/content-autosave.test.js`.
+- Sidebar behavior is covered with jsdom fixture tests in `test/content-sidebar.test.js`, including folder/session rendering, session selection, refresh, and native-sidebar hide/restore. Composer and Load past behavior is covered in `test/content-composer.test.js`. Message extraction/clipboard behavior is covered in `test/content-message-save.test.js`. Runtime toggle/availability/Save local behavior is covered in `test/content-runtime.test.js`.
+- The selected local session is captured at submit time so a later active-session switch is less likely to save the assistant response into the wrong chat.
+
+## Limitations
+
+- DOM extraction is heuristic, although provider-specific selectors are isolated in `providers/*.js` and covered by reduced provider fixtures.
+- Long chats can stress provider pages and the content script.
+- Background-worker URL/header/session behavior is covered by Node tests. Reduced provider DOM fixture tests cover extraction and Save local injection for ChatGPT, Claude, DeepSeek, and Gemini, composer tests cover modal search/rendering and transcript insertion, and runtime tests cover auto-send toggle state, local-app unavailability cleanup, and Save local delegation. These are regression tests, not a guarantee that live provider DOM changes will keep working.
+- Clipboard permissions are used only for capture/paste flows initiated by the extension logic.

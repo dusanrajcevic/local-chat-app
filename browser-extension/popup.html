@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Chat Saver</title>
+    <style>
+      body {
+        width: 310px;
+        margin: 0;
+        padding: 14px;
+        font:
+          13px/1.4 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 10px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        padding: 8px;
+        font: inherit;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      button {
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        background: #fafafa;
+        padding: 8px 10px;
+        cursor: pointer;
+        font: inherit;
+      }
+      button.primary {
+        background: #111827;
+        border-color: #111827;
+        color: white;
+      }
+      .hint {
+        margin-top: 10px;
+        color: #71717a;
+      }
+      #status {
+        min-height: 18px;
+        margin-top: 10px;
+        color: #52525b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Local Chat Saver</h1>
+    <label for="localAppUrl">Local app URL</label>
+    <input id="localAppUrl" value="http://localhost:3000" />
+
+    <label for="localChatToken" style="margin-top: 10px">Optional API token</label>
+    <input
+      id="localChatToken"
+      type="password"
+      autocomplete="off"
+      placeholder="Only needed when LOCAL_CHAT_AUTH_TOKEN is set"
+    />
+    <div class="row">
+      <button id="save" class="primary">Save</button>
+      <button id="test">Test active chat</button>
+    </div>
+    <p class="hint">
+      Use “New chat” in the local sidebar to create an active local target. If the server runs with
+      LOCAL_CHAT_AUTH_TOKEN, paste the same token here.
+    </p>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>
