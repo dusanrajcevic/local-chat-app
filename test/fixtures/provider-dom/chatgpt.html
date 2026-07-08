@@ -1,0 +1,27 @@
+<main>
+  <div data-testid="conversation-turn-1">
+    <div data-message-author-role="user">
+      <div data-testid="message-content">
+        <p>Please summarize the tradeoffs of local-first chat storage for a portfolio project.</p>
+      </div>
+    </div>
+    <div data-testid="turn-actions"><button aria-label="Copy">Copy</button></div>
+  </div>
+
+  <div data-testid="conversation-turn-2">
+    <div data-message-author-role="assistant">
+      <div class="markdown prose">
+        <p>
+          Local-first storage improves privacy and portability, but it requires careful backup and migration design.
+        </p>
+        <ul>
+          <li>Keep writes atomic.</li>
+          <li>Document security boundaries.</li>
+        </ul>
+        <pre><code class="language-js">const mode = "local";</code></pre>
+        <div class="code-toolbar"><button aria-label="Copy code">Copy code</button></div>
+      </div>
+    </div>
+    <div data-testid="turn-actions"><button aria-label="Copy">Copy</button></div>
+  </div>
+</main>

@@ -1,0 +1,29 @@
+<main>
+  <section class="chat-message human-turn">
+    <div data-message-author-role="user">
+      <div class="markdown"><p>Draft a concise threat model for a localhost-only chat archive.</p></div>
+    </div>
+    <div class="actions"><span role="button" aria-label="Copy">Copy</span></div>
+  </section>
+
+  <section class="chat-message assistant-turn">
+    <div data-message-author-role="assistant">
+      <div class="markdown">
+        <p>
+          The main risks are cross-origin localhost access, path traversal, and accidental publication of runtime data.
+        </p>
+        <table>
+          <tr>
+            <th>Risk</th>
+            <th>Mitigation</th>
+          </tr>
+          <tr>
+            <td>CORS</td>
+            <td>Trusted origins</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <div class="actions"><span role="button" aria-label="Copy">Copy</span></div>
+  </section>
+</main>
