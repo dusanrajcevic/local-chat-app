@@ -12,6 +12,31 @@ The project is designed for private local use, not as a hosted multi-user servic
 - Supports ChatGPT, Claude, DeepSeek, and Gemini through best-effort DOM adapters.
 - Runs as either a Node/Express web app or a packaged Electron desktop app.
 
+## Screenshots
+
+A quick look at the local web app and browser-extension capture flow.
+
+### Local app
+
+![Local Chat App conversation view](docs/screenshots/local.jpg)
+
+<p align="center">
+  <img src="docs/screenshots/create-new-chat.jpg" alt="Create new local chat dialog" width="49%">
+  <img src="docs/screenshots/create-new-folder.jpg" alt="Create new folder dialog" width="49%">
+</p>
+
+### Browser extension on supported providers
+
+<p align="center">
+  <img src="docs/screenshots/chatgpt.jpg" alt="ChatGPT with the Local Chat extension sidebar" width="49%">
+  <img src="docs/screenshots/claude.jpg" alt="Claude with the Local Chat extension sidebar" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/gemini.jpg" alt="Gemini with the Local Chat extension sidebar" width="49%">
+  <img src="docs/screenshots/deepseek.jpg" alt="DeepSeek with the Local Chat extension sidebar" width="49%">
+</p>
+
 ## Architecture
 
 ```text
