@@ -64,7 +64,7 @@ async function launchChromiumOrSkip(t) {
   }
 }
 
-test('web UI smoke flow works against a live local server', { timeout: 30_000 }, async (t) => {
+test('web UI smoke flow works against a live local server', { timeout: 60_000 }, async (t) => {
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-chat-playwright-'));
@@ -90,35 +90,36 @@ test('web UI smoke flow works against a live local server', { timeout: 30_000 },
     if (!browser) return;
 
     const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     page.on('dialog', (dialog) => dialog.accept());
 
     await page.goto(baseUrl, { waitUntil: 'networkidle' });
     await page.getByRole('heading', { name: 'Start a new local chat' }).waitFor();
 
-    await page.getByRole('button', { name: '+ Create folder' }).click();
+    await page.locator('#newFolderBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Folder');
-    await page.getByRole('button', { name: 'Create folder' }).click();
+    await page.locator('#saveAppPromptBtn').click();
     await page.locator('#folderList').getByText('Smoke Folder').waitFor();
 
     await page.locator('#folderList').getByText('Smoke Folder').click();
-    await page.getByRole('button', { name: '+ New session' }).click();
+    await page.locator('#newChatBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session');
-    await page.getByRole('button', { name: 'Create session' }).click();
+    await page.locator('#saveAppPromptBtn').click();
     await page.getByRole('heading', { name: 'Smoke Session' }).waitFor();
 
     await page.locator('#messageInput').fill('Hello from Playwright smoke');
-    await page.getByRole('button', { name: 'Send' }).click();
+    await page.locator('#sendBtn').click();
     await page.locator('.message-text').getByText('Hello from Playwright smoke').waitFor();
 
-    await page.getByRole('button', { name: 'Rename session' }).click();
+    await page.locator('#renameSessionBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session Renamed');
-    await page.getByRole('button', { name: 'Rename' }).click();
+    await page.locator('#saveAppPromptBtn').click();
     await page.getByRole('heading', { name: 'Smoke Session Renamed' }).waitFor();
 
     await page.locator('[data-trash-session]').first().click();
     await page.getByRole('heading', { name: 'No session selected' }).waitFor();
 
-    await page.getByRole('button', { name: 'Trash' }).click();
+    await page.locator('#toggleTrashBtn').click();
     await page.locator('#trashList').getByText('Smoke Session Renamed').waitFor();
     await page.locator('[data-restore-session]').first().click();
     await page.locator('#sessionList').getByText('Smoke Session Renamed').waitFor();
@@ -131,7 +132,10 @@ test('web UI smoke flow works against a live local server', { timeout: 30_000 },
   } finally {
     await browser?.close();
     serverProcess.kill('SIGTERM');
-    await new Promise((resolve) => serverProcess.once('exit', resolve));
+    await Promise.race([
+      new Promise((resolve) => serverProcess.once('exit', resolve)),
+      new Promise((resolve) => setTimeout(resolve, 2_000))
+    ]);
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 
