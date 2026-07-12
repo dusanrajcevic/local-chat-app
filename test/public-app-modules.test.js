@@ -302,6 +302,85 @@ test('text prompt modal resolves values and toggles the global modal class', asy
   assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), false);
 });
 
+test('copying part of a rendered message preserves only the selected text', () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 's1',
+    title: 'Demo',
+    aiName: 'Assistant',
+    trashed: false,
+    messages: [
+      {
+        id: 'm1',
+        sender: 'bot',
+        text: 'Copy only this selected phrase, not the entire message.',
+        createdAt: '2026-07-09T09:00:00Z'
+      }
+    ]
+  };
+  harness.view.renderMessages();
+
+  const messageText = harness.el.messages.querySelector('[data-message-id="m1"]');
+  const textNode = messageText.querySelector('p').firstChild;
+  const start = textNode.nodeValue.indexOf('this selected phrase');
+  const range = harness.dom.window.document.createRange();
+  range.setStart(textNode, start);
+  range.setEnd(textNode, start + 'this selected phrase'.length);
+
+  const selection = harness.dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  let prevented = false;
+  let copiedText = null;
+  harness.clipboard.handleCopyEvent({
+    preventDefault() {
+      prevented = true;
+    },
+    clipboardData: {
+      setData(type, value) {
+        assert.equal(type, 'text/plain');
+        copiedText = value;
+      }
+    }
+  });
+
+  assert.equal(prevented, true);
+  assert.equal(copiedText, 'this selected phrase');
+});
+
+test('copy handler leaves selections outside message text to native browser behavior', () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 's1',
+    title: 'Demo',
+    aiName: 'Assistant',
+    trashed: false,
+    messages: [{ id: 'm1', sender: 'bot', text: 'Message', createdAt: '2026-07-09T09:00:00Z' }]
+  };
+  harness.view.renderMessages();
+
+  const range = harness.dom.window.document.createRange();
+  range.selectNodeContents(harness.el.chatTitle);
+  const selection = harness.dom.window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  let prevented = false;
+  harness.clipboard.handleCopyEvent({
+    preventDefault() {
+      prevented = true;
+    },
+    clipboardData: {
+      setData() {
+        throw new Error('clipboard should not be overridden');
+      }
+    }
+  });
+
+  assert.equal(prevented, false);
+});
+
 test('event wiring delegates sidebar folder clicks and copy buttons to controllers', async () => {
   const harness = createHarness();
   let selectedFolder = null;

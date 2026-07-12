@@ -46,13 +46,7 @@ function createClipboardController({
   function selectedMessageMarkdown(selection) {
     if (!state.currentSession || !selection || selection.isCollapsed) return '';
 
-    const selectedMessages = state.currentSession.messages.filter((message) => {
-      const textNode = Array.from(doc.querySelectorAll('[data-message-id]')).find(
-        (item) => item.dataset.messageId === message.id
-      );
-      const node = textNode?.closest('.message');
-      if (!node) return false;
-
+    const selectionIntersectsMessageText = Array.from(doc.querySelectorAll('[data-message-id]')).some((node) => {
       for (let index = 0; index < selection.rangeCount; index += 1) {
         const range = selection.getRangeAt(index);
         if (range.intersectsNode(node)) return true;
@@ -61,15 +55,7 @@ function createClipboardController({
       return false;
     });
 
-    if (!selectedMessages.length) return '';
-    if (selectedMessages.length === 1) return selectedMessages[0].text;
-
-    return selectedMessages
-      .map((message) => {
-        const sender = message.sender === 'me' ? 'Me' : getBotName(state.currentSession);
-        return `### ${sender}\n\n${message.text}`;
-      })
-      .join('\n\n---\n\n');
+    return selectionIntersectsMessageText ? selection.toString() : '';
   }
 
   async function copyEntireChat() {
