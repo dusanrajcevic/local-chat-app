@@ -96,7 +96,8 @@ function createHarness({ routes = {} } = {}) {
     escapeHtml: markdown.escapeHtml,
     renderMarkdown: markdown.renderMarkdown,
     formatDate: stateModule.formatDate,
-    getBotName: stateModule.getBotName
+    getBotName: stateModule.getBotName,
+    nextMessageSender: stateModule.nextMessageSender
   });
   const modal = modalModule.createModalController({
     state,
@@ -159,6 +160,18 @@ test('app API client sends JSON by default, merges headers, and surfaces server 
   assert.equal(calls[0].url, '/api/test');
   assert.equal(calls[0].options.headers['Content-Type'], 'application/json');
   assert.equal(calls[0].options.headers['X-Test'], 'yes');
+});
+
+test('next message sender alternates from the last actual sender', () => {
+  assert.equal(stateModule.nextMessageSender({ messages: [] }), 'me');
+  assert.equal(
+    stateModule.nextMessageSender({ messages: [{ sender: 'me' }, { sender: 'me' }] }),
+    'bot'
+  );
+  assert.equal(
+    stateModule.nextMessageSender({ messages: [{ sender: 'bot' }, { sender: 'bot' }] }),
+    'me'
+  );
 });
 
 test('renderer filters folder views and escapes rendered titles', () => {
@@ -284,6 +297,55 @@ test('message controller sends alternating sender messages and refreshes current
   assert.deepEqual(postedBody, { text: 'Hi', sender: 'me' });
   assert.equal(harness.el.messageInput.value, '');
   assert.equal(harness.state.currentSession.messages.length, 1);
+  assert.equal(harness.el.isMeCheckbox.checked, false);
+});
+
+test('message controller honors a manual sender selection before continuing alternation', async () => {
+  const sessionBefore = {
+    id: 's1',
+    title: 'Demo',
+    aiName: '',
+    pinnedFolderId: null,
+    trashed: false,
+    createdAt: '2026-07-09T09:00:00Z',
+    updatedAt: '2026-07-09T09:00:00Z',
+    messages: [{ id: 'm1', sender: 'me', text: 'First', createdAt: '2026-07-09T09:00:00Z' }]
+  };
+  const sessionAfter = {
+    ...sessionBefore,
+    updatedAt: '2026-07-09T09:01:00Z',
+    messages: [
+      ...sessionBefore.messages,
+      { id: 'm2', sender: 'me', text: 'Manual override', createdAt: '2026-07-09T09:01:00Z' }
+    ]
+  };
+  let postedBody = null;
+  const harness = createHarness({
+    routes: {
+      'POST /api/sessions/s1/messages': {
+        body: ({ options }) => {
+          postedBody = JSON.parse(options.body);
+          return { id: 'm2' };
+        }
+      },
+      'GET /api/sessions/s1': { body: () => sessionAfter },
+      'PUT /api/active-session': { body: { sessionId: 's1' } },
+      'GET /api/folders': { body: [] },
+      'GET /api/sessions': { body: [] },
+      'GET /api/trash': { body: [] }
+    }
+  });
+  harness.state.currentSession = sessionBefore;
+  harness.view.renderMessages();
+  assert.equal(harness.el.isMeCheckbox.checked, false);
+
+  harness.el.isMeCheckbox.checked = true;
+  harness.el.messageInput.value = 'Manual override';
+  await harness.controllers.sendMessage();
+
+  assert.deepEqual(postedBody, { text: 'Manual override', sender: 'me' });
+  assert.equal(harness.state.currentSession.messages.at(-1).sender, 'me');
+  assert.equal(harness.el.isMeCheckbox.checked, false);
 });
 
 test('text prompt modal resolves values and toggles the global modal class', async () => {
@@ -429,4 +491,22 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
   harness.el.messages.querySelector('[data-copy-message]').click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(copiedMessage, 'm1');
+
+  harness.state.currentSession = {
+    id: 's1',
+    title: 'Demo',
+    aiName: '',
+    pinnedFolderId: null,
+    trashed: false,
+    messages: [{ id: 'm1', sender: 'me', text: 'First', createdAt: '2026-07-09T09:00:00Z' }]
+  };
+  harness.view.renderMessages();
+  assert.equal(harness.el.isMeCheckbox.checked, false);
+
+  harness.el.isMeCheckbox.checked = true;
+  harness.el.isMeCheckbox.dispatchEvent(new harness.dom.window.Event('change', { bubbles: true }));
+  harness.view.renderMessages();
+
+  assert.deepEqual(harness.state.nextSenderOverride, { sessionId: 's1', sender: 'me' });
+  assert.equal(harness.el.isMeCheckbox.checked, true);
 });

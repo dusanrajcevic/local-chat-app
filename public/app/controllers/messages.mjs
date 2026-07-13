@@ -3,14 +3,11 @@ function createMessageController({
   el,
   api,
   modal,
-  stateUtils,
   openSession,
   refreshAll,
   alertUser,
   confirmUser
 }) {
-  const nextMessageSender = stateUtils.nextMessageSender;
-
   async function saveEditedMessage() {
     if (!state.currentSession || state.currentSession.trashed || !state.editingMessageId) return;
 
@@ -35,13 +32,13 @@ function createMessageController({
     const text = el.messageInput.value.trim();
     if (!text) return;
 
-    const sender = nextMessageSender(state.currentSession);
-    el.isMeCheckbox.checked = sender === 'me';
+    const sender = el.isMeCheckbox.checked ? 'me' : 'bot';
 
     await api(`/api/sessions/${state.currentSession.id}/messages`, {
       method: 'POST',
       body: JSON.stringify({ text, sender })
     });
+    state.nextSenderOverride = null;
     el.messageInput.value = '';
     await openSession(state.currentSession.id);
     await refreshAll();

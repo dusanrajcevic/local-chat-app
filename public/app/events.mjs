@@ -3,7 +3,7 @@ function reportError(err) {
   else console.error(err);
 }
 
-function wireEvents({ el, view, modal, controllers, clipboard, doc = document }) {
+function wireEvents({ state, el, view, modal, controllers, clipboard, doc = document }) {
   view.applySidebarState();
   el.sidebarToggleBtn.addEventListener('click', view.toggleSidebar);
   el.newChatBtn.addEventListener('click', () => controllers.createSession().catch(reportError));
@@ -22,7 +22,13 @@ function wireEvents({ el, view, modal, controllers, clipboard, doc = document })
   el.appPromptModal.addEventListener('click', (event) => {
     if (event.target === el.appPromptModal) modal.closeTextPrompt(null);
   });
-  el.isMeCheckbox.addEventListener('change', view.syncSenderCheckbox);
+  el.isMeCheckbox.addEventListener('change', () => {
+    if (!state.currentSession || state.currentSession.trashed) return;
+    state.nextSenderOverride = {
+      sessionId: state.currentSession.id,
+      sender: el.isMeCheckbox.checked ? 'me' : 'bot'
+    };
+  });
   el.messageInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();

@@ -62,7 +62,6 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     el,
     api,
     modal,
-    stateUtils,
     openSession: sessionController.openSession,
     refreshAll,
     alertUser,

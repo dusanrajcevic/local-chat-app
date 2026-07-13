@@ -109,6 +109,7 @@ function createActiveSessionController({
 
       if (!activeSessionId && currentSessionId) {
         state.currentSession = null;
+        state.nextSenderOverride = null;
         rememberOpenSession(null);
         view.renderPinSelect();
         view.renderSessions();

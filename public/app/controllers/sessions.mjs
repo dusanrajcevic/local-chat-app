@@ -3,6 +3,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
 
   async function openSession(sessionId, options = {}) {
     const { markActive = true } = options;
+    if (state.currentSession?.id !== sessionId) state.nextSenderOverride = null;
     state.currentSession = await api(`/api/sessions/${sessionId}`);
     if (markActive && !state.currentSession.trashed) await active.markActiveSession(sessionId);
     active.rememberOpenSession(sessionId);
@@ -121,6 +122,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     await api(`/api/sessions/${sessionId}`, { method: 'DELETE' });
     if (state.currentSession?.id === sessionId) {
       state.currentSession = null;
+      state.nextSenderOverride = null;
       active.rememberOpenSession(null);
       await active.clearActiveSession();
     }
@@ -138,6 +140,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     await api(`/api/trash/${sessionId}`, { method: 'DELETE' });
     if (state.currentSession?.id === sessionId) {
       state.currentSession = null;
+      state.nextSenderOverride = null;
       active.rememberOpenSession(null);
       await active.clearActiveSession();
     }

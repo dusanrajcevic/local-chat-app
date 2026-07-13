@@ -1,4 +1,4 @@
-function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, formatDate, getBotName }) {
+function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, formatDate, getBotName, nextMessageSender }) {
   const htmlEscape = escapeHtml || ((value) => String(value || ''));
   const markdown = renderMarkdown || htmlEscape;
   const dateFormatter = formatDate || ((value) => String(value || ''));
@@ -110,10 +110,13 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
   }
 
   function syncSenderCheckbox() {
-    const messageCount = state.currentSession?.messages?.length || 0;
-    const nextSenderIsMe = messageCount % 2 === 0;
+    const override = state.nextSenderOverride;
+    const sender =
+      override?.sessionId === state.currentSession?.id
+        ? override.sender
+        : nextMessageSender(state.currentSession);
 
-    el.isMeCheckbox.checked = nextSenderIsMe;
+    el.isMeCheckbox.checked = sender === 'me';
     el.isMeCheckbox.disabled = !state.currentSession || state.currentSession.trashed;
   }
 

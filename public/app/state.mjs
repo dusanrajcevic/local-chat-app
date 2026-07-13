@@ -5,6 +5,7 @@ function createInitialState({ storage } = {}) {
     folders: [],
     trash: [],
     currentSession: null,
+    nextSenderOverride: null,
     selectedFolderId: null,
     trashOpen: false,
     editingMessageId: null,
@@ -62,8 +63,12 @@ function getBotName(session) {
 }
 
 function nextMessageSender(session) {
-  const messageCount = session?.messages?.length || 0;
-  return messageCount % 2 === 0 ? 'me' : 'bot';
+  const messages = session?.messages || [];
+  const lastSender = messages.at(-1)?.sender;
+
+  if (lastSender === 'me') return 'bot';
+  if (lastSender === 'bot') return 'me';
+  return 'me';
 }
 
 export { createInitialState, queryElements, formatDate, getBotName, nextMessageSender };

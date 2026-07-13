@@ -38,7 +38,8 @@ export function createRuntime({
     escapeHtml,
     renderMarkdown,
     formatDate,
-    getBotName
+    getBotName,
+    nextMessageSender
   });
   const modal = createModalController({ state, el, doc, raf: win.requestAnimationFrame?.bind(win) });
   const clipboard = createClipboardController({

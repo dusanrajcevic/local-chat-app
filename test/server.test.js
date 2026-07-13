@@ -193,6 +193,16 @@ test('messages support explicit sender, auto sender, edit, delete, metadata, and
   assert.match(empty.data.error, /message text/i);
 });
 
+test('automatic sender alternates from the last explicit sender override', async () => {
+  const session = await createSession({ title: 'Sender override' });
+
+  await postLocalMessage(session.id, { text: 'First message', sender: 'me' });
+  await postLocalMessage(session.id, { text: 'Manual same-sender message', sender: 'me' });
+  const next = await postLocalMessage(session.id, { text: 'Automatic reply' });
+
+  assert.equal(next.sender, 'bot');
+});
+
 test('message idempotency works for sequential and concurrent duplicate saves', async () => {
   const session = await createSession({ title: 'Idempotency' });
   const body = { sender: 'me', text: 'Save this exactly once.', idempotencyKey: 'test-key-0001' };

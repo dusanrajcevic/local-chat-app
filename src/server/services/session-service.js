@@ -100,6 +100,13 @@ async function readSession(sessionId) {
   return { ...session, trashed: found.trashed };
 }
 
+function nextMessageSender(messages) {
+  const lastSender = messages.at(-1)?.sender;
+  if (lastSender === 'me') return 'bot';
+  if (lastSender === 'bot') return 'me';
+  return 'me';
+}
+
 async function addMessage(sessionId, body, rawIdempotencyKey) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
   const text = cleanText(body.text);
@@ -119,7 +126,7 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     }
 
     const requestedSender = body.sender === 'me' ? 'me' : body.sender === 'bot' ? 'bot' : null;
-    const sender = requestedSender || (session.messages.length % 2 === 0 ? 'me' : 'bot');
+    const sender = requestedSender || nextMessageSender(session.messages);
     const now = new Date().toISOString();
     const nextMessage = {
       id: id('msg'),
