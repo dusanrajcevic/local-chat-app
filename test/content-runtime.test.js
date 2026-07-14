@@ -263,3 +263,123 @@ test('content runtime health checks update availability and invalidate sidebar a
   assert.ok(sidebarCalls.includes('invalidate'));
   controller.resetForTest();
 });
+
+test('content runtime throttles host mutations and ignores extension-owned DOM changes', () => {
+  installRuntimeDom('<main><div id="host-root"></div></main>');
+  const timers = [];
+  const { controller, autosaveCalls } = createController({
+    deps: {
+      setTimeout(callback, delay) {
+        timers.push({ callback, delay });
+        return timers.length;
+      },
+      clearTimeout() {}
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: false,
+    autoSendPreferenceLoaded: true
+  });
+
+  const extensionButton = document.createElement('button');
+  extensionButton.setAttribute(contentDom.markers.EXT_MARKER, 'true');
+  assert.equal(
+    controller.mutationNeedsInjection({ type: 'childList', addedNodes: [extensionButton], removedNodes: [] }),
+    false
+  );
+
+  const extensionPanel = document.createElement('div');
+  extensionPanel.setAttribute(contentDom.markers.LOCAL_SIDEBAR_MARKER, 'true');
+  assert.equal(
+    controller.mutationNeedsInjection({
+      type: 'childList',
+      target: extensionPanel,
+      addedNodes: [],
+      removedNodes: [document.createTextNode('old status')]
+    }),
+    false,
+    'text replacement inside extension UI should not schedule another scan'
+  );
+
+  const irrelevantNode = document.createElement('div');
+  assert.equal(
+    controller.mutationNeedsInjection({ type: 'childList', addedNodes: [irrelevantNode], removedNodes: [] }),
+    false,
+    'unrelated page mutations should not trigger a whole-page scan'
+  );
+
+  const hostNode = document.createElement('button');
+  const mutation = { type: 'childList', addedNodes: [hostNode], removedNodes: [] };
+  assert.equal(controller.mutationNeedsInjection(mutation), true);
+
+  controller.handleMutations([mutation]);
+  controller.handleMutations([mutation]);
+  controller.handleMutations([mutation]);
+
+  assert.equal(timers.length, 1, 'repeated streaming mutations should share one scheduled scan');
+  assert.equal(timers[0].delay, runtime.DEFAULTS.mutationInjectDelayMs);
+
+  timers[0].callback();
+  assert.equal(
+    autosaveCalls.filter((call) => call[0] === 'schedule-outgoing').length,
+    1,
+    'the throttled scan should run once'
+  );
+});
+
+test('content runtime only performs completion checks for the newest assistant turn', () => {
+  installRuntimeDom(`
+    <main>
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant"><div class="markdown">First completed response</div></div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+      <article data-testid="conversation-turn-2">
+        <div data-message-author-role="assistant"><div class="markdown">Second completed response</div></div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+      <article data-testid="conversation-turn-3">
+        <div data-message-author-role="assistant"><div class="markdown">Newest response</div></div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+    </main>
+  `);
+
+  const readinessCalls = [];
+  const assistantScheduleCalls = [];
+  const { controller, sidebarCalls } = createController({
+    autosaveController: {
+      isAssistantMessageReadyForButton(container, options) {
+        readinessCalls.push({ container, options });
+        return true;
+      },
+      scheduleAssistantAutoSave(...args) {
+        assistantScheduleCalls.push(args);
+      }
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectButtons();
+  controller.injectButtons();
+
+  const newestTurn = document.querySelector('[data-testid="conversation-turn-3"]');
+  assert.equal(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`).length, 3);
+  assert.equal(readinessCalls.length, 1, 'historical assistant messages should not be reparsed');
+  assert.equal(readinessCalls[0].container, newestTurn);
+  assert.deepEqual(readinessCalls[0].options, { assumeNewest: true });
+  assert.ok(assistantScheduleCalls.every((call) => call[0] === newestTurn));
+  assert.ok(assistantScheduleCalls.every((call) => call[3]?.assumeNewest === true));
+  assert.equal(
+    sidebarCalls.filter((call) => call === 'refresh:false').length,
+    1,
+    'expensive sidebar discovery should be rate-limited across rapid scans'
+  );
+});

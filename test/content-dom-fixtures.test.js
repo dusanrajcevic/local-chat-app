@@ -228,6 +228,18 @@ test('ChatGPT fixture rejects nested code-copy controls while accepting message-
   );
 });
 
+test('assistant completion signatures do not clone and re-render the whole message tree', () => {
+  installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  const contentRoot = contentDom.messageExtractionSource(assistantContainer, 'bot');
+  contentRoot.cloneNode = () => {
+    throw new Error('completion checks should use live text, not clone the rendered message');
+  };
+
+  assert.match(contentDom.assistantContentSignature(assistantContainer), /^\d+:[a-z0-9]+$/);
+});
+
 test('provider transcript and transient assistant status text are rejected before saving', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 

@@ -221,12 +221,12 @@
       }
     }
 
-    function hasActiveGenerationSignal(container) {
+    function hasActiveGenerationSignal(container, options = {}) {
       if (hasStreamingMarker(container)) return true;
-      return isLikelyNewestAssistantContainer(container) && hasVisibleGenerationStopControl();
+      return (options.assumeNewest || isLikelyNewestAssistantContainer(container)) && hasVisibleGenerationStopControl();
     }
 
-    function isAssistantMessageReadyForButton(container) {
+    function isAssistantMessageReadyForButton(container, options = {}) {
       if (!container) return false;
       if (inferSender(container) !== 'bot') return true;
 
@@ -242,7 +242,7 @@
         return false;
       }
 
-      if (hasActiveGenerationSignal(container)) {
+      if (hasActiveGenerationSignal(container, options)) {
         state.stableSince = now;
         return false;
       }
@@ -250,12 +250,12 @@
       return now - state.stableSince >= config.assistantReadyForButtonStableMs;
     }
 
-    async function waitForAssistantMessageCompletion(container) {
+    async function waitForAssistantMessageCompletion(container, options = {}) {
       const startedAt = Date.now();
 
       while (Date.now() - startedAt < config.assistantCompleteTimeoutMs) {
         if (!document.documentElement.contains(container)) return false;
-        if (isAssistantMessageReadyForButton(container)) return true;
+        if (isAssistantMessageReadyForButton(container, options)) return true;
         await sleep(config.assistantCompletePollMs);
       }
 
@@ -331,11 +331,11 @@
       }
     }
 
-    function scheduleAssistantAutoSave(container, button, copyButton) {
+    function scheduleAssistantAutoSave(container, button, copyButton, options = {}) {
       if (!isAutoSendEnabled()) return;
       if (!container || !button || !copyButton) return;
       if (inferSender(container) !== 'bot') return;
-      if (!isLikelyNewestAssistantContainer(container)) return;
+      if (!options.assumeNewest && !isLikelyNewestAssistantContainer(container)) return;
       if (assistantContainersIgnoredByArm.get(container) === assistantAutoSaveArmId) return;
       if (attemptedAssistantContainers.has(container) || pendingAssistantContainers.has(container)) return;
       if (!reserveAssistantAutoSaveSlot()) return;
@@ -349,7 +349,7 @@
           if (!isAutoSendEnabled()) return;
           if (!document.documentElement.contains(container) || !document.documentElement.contains(button)) return;
 
-          const isComplete = await waitForAssistantMessageCompletion(container);
+          const isComplete = await waitForAssistantMessageCompletion(container, options);
           if (!isAutoSendEnabled()) return;
           if (
             !isComplete ||

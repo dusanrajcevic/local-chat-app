@@ -580,7 +580,8 @@
   }
 
   function assistantContentSignature(container) {
-    const text = cleanExtractedMessageText(extractMessageTextFallback(container, 'bot'), 'bot');
+    const source = messageExtractionSource(container, 'bot');
+    const text = cleanExtractedMessageText(normalizeText(source?.innerText || source?.textContent || ''), 'bot');
     if (!text || shouldSkipExtractedMessageText(text, 'bot', 'assistant-signature')) return '';
     return `${text.length}:${hashText(text)}`;
   }

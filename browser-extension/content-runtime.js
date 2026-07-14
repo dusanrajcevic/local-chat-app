@@ -13,7 +13,9 @@
     localChatAppHealthCheckHiddenOfflineMs: 60000,
     localChatAppHealthCheckHiddenOnlineMs: 5 * 60 * 1000,
     localChatAppOfflineMessage: 'Local chat app is not running.',
-    periodicInjectMs: 2000
+    mutationInjectDelayMs: 250,
+    auxiliaryUiRefreshMs: 4000,
+    periodicInjectMs: 4000
   });
 
   function createRuntimeController(deps = {}, options = {}) {
@@ -21,11 +23,28 @@
     const markers = deps.markers || {};
     const EXT_MARKER = markers.EXT_MARKER || 'data-local-chat-save';
     const NEW_SESSION_MARKER = markers.NEW_SESSION_MARKER || 'data-local-chat-new-session';
+    const LOAD_PAST_MARKER = markers.LOAD_PAST_MARKER || 'data-local-chat-load-past';
+    const TOP_PIN_SELECT_MARKER = markers.TOP_PIN_SELECT_MARKER || 'data-local-chat-top-pin-select';
     const AUTO_SEND_TOGGLE_MARKER = markers.AUTO_SEND_TOGGLE_MARKER || 'data-local-chat-auto-send';
     const AUTO_SEND_TOGGLE_MOUNT_MARKER = markers.AUTO_SEND_TOGGLE_MOUNT_MARKER || 'data-local-chat-auto-send-mount';
     const AUTO_SEND_COMPOSER_MARKER = markers.AUTO_SEND_COMPOSER_MARKER || 'data-local-chat-auto-send-composer';
     const AUTO_SEND_LAYOUT_MARKER = markers.AUTO_SEND_LAYOUT_MARKER || 'data-local-chat-auto-send-layout';
+    const LOCAL_SIDEBAR_MARKER = markers.LOCAL_SIDEBAR_MARKER || 'data-local-chat-sidebar';
     const LOAD_PAST_MODAL_ID = markers.LOAD_PAST_MODAL_ID || 'local-chat-load-past-modal';
+    const RELEVANT_MUTATION_SELECTOR = [
+      'button',
+      '[role="button"]',
+      '[data-message-author-role]',
+      '[data-testid^="conversation-turn"]',
+      '[data-testid="message-content"]',
+      'article',
+      'form',
+      'textarea',
+      '[contenteditable="true"]',
+      'aside',
+      'nav',
+      '[role="navigation"]'
+    ].join(',');
 
     const normalizeText =
       deps.normalizeText ||
@@ -64,12 +83,9 @@
     const removeLoadPastButtons = deps.removeLoadPastButtons || (() => {});
     const injectLoadPastButton = deps.injectLoadPastButton || (() => {});
     const chromeApi = deps.chromeApi || (typeof chrome !== 'undefined' ? chrome : null);
-    const requestAnimationFrameImpl =
-      deps.requestAnimationFrame ||
-      ((callback) => {
-        if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(callback);
-        return setTimeout(callback, 0);
-      });
+    const setTimeoutImpl = deps.setTimeout || ((callback, delay) => setTimeout(callback, delay));
+    const clearTimeoutImpl = deps.clearTimeout || ((timer) => clearTimeout(timer));
+    const now = deps.now || (() => Date.now());
 
     const getAutosaveController = deps.getAutosaveController || (() => null);
     const getSidebarController = deps.getSidebarController || (() => null);
@@ -84,7 +100,11 @@
     let localChatAppLastHealthError = '';
     let localChatAppHealthCheckTimer = null;
     let scheduled = false;
+    let scheduledInjectTimer = null;
+    let forceAuxiliaryUiOnNextInject = false;
+    let lastAuxiliaryUiRefreshAt = 0;
     let started = false;
+    let mutationObserver = null;
     let periodicInjectTimer = null;
 
     function sidebarController() {
@@ -235,7 +255,7 @@
           sidebarController()?.scheduleLocalSidebarRefresh?.(true);
           consumePendingLocalSidebarLoad();
         }
-        scheduleInject();
+        scheduleInject(true);
         scheduleNextLocalChatAppHealthCheck();
       }
     }
@@ -252,14 +272,14 @@
 
     function clearLocalChatAppHealthCheckTimer() {
       if (!localChatAppHealthCheckTimer) return;
-      clearTimeout(localChatAppHealthCheckTimer);
+      clearTimeoutImpl(localChatAppHealthCheckTimer);
       localChatAppHealthCheckTimer = null;
     }
 
     function scheduleNextLocalChatAppHealthCheck(delayMs = localChatAppHealthCheckIntervalMs()) {
       clearLocalChatAppHealthCheckTimer();
       const delay = Math.max(0, Number(delayMs) || 0);
-      localChatAppHealthCheckTimer = setTimeout(() => {
+      localChatAppHealthCheckTimer = setTimeoutImpl(() => {
         localChatAppHealthCheckTimer = null;
         runScheduledLocalChatAppHealthCheck();
       }, delay);
@@ -268,7 +288,7 @@
     async function runScheduledLocalChatAppHealthCheck() {
       try {
         const available = await checkLocalChatAppAvailability(true);
-        if (available) scheduleInject();
+        if (available) scheduleInject(true);
       } catch {
         // checkLocalChatAppAvailability already updates availability state.
       } finally {
@@ -673,19 +693,41 @@
 
         const container = findMessageContainer(copyButton);
         if (!container) continue;
-        if (inferSender(container) === 'bot' && !autosaveController()?.isAssistantMessageReadyForButton?.(container))
-          continue;
 
         if (!grouped.has(container)) grouped.set(container, []);
         grouped.get(container).push(copyButton);
       }
 
-      return Array.from(grouped.entries())
+      const targets = Array.from(grouped.entries())
         .map(([container, copyButtons]) => ({
           container,
-          copyButton: chooseMessageCopyButton(container, copyButtons)
+          copyButton: chooseMessageCopyButton(container, copyButtons),
+          sender: inferSender(container)
         }))
         .filter((target) => target.copyButton);
+
+      const newestAssistantTarget = [...targets].reverse().find((target) => target.sender === 'bot') || null;
+
+      return targets
+        .map((target) => ({
+          ...target,
+          isNewestAssistant: target === newestAssistantTarget
+        }))
+        .filter((target) => {
+          if (target.sender !== 'bot') return true;
+
+          // Existing controls belong to already-processed messages. Avoid repeatedly
+          // parsing every historical assistant response on each ChatGPT DOM mutation.
+          if (saveButtonForCopyButton(target.copyButton)) return true;
+
+          // Providers stream the newest assistant turn. Historical turns can receive
+          // their controls immediately; only the newest one needs stability checks.
+          if (!target.isNewestAssistant) return true;
+
+          return Boolean(
+            autosaveController()?.isAssistantMessageReadyForButton?.(target.container, { assumeNewest: true })
+          );
+        });
     }
 
     function removeInvalidSaveButtons(validCopyButtons = new Set()) {
@@ -696,23 +738,28 @@
       });
     }
 
-    function injectButtons() {
-      if (!shouldExposeLocalChatUi()) {
-        removeLocalChatUnavailableUi();
-        return;
-      }
+    function refreshAuxiliaryUi(force = false) {
+      const currentTime = now();
+      if (!force && currentTime - lastAuxiliaryUiRefreshAt < config.auxiliaryUiRefreshMs) return;
 
+      lastAuxiliaryUiRefreshAt = currentTime;
       injectAutoSendToggle();
       sidebarController()?.scheduleLocalSidebarRefresh?.();
       removeNewSessionButtons();
       injectLoadPastButton();
+    }
+
+    function injectButtons(options = {}) {
+      if (!shouldExposeLocalChatUi()) return;
+
+      refreshAuxiliaryUi(Boolean(options.forceAuxiliaryUi));
       autosaveController()?.scheduleOutgoingDomSaveIfNeeded?.();
 
       const targets = collectMessageSaveTargets();
       const validCopyButtons = new Set(targets.map((target) => target.copyButton));
       removeInvalidSaveButtons(validCopyButtons);
 
-      for (const { container, copyButton } of targets) {
+      for (const { container, copyButton, sender, isNewestAssistant } of targets) {
         let saveButton = saveButtonForCopyButton(copyButton);
 
         if (!saveButton) {
@@ -723,17 +770,74 @@
           saveButton.__localChatCopyButton = copyButton;
         }
 
-        autosaveController()?.scheduleAssistantAutoSave?.(container, saveButton, copyButton);
+        if (sender === 'bot' && isNewestAssistant) {
+          autosaveController()?.scheduleAssistantAutoSave?.(container, saveButton, copyButton, {
+            assumeNewest: true
+          });
+        }
       }
     }
 
-    function scheduleInject() {
+    function isExtensionOwnedNode(node) {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      if (!element) return false;
+
+      return Boolean(
+        element.closest?.(
+          [
+            `[${EXT_MARKER}]`,
+            `[${NEW_SESSION_MARKER}]`,
+            `[${LOAD_PAST_MARKER}]`,
+            `[${TOP_PIN_SELECT_MARKER}]`,
+            `[${AUTO_SEND_TOGGLE_MARKER}]`,
+            `[${AUTO_SEND_TOGGLE_MOUNT_MARKER}]`,
+            `[${LOCAL_SIDEBAR_MARKER}]`,
+            `#${LOAD_PAST_MODAL_ID}`,
+            '#local-chat-save-toast'
+          ].join(',')
+        )
+      );
+    }
+
+    function nodeTouchesRelevantUi(node) {
+      const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+      if (!element) return false;
+
+      return Boolean(
+        element.matches?.(RELEVANT_MUTATION_SELECTOR) ||
+          element.closest?.(RELEVANT_MUTATION_SELECTOR) ||
+          element.querySelector?.(RELEVANT_MUTATION_SELECTOR)
+      );
+    }
+
+    function mutationNeedsInjection(record) {
+      if (!record || record.type !== 'childList') return false;
+      if (isExtensionOwnedNode(record.target)) return false;
+      if (nodeTouchesRelevantUi(record.target)) return true;
+
+      const changedNodes = [...(record.addedNodes || []), ...(record.removedNodes || [])];
+      if (!changedNodes.length) return false;
+      return changedNodes.some((node) => !isExtensionOwnedNode(node) && nodeTouchesRelevantUi(node));
+    }
+
+    function handleMutations(records = []) {
+      if (localChatAppAvailabilityLoaded && !localChatAppAvailable) return;
+      if (!records.some(mutationNeedsInjection)) return;
+      scheduleInject();
+    }
+
+    function scheduleInject(forceAuxiliaryUi = false) {
+      forceAuxiliaryUiOnNextInject ||= Boolean(forceAuxiliaryUi);
       if (scheduled) return;
+
       scheduled = true;
-      requestAnimationFrameImpl(() => {
+      scheduledInjectTimer = setTimeoutImpl(() => {
+        scheduledInjectTimer = null;
         scheduled = false;
-        injectButtons();
-      });
+        const forceAuxiliaryUi = forceAuxiliaryUiOnNextInject;
+        forceAuxiliaryUiOnNextInject = false;
+        injectButtons({ forceAuxiliaryUi });
+      }, config.mutationInjectDelayMs);
     }
 
     function installStorageListener() {
@@ -779,21 +883,21 @@
       if (started) return;
       started = true;
 
-      const observer = new MutationObserver(scheduleInject);
-      observer.observe(document.documentElement, { childList: true, subtree: true });
+      mutationObserver = new MutationObserver(handleMutations);
+      mutationObserver.observe(document.documentElement, { childList: true, subtree: true });
 
       autosaveController()?.installOutgoingPromptAutoSave?.();
       loadAutoSendPreference()
         .then(() => checkLocalChatAppAvailability(true))
         .finally(() => {
-          scheduleInject();
+          scheduleInject(true);
           scheduleNextLocalChatAppHealthCheck();
         });
 
       installStorageListener();
       installVisibilityListener();
 
-      scheduleInject();
+      scheduleInject(true);
       periodicInjectTimer = setInterval(injectButtons, config.periodicInjectMs);
     }
 
@@ -836,9 +940,15 @@
       localChatAppLastHealthCheckAt = 0;
       localChatAppLastHealthError = '';
       clearLocalChatAppHealthCheckTimer();
+      if (scheduledInjectTimer !== null) clearTimeoutImpl(scheduledInjectTimer);
+      scheduledInjectTimer = null;
+      mutationObserver?.disconnect?.();
+      mutationObserver = null;
       if (periodicInjectTimer) clearInterval(periodicInjectTimer);
       periodicInjectTimer = null;
       scheduled = false;
+      forceAuxiliaryUiOnNextInject = false;
+      lastAuxiliaryUiRefreshAt = 0;
       started = false;
     }
 
@@ -877,7 +987,12 @@
       chooseMessageCopyButton,
       collectMessageSaveTargets,
       removeInvalidSaveButtons,
+      refreshAuxiliaryUi,
       injectButtons,
+      isExtensionOwnedNode,
+      nodeTouchesRelevantUi,
+      mutationNeedsInjection,
+      handleMutations,
       scheduleInject,
       startContentScriptRuntime,
       setStateForTest,
