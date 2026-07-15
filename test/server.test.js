@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
+const http = require('node:http');
 
 const tempDataDir = path.join(os.tmpdir(), `local-chat-app-api-test-${process.pid}-${Date.now()}`);
 process.env.LOCAL_CHAT_DATA_DIR = tempDataDir;
@@ -31,6 +32,37 @@ async function json(pathname, options = {}) {
   });
   const data = await res.json().catch(() => ({}));
   return { res, data };
+}
+
+async function rawJson(pathname, headers = {}) {
+  const target = new URL(baseUrl);
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        path: pathname,
+        method: 'GET',
+        headers
+      },
+      (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          let data = {};
+          try {
+            data = JSON.parse(text);
+          } catch {
+            // Keep the empty object for responses without JSON bodies.
+          }
+          resolve({ res: response, data });
+        });
+      }
+    );
+    request.on('error', reject);
+    request.end();
+  });
 }
 
 async function createSession(overrides = {}) {
@@ -77,6 +109,36 @@ test('rejects untrusted browser origins before CORS can expose responses', async
   assert.equal(res.status, 403);
   assert.match(data.error, /origin/i);
   assert.equal(res.headers.get('access-control-allow-origin'), null);
+});
+
+test('rejects DNS-rebinding requests with attacker-controlled Host and Origin headers', async () => {
+  const { res, data } = await rawJson('/api/health', {
+    Host: 'attacker.example',
+    Origin: 'http://attacker.example'
+  });
+  assert.equal(res.statusCode, 403);
+  assert.match(data.error, /host/i);
+  assert.equal(res.headers['access-control-allow-origin'], undefined);
+});
+
+test('rejects local-looking Host headers that do not match the listening port', async () => {
+  const { res, data } = await rawJson('/api/health', {
+    Host: '127.0.0.1:65535',
+    Origin: 'http://127.0.0.1:65535'
+  });
+  assert.equal(res.statusCode, 403);
+  assert.match(data.error, /host/i);
+});
+
+test('allows a localhost Host alias on the actual loopback listening port', async () => {
+  const { port } = new URL(baseUrl);
+  const origin = `http://localhost:${port}`;
+  const { res, data } = await rawJson('/api/health', {
+    Host: `localhost:${port}`,
+    Origin: origin
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(data));
+  assert.equal(res.headers['access-control-allow-origin'], origin);
 });
 
 test('allows same-origin and Chrome-extension origins through CORS', async () => {
