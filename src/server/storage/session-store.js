@@ -1,7 +1,8 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { DATA_DIR } = require('../config');
-const { readJson, listDateDirs } = require('./file-store');
+const { listDateDirs } = require('./file-store');
+const { readSessionRecord } = require('./record-validation');
 const { summarizeSession } = require('../services/session-format');
 
 async function collectSessionSummaries() {
@@ -13,8 +14,8 @@ async function collectSessionSummaries() {
     const files = await fs.readdir(dir).catch(() => []);
     for (const file of files.filter((f) => f.endsWith('.json'))) {
       const filePath = path.join(dir, file);
-      const session = await readJson(filePath, null);
-      if (session?.id) sessions.push(summarizeSession(session, dateDir));
+      const session = await readSessionRecord(filePath);
+      sessions.push(summarizeSession(session, dateDir));
     }
   }
 
@@ -31,8 +32,8 @@ async function collectSearchableSessions() {
     const files = await fs.readdir(dir).catch(() => []);
     for (const file of files.filter((f) => f.endsWith('.json'))) {
       const filePath = path.join(dir, file);
-      const session = await readJson(filePath, null);
-      if (session?.id) sessions.push({ session, dateDir });
+      const session = await readSessionRecord(filePath);
+      sessions.push({ session, dateDir });
     }
   }
 

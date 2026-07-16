@@ -20,6 +20,7 @@ const MESSAGE_ID_PATTERN = /^msg_\d+_[a-f0-9]{8}$/;
 const FOLDER_ID_PATTERN = /^folder_\d+_[a-f0-9]{8}$/;
 const DATE_DIR_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9._:-]{8,160}$/;
+const CURRENT_SCHEMA_VERSION = 1;
 
 module.exports = {
   ROOT_DIR,
@@ -35,5 +36,6 @@ module.exports = {
   MESSAGE_ID_PATTERN,
   FOLDER_ID_PATTERN,
   DATE_DIR_PATTERN,
-  IDEMPOTENCY_KEY_PATTERN
+  IDEMPOTENCY_KEY_PATTERN,
+  CURRENT_SCHEMA_VERSION
 };

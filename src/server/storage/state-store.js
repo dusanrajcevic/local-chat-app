@@ -1,14 +1,16 @@
 const { STATE_FILE } = require('../config');
-const { ensureBaseFiles, readJson, writeJson, withLock } = require('./file-store');
+const { ensureBaseFiles, writeJson, withLock } = require('./file-store');
+const { CURRENT_SCHEMA_VERSION, readStateDocument } = require('./record-validation');
 
 async function getAppState() {
   await ensureBaseFiles();
-  return readJson(STATE_FILE, { activeSessionId: null, updatedAt: null });
+  return readStateDocument(STATE_FILE);
 }
 
 async function setActiveSessionId(sessionId) {
   return withLock(STATE_FILE, async () => {
     const state = await getAppState();
+    state.schemaVersion = CURRENT_SCHEMA_VERSION;
     state.activeSessionId = sessionId || null;
     state.updatedAt = new Date().toISOString();
     await writeJson(STATE_FILE, state);

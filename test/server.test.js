@@ -93,6 +93,21 @@ async function postLocalMessage(sessionId, body) {
   return result.data;
 }
 
+async function findActiveSessionPath(sessionId) {
+  const entries = await fs.readdir(DATA_DIR, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/.test(entry.name)) continue;
+    const candidate = path.join(DATA_DIR, entry.name, `${sessionId}.json`);
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Continue looking through date directories.
+    }
+  }
+  throw new Error(`Could not locate session file for ${sessionId}`);
+}
+
 test('health endpoint reports the app is reachable and omits Express fingerprinting', async () => {
   const { res, data } = await json('/api/health');
   assert.equal(res.status, 200);
@@ -449,6 +464,46 @@ test('trash lifecycle moves sessions out of active lists, supports restore, and 
   assert.equal(purged.res.status, 200);
   const missing = await json(`/api/sessions/${session.id}`);
   assert.equal(missing.res.status, 404);
+});
+
+test('corrupted persisted session IDs cannot overwrite metadata files', async () => {
+  await createFolder('Protected folder metadata');
+  const session = await createSession({ title: 'Corruption regression' });
+  const sessionPath = await findActiveSessionPath(session.id);
+  const foldersPath = path.join(DATA_DIR, 'folders.json');
+  const originalSessionText = await fs.readFile(sessionPath, 'utf8');
+  const originalFoldersText = await fs.readFile(foldersPath, 'utf8');
+  const corruptedSession = JSON.parse(originalSessionText);
+  corruptedSession.id = '../folders';
+  await fs.writeFile(sessionPath, `${JSON.stringify(corruptedSession, null, 2)}\n`);
+
+  try {
+    const removed = await json(`/api/sessions/${session.id}`, { method: 'DELETE' });
+    assert.equal(removed.res.status, 500);
+    assert.match(removed.data.error, /stored session data is invalid/i);
+    assert.equal(await fs.readFile(foldersPath, 'utf8'), originalFoldersText);
+    await fs.access(sessionPath);
+    await assert.rejects(fs.access(path.join(DATA_DIR, 'trash', `${session.id}.json`)), { code: 'ENOENT' });
+  } finally {
+    await fs.writeFile(sessionPath, originalSessionText);
+  }
+});
+
+test('valid-looking record IDs must still match the session filename', async () => {
+  const session = await createSession({ title: 'Filename mismatch regression' });
+  const sessionPath = await findActiveSessionPath(session.id);
+  const originalSessionText = await fs.readFile(sessionPath, 'utf8');
+  const corruptedSession = JSON.parse(originalSessionText);
+  corruptedSession.id = 'chat_1700000000000_deadbeef';
+  await fs.writeFile(sessionPath, `${JSON.stringify(corruptedSession, null, 2)}\n`);
+
+  try {
+    const read = await json(`/api/sessions/${session.id}`);
+    assert.equal(read.res.status, 500);
+    assert.match(read.data.error, /does not match filename id/i);
+  } finally {
+    await fs.writeFile(sessionPath, originalSessionText);
+  }
 });
 
 test('invalid IDs are rejected instead of being used in file paths', async () => {

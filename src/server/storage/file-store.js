@@ -1,7 +1,15 @@
 const fs = require('fs/promises');
 const path = require('path');
 const nodeCrypto = require('crypto');
-const { DATA_DIR, TRASH_DIR, FOLDERS_FILE, STATE_FILE, DATE_DIR_PATTERN, SESSION_ID_PATTERN } = require('../config');
+const {
+  DATA_DIR,
+  TRASH_DIR,
+  FOLDERS_FILE,
+  STATE_FILE,
+  DATE_DIR_PATTERN,
+  SESSION_ID_PATTERN,
+  CURRENT_SCHEMA_VERSION
+} = require('../config');
 const { appError } = require('../errors');
 const { validateId } = require('../validation');
 
@@ -86,13 +94,13 @@ async function ensureBaseFiles() {
   try {
     await fs.access(FOLDERS_FILE);
   } catch {
-    await writeJson(FOLDERS_FILE, { folders: [] });
+    await writeJson(FOLDERS_FILE, { schemaVersion: CURRENT_SCHEMA_VERSION, folders: [] });
   }
 
   try {
     await fs.access(STATE_FILE);
   } catch {
-    await writeJson(STATE_FILE, { activeSessionId: null, updatedAt: null });
+    await writeJson(STATE_FILE, { schemaVersion: CURRENT_SCHEMA_VERSION, activeSessionId: null, updatedAt: null });
   }
 }
 

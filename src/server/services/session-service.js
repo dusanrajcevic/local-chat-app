@@ -7,7 +7,8 @@ const { cleanName, cleanText, normalizeIdempotencyKey, optionalFolderId, validat
 const { requireExistingFolderId } = require('../storage/folder-store');
 const { clearActiveSessionIf } = require('../storage/state-store');
 const { collectSessionSummaries } = require('../storage/session-store');
-const { findSessionFile, readJson, writeJson, withLock, ensureBaseFiles } = require('../storage/file-store');
+const { findSessionFile, writeJson, withLock, ensureBaseFiles } = require('../storage/file-store');
+const { CURRENT_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
 const { buildSessionExportResponse } = require('./export-service');
 
@@ -19,6 +20,10 @@ async function recentChats(limit) {
   return (await collectSessionSummaries()).slice(0, limit);
 }
 
+function readFoundSession(found, expectedId) {
+  return readSessionRecord(found.filePath, { expectedId, trashed: found.trashed });
+}
+
 async function createSession(body) {
   const title = cleanName(body.title);
   if (!title) throw appError(400, 'Session title is required.');
@@ -26,6 +31,7 @@ async function createSession(body) {
   const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
   const now = new Date().toISOString();
   const session = {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     id: id('chat'),
     title,
     aiName: cleanName(body.aiName, 80) || 'AI Bot',
@@ -57,7 +63,7 @@ async function updateSessionMetadata(sessionId, body) {
   if (!found) throw appError(404, 'Session not found.');
 
   return withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     if (hasTitle) session.title = title;
     if (hasAiName) session.aiName = aiName;
     session.updatedAt = new Date().toISOString();
@@ -75,7 +81,7 @@ async function updateBotName(sessionId, body) {
   if (!found) throw appError(404, 'Session not found.');
 
   return withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     session.aiName = aiName;
     session.updatedAt = new Date().toISOString();
     await writeJson(found.filePath, session);
@@ -87,7 +93,7 @@ async function getSessionExport(sessionId) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
   const found = await findSessionFile(safeSessionId, true);
   if (!found) throw appError(404, 'Session not found.');
-  const session = await readJson(found.filePath);
+  const session = await readFoundSession(found, safeSessionId);
   return buildSessionExportResponse(session, found.dateDir, found.trashed);
 }
 
@@ -95,7 +101,7 @@ async function readSession(sessionId) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
   const found = await findSessionFile(safeSessionId, true);
   if (!found) throw appError(404, 'Session not found.');
-  const session = await readJson(found.filePath);
+  const session = await readFoundSession(found, safeSessionId);
   session.aiName = botNameForSession(session);
   return { ...session, trashed: found.trashed };
 }
@@ -117,9 +123,7 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
   if (!found) throw appError(404, 'Session not found.');
 
   return withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
-    if (!Array.isArray(session.messages)) session.messages = [];
-
+    const session = await readFoundSession(found, safeSessionId);
     if (idempotencyKey) {
       const existing = session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey);
       if (existing) return { message: existing, created: false };
@@ -157,7 +161,7 @@ async function updateMessage(sessionId, messageId, body) {
   if (!found) throw appError(404, 'Session not found.');
 
   return withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     const existing = (session.messages || []).find((msg) => msg.id === safeMessageId);
     if (!existing) throw appError(404, 'Message not found.');
 
@@ -178,7 +182,7 @@ async function deleteMessage(sessionId, messageId) {
   if (!found) throw appError(404, 'Session not found.');
 
   await withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     const originalLength = Array.isArray(session.messages) ? session.messages.length : 0;
     session.messages = (session.messages || []).filter((msg) => msg.id !== safeMessageId);
 
@@ -196,7 +200,7 @@ async function pinSession(sessionId, body) {
   if (!found) throw appError(404, 'Session not found.');
 
   return withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     session.pinnedFolderId = pinnedFolderId;
     session.updatedAt = new Date().toISOString();
     await writeJson(found.filePath, session);
@@ -210,11 +214,11 @@ async function moveSessionToTrash(sessionId) {
   if (!found) throw appError(404, 'Session not found.');
 
   await withLock(found.filePath, async () => {
-    const session = await readJson(found.filePath);
+    const session = await readFoundSession(found, safeSessionId);
     session.deletedAt = new Date().toISOString();
-    await writeJson(path.join(TRASH_DIR, `${session.id}.json`), session);
+    await writeJson(path.join(TRASH_DIR, `${safeSessionId}.json`), session);
     await fs.unlink(found.filePath);
-    await clearActiveSessionIf(session.id);
+    await clearActiveSessionIf(safeSessionId);
   });
 }
 
@@ -223,8 +227,8 @@ async function listTrash() {
   const files = await fs.readdir(TRASH_DIR).catch(() => []);
   const sessions = [];
   for (const file of files.filter((f) => f.endsWith('.json'))) {
-    const session = await readJson(path.join(TRASH_DIR, file), null);
-    if (session?.id) sessions.push(summarizeSession(session, null, true));
+    const session = await readSessionRecord(path.join(TRASH_DIR, file), { trashed: true });
+    sessions.push(summarizeSession(session, null, true));
   }
   sessions.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   return sessions;
@@ -235,13 +239,18 @@ async function restoreSessionFromTrash(sessionId) {
   const trashFile = path.join(TRASH_DIR, `${safeSessionId}.json`);
 
   return withLock(trashFile, async () => {
-    const session = await readJson(trashFile, null);
-    if (!session) throw appError(404, 'Trashed session not found.');
+    let session;
+    try {
+      session = await readSessionRecord(trashFile, { expectedId: safeSessionId, trashed: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') throw appError(404, 'Trashed session not found.');
+      throw error;
+    }
 
     const restoreDate = dateFolderName(new Date(session.createdAt || Date.now()));
     delete session.deletedAt;
     session.updatedAt = new Date().toISOString();
-    await writeJson(path.join(DATA_DIR, restoreDate, `${session.id}.json`), session);
+    await writeJson(path.join(DATA_DIR, restoreDate, `${safeSessionId}.json`), session);
     await fs.unlink(trashFile);
     return summarizeSession(session, restoreDate);
   });

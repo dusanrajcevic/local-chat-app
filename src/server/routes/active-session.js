@@ -3,7 +3,8 @@ const { appError } = require('../errors');
 const { validateId } = require('../validation');
 const { asyncRoute } = require('./helpers');
 const { getAppState, setActiveSessionId } = require('../storage/state-store');
-const { findSessionFile, readJson } = require('../storage/file-store');
+const { findSessionFile } = require('../storage/file-store');
+const { readSessionRecord } = require('../storage/record-validation');
 const { summarizeSession } = require('../services/session-format');
 
 function registerActiveSessionRoutes(app) {
@@ -23,9 +24,9 @@ function registerActiveSessionRoutes(app) {
         return res.json({ sessionId: null, session: null, updatedAt: state.updatedAt || null });
       }
 
-      const session = await readJson(found.filePath);
+      const session = await readSessionRecord(found.filePath, { expectedId: activeSessionId });
       res.json({
-        sessionId: session.id,
+        sessionId: activeSessionId,
         session: summarizeSession(session, found.dateDir),
         updatedAt: state.updatedAt || null
       });
@@ -39,11 +40,11 @@ function registerActiveSessionRoutes(app) {
       const found = await findSessionFile(sessionId);
       if (!found) throw appError(404, 'Session not found.');
 
-      const session = await readJson(found.filePath);
-      await setActiveSessionId(session.id);
+      const session = await readSessionRecord(found.filePath, { expectedId: sessionId });
+      await setActiveSessionId(sessionId);
       res.json({
         ok: true,
-        sessionId: session.id,
+        sessionId,
         session: summarizeSession(session, found.dateDir),
         updatedAt: new Date().toISOString()
       });
