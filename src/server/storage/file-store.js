@@ -13,7 +13,12 @@ const {
 const { appError } = require('../errors');
 const { validateId } = require('../validation');
 
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+const SUPPORTS_POSIX_PERMISSIONS = process.platform !== 'win32';
+
 const fileLocks = new Map();
+let permissionMigration = null;
 
 function isInside(parentDir, childPath) {
   const relative = path.relative(parentDir, childPath);
@@ -51,9 +56,45 @@ async function withLock(lockKey, task) {
   }
 }
 
+async function ensurePrivateDirectory(dirPath) {
+  const resolved = assertInsideDataDir(dirPath);
+  await fs.mkdir(resolved, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+  if (SUPPORTS_POSIX_PERMISSIONS) await fs.chmod(resolved, PRIVATE_DIRECTORY_MODE);
+  return resolved;
+}
+
+async function hardenDirectoryTree(dirPath) {
+  if (!SUPPORTS_POSIX_PERMISSIONS) return;
+
+  const resolved = assertInsideDataDir(dirPath);
+  await fs.chmod(resolved, PRIVATE_DIRECTORY_MODE);
+  const entries = await fs.readdir(resolved, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = assertInsideDataDir(path.join(resolved, entry.name));
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      await hardenDirectoryTree(entryPath);
+    } else if (entry.isFile()) {
+      await fs.chmod(entryPath, PRIVATE_FILE_MODE);
+    }
+  }
+}
+
+async function migrateExistingPermissionsOnce() {
+  if (!SUPPORTS_POSIX_PERMISSIONS) return;
+  if (!permissionMigration) {
+    permissionMigration = hardenDirectoryTree(DATA_DIR).catch((error) => {
+      permissionMigration = null;
+      throw error;
+    });
+  }
+  await permissionMigration;
+}
+
 async function atomicWriteFile(filePath, content) {
   const resolved = assertInsideDataDir(filePath);
-  await fs.mkdir(path.dirname(resolved), { recursive: true });
+  await ensurePrivateDirectory(path.dirname(resolved));
   const tempPath = path.join(
     path.dirname(resolved),
     `.${path.basename(resolved)}.${process.pid}.${Date.now()}.${nodeCrypto.randomBytes(4).toString('hex')}.tmp`
@@ -61,7 +102,8 @@ async function atomicWriteFile(filePath, content) {
 
   let handle = null;
   try {
-    handle = await fs.open(tempPath, 'w');
+    handle = await fs.open(tempPath, 'wx', PRIVATE_FILE_MODE);
+    if (SUPPORTS_POSIX_PERMISSIONS) await handle.chmod(PRIVATE_FILE_MODE);
     await handle.writeFile(content, 'utf8');
     await handle.sync();
     await handle.close();
@@ -88,8 +130,8 @@ async function writeJson(filePath, data) {
 }
 
 async function ensureBaseFiles() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.mkdir(TRASH_DIR, { recursive: true });
+  await ensurePrivateDirectory(DATA_DIR);
+  await ensurePrivateDirectory(TRASH_DIR);
 
   try {
     await fs.access(FOLDERS_FILE);
@@ -102,6 +144,8 @@ async function ensureBaseFiles() {
   } catch {
     await writeJson(STATE_FILE, { schemaVersion: CURRENT_SCHEMA_VERSION, activeSessionId: null, updatedAt: null });
   }
+
+  await migrateExistingPermissionsOnce();
 }
 
 async function listDateDirs() {

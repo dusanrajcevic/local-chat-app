@@ -23,6 +23,7 @@ Current hardening includes:
 - optional extension token via `LOCAL_CHAT_AUTH_TOKEN`;
 - route ID validation;
 - atomic JSON writes;
+- private POSIX storage permissions (`0700` directories and `0600` files), including a startup migration for existing data;
 - per-file write locks around read-modify-write operations;
 - idempotency keys for extension auto-save messages.
 
@@ -81,7 +82,7 @@ data/
     chat_<timestamp>_<random>.json
 ```
 
-The format is intentionally inspectable and portable. Every chat file contains metadata and a `messages` array.
+The format is intentionally inspectable and portable. Every chat file contains metadata and a `messages` array. On macOS and Linux, the app creates data directories with mode `0700`, creates JSON and temporary files with mode `0600`, and tightens existing regular files during startup without following symlinks. Windows does not expose equivalent POSIX mode bits, so access remains governed by the user's Windows account and filesystem ACLs.
 
 ## Recommended next refactor
 
