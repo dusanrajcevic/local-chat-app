@@ -17,7 +17,6 @@ const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const SUPPORTS_POSIX_PERMISSIONS = process.platform !== 'win32';
 
-const fileLocks = new Map();
 let permissionMigration = null;
 
 function isInside(parentDir, childPath) {
@@ -33,28 +32,40 @@ function assertInsideDataDir(filePath) {
   return resolved;
 }
 
-async function withLock(lockKey, task) {
-  const previous = fileLocks.get(lockKey) || Promise.resolve();
-  let release;
-  const current = new Promise((resolve) => {
-    release = resolve;
-  });
-  fileLocks.set(
-    lockKey,
-    previous.then(
+function createLockRegistry() {
+  const locks = new Map();
+
+  async function withLock(lockKey, task) {
+    const previous = locks.get(lockKey) || Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(
       () => current,
       () => current
-    )
-  );
+    );
+    locks.set(lockKey, queued);
 
-  try {
-    await previous.catch(() => {});
-    return await task();
-  } finally {
-    release();
-    if (fileLocks.get(lockKey) === current) fileLocks.delete(lockKey);
+    try {
+      await previous.catch(() => {});
+      return await task();
+    } finally {
+      release();
+      if (locks.get(lockKey) === queued) locks.delete(lockKey);
+    }
   }
+
+  return {
+    withLock,
+    get size() {
+      return locks.size;
+    }
+  };
 }
+
+const fileLockRegistry = createLockRegistry();
+const { withLock } = fileLockRegistry;
 
 async function ensurePrivateDirectory(dirPath) {
   const resolved = assertInsideDataDir(dirPath);
@@ -183,6 +194,7 @@ async function findSessionFile(sessionId, includeTrash = false) {
 module.exports = {
   isInside,
   assertInsideDataDir,
+  createLockRegistry,
   withLock,
   atomicWriteFile,
   readJson,
