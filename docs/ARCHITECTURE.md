@@ -88,7 +88,7 @@ The format is intentionally inspectable and portable. Every chat file contains m
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
-The next architecture improvement should be to add stricter quality gates around the public portfolio repo: ESLint/Prettier, mutation-resistant fixture snapshots for provider DOM changes, and a small Playwright or browser-runner smoke test against a live local server. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
+The next architecture improvement should focus on mutation-resistant provider fixtures and stronger browser-extension integration boundaries. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
 
 The current test suite covers server API/storage behavior, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
 
@@ -98,6 +98,8 @@ The repo now has public-portfolio quality gates:
 
 - ESLint flat config in `eslint.config.mjs` for Node, browser, WebExtension, CommonJS, and native ES module files.
 - Prettier config in `.prettierrc.json` with `.prettierignore` for generated/runtime artifacts.
-- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, and the Playwright smoke test.
+- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, and the required Playwright smoke test.
 - `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium.
-- CI installs Chromium with Playwright before running `npm run verify`.
+- The required smoke test fails when Chromium is unavailable and also rejects uncaught page errors, browser `console.error` messages, and failed network requests.
+- `npm run test:smoke:optional` is available only for lightweight local development where a missing browser may be skipped.
+- CI installs Chromium with Playwright before running `npm run verify` and never uses the optional command.

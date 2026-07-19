@@ -63,9 +63,10 @@ npm run check:syntax
 npm test
 npm run test:coverage
 npm run test:smoke
+npm run test:smoke:optional
 ```
 
-The Playwright smoke test needs Chromium. In CI, this is installed with:
+The required Playwright smoke test fails when Chromium is unavailable. This keeps `npm run verify` and CI from succeeding without browser-level coverage. In CI, Chromium is installed with:
 
 ```bash
 npx playwright install --with-deps chromium
@@ -76,6 +77,14 @@ Locally, you may also point Playwright at an existing Chromium binary:
 ```bash
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium npm run test:smoke
 ```
+
+For a lightweight local check that may skip only when the Playwright browser is missing, use:
+
+```bash
+npm run test:smoke:optional
+```
+
+Do not use the optional command in CI or release verification. The smoke test also fails on uncaught page errors, browser `console.error` messages, and failed network requests.
 
 Run `npm run format` only when you are ready to accept formatter changes across the repo.
 

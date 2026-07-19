@@ -110,9 +110,10 @@ Additional quality-gate commands:
 npm run lint
 npm run format:check
 npm run test:smoke
+npm run test:smoke:optional
 ```
 
-`npm run test:smoke` uses Playwright/Chromium. In CI, install the browser with `npx playwright install --with-deps chromium`; locally, Playwright can also use a system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
+`npm run test:smoke` requires Playwright/Chromium and fails when the browser is unavailable, so `npm run verify` cannot silently pass without browser coverage. In CI, install the browser with `npx playwright install --with-deps chromium`; locally, Playwright can also use a system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Use `npm run test:smoke:optional` only for lightweight local checks where a missing Playwright browser is allowed to skip the smoke test.
 
 ## Build desktop packages
 

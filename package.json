@@ -24,7 +24,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:smoke": "node --test e2e/playwright-smoke.mjs"
+    "test:smoke": "node e2e/playwright-smoke.mjs",
+    "test:smoke:optional": "node e2e/playwright-smoke.mjs --optional"
   },
   "keywords": [
     "local-first",

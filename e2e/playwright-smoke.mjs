@@ -5,7 +5,11 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
+
+import { launchChromium, monitorBrowserFailures } from './playwright-support.mjs';
+
+const OPTIONAL_SMOKE_TEST = process.argv.includes('--optional');
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -40,31 +44,15 @@ async function waitForHealth(baseUrl, timeoutMs = 10_000) {
   throw lastError || new Error('Timed out waiting for local server health check.');
 }
 
-function playwrightBrowserIsMissingError(err) {
-  const message = String(err?.message || err);
-  return /Executable doesn't exist|Please run the following command to download new browsers|playwright install/i.test(
-    message
-  );
-}
-
-async function launchChromiumOrSkip(t) {
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
-  try {
-    return await chromium.launch({
-      headless: true,
-      ...(executablePath ? { executablePath } : {}),
-      args: ['--no-sandbox']
-    });
-  } catch (err) {
-    if (!executablePath && playwrightBrowserIsMissingError(err)) {
-      t.skip('Playwright Chromium is not installed; run `npx playwright install chromium` to enable this smoke test.');
-      return null;
-    }
-    throw err;
-  }
-}
-
 test('web UI smoke flow works against a live local server', { timeout: 60_000 }, async (t) => {
+  const browser = await launchChromium({
+    chromium,
+    t,
+    optional: OPTIONAL_SMOKE_TEST,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+  });
+  if (!browser) return;
+
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-chat-playwright-'));
@@ -82,14 +70,11 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
   const stderr = [];
   serverProcess.stderr.on('data', (chunk) => stderr.push(String(chunk)));
 
-  let browser;
   try {
     await waitForHealth(baseUrl);
 
-    browser = await launchChromiumOrSkip(t);
-    if (!browser) return;
-
     const page = await browser.newPage();
+    const browserFailures = monitorBrowserFailures(page);
     page.setDefaultTimeout(10_000);
     page.on('dialog', (dialog) => dialog.accept());
 
@@ -129,8 +114,9 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0].title, 'Smoke Session Renamed');
     assert.equal(sessions[0].messageCount, 1);
+    assert.deepEqual(browserFailures, [], browserFailures.join('\n'));
   } finally {
-    await browser?.close();
+    await browser.close();
     serverProcess.kill('SIGTERM');
     await Promise.race([
       new Promise((resolve) => serverProcess.once('exit', resolve)),
