@@ -1,4 +1,5 @@
 const { FOLDER_ID_PATTERN } = require('../config');
+const { requireJsonObjectBody } = require('../middleware/request-body');
 const { validateId } = require('../validation');
 const { asyncRoute } = require('./helpers');
 const { readFolders, createFolder, renameFolder, deleteFolderAndUnpinSessions } = require('../storage/folder-store');
@@ -13,6 +14,7 @@ function registerFolderRoutes(app) {
 
   app.post(
     '/api/folders',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.status(201).json(await createFolder(req.body.name));
     })
@@ -20,6 +22,7 @@ function registerFolderRoutes(app) {
 
   app.patch(
     '/api/folders/:folderId',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       const folderId = validateId(req.params.folderId, FOLDER_ID_PATTERN, 'Folder ID');
       res.json(await renameFolder(folderId, req.body.name));

@@ -52,6 +52,12 @@ The browser extension uses this to determine where manual saves should go when n
 - `POST /api/trash/:sessionId/restore`
 - `DELETE /api/trash/:sessionId`
 
+## Request body contract
+
+Routes that accept a request body require `Content-Type: application/json` (or an `application/*+json` media type) and a top-level JSON object. Missing or unsupported content types return `415`. Empty, malformed, or non-object JSON bodies return `400`, and payloads over `LOCAL_CHAT_JSON_LIMIT` return `413`.
+
+String fields are type-checked before whitespace normalization. Arrays, objects, numbers, and booleans are rejected rather than being converted with JavaScript string coercion.
+
 ## Validation and consistency notes
 
 - Route IDs must match the generated `chat_...`, `msg_...`, or `folder_...` formats. Invalid IDs return `400` before any file path is touched.

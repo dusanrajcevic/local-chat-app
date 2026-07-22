@@ -25,7 +25,7 @@ async function requireExistingFolderId(folderId) {
 }
 
 async function createFolder(name) {
-  const cleanFolderName = cleanName(name, 80);
+  const cleanFolderName = cleanName(name, 80, 'Folder name');
   if (!cleanFolderName) throw appError(400, 'Folder name is required.');
 
   return withLock(FOLDERS_FILE, async () => {
@@ -40,7 +40,7 @@ async function createFolder(name) {
 }
 
 async function renameFolder(folderId, name) {
-  const cleanFolderName = cleanName(name, 80);
+  const cleanFolderName = cleanName(name, 80, 'Folder name');
   if (!cleanFolderName) throw appError(400, 'Folder name is required.');
 
   return withLock(FOLDERS_FILE, async () => {

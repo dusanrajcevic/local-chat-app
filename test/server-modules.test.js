@@ -2,17 +2,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { FOLDER_ID_PATTERN } = require('../src/server/config');
-const { cleanName, optionalFolderId, normalizeIdempotencyKey, validateId } = require('../src/server/validation');
+const {
+  cleanName,
+  cleanText,
+  optionalFolderId,
+  normalizeIdempotencyKey,
+  optionalMessageSender,
+  validateId
+} = require('../src/server/validation');
 const { compactSnippet, normalizeLimit, normalizeSearchText } = require('../src/server/services/search-service');
 const { summarizeSession, botNameForSession } = require('../src/server/services/session-format');
 
 test('server validation utilities normalize public API inputs consistently', () => {
   assert.equal(cleanName('  one\n two\tthree  '), 'one two three');
   assert.equal(optionalFolderId(''), null);
+  assert.equal(optionalFolderId('   '), null);
   assert.equal(optionalFolderId('folder_1700000000000_deadbeef'), 'folder_1700000000000_deadbeef');
   assert.equal(normalizeIdempotencyKey(' auto:save.key-0001 '), 'auto:save.key-0001');
+  assert.equal(normalizeIdempotencyKey('   '), '');
   assert.throws(() => validateId('../escape', FOLDER_ID_PATTERN, 'Folder ID'), /Folder ID is invalid/);
   assert.throws(() => normalizeIdempotencyKey('../escape'), /Idempotency key is invalid/);
+  assert.throws(() => cleanName({ name: 'object' }, 80, 'Folder name'), /Folder name must be a string/);
+  assert.throws(() => cleanText(['message'], 'Message text'), /Message text must be a string/);
+  assert.throws(() => optionalFolderId(false), /Folder ID must be a string/);
+  assert.throws(() => normalizeIdempotencyKey({ key: 'object' }), /Idempotency key must be a string/);
+  assert.throws(() => optionalMessageSender(true), /Message sender must be/);
+  assert.equal(optionalMessageSender(undefined), null);
+  assert.equal(optionalMessageSender('me'), 'me');
 });
 
 test('server search utilities normalize limits and build compact snippets', () => {

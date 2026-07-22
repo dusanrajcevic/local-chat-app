@@ -108,6 +108,83 @@ async function findActiveSessionPath(sessionId) {
   throw new Error(`Could not locate session file for ${sessionId}`);
 }
 
+
+test('body-bearing routes require a JSON object with a supported content type', async () => {
+  const routes = [
+    ['POST', '/api/folders'],
+    ['PATCH', '/api/folders/folder_1700000000000_deadbeef'],
+    ['PUT', '/api/active-session'],
+    ['POST', '/api/sessions'],
+    ['PATCH', '/api/sessions/chat_1700000000000_deadbeef'],
+    ['PATCH', '/api/sessions/chat_1700000000000_deadbeef/bot-name'],
+    ['POST', '/api/sessions/chat_1700000000000_deadbeef/messages'],
+    ['PATCH', '/api/sessions/chat_1700000000000_deadbeef/messages/msg_1700000000000_deadbeef'],
+    ['PATCH', '/api/sessions/chat_1700000000000_deadbeef/pin']
+  ];
+
+  for (const [method, pathname] of routes) {
+    const unsupported = await json(pathname, {
+      method,
+      headers: { 'Content-Type': 'text/plain' },
+      body: '{}'
+    });
+    assert.equal(unsupported.res.status, 415, `${method} ${pathname}`);
+    assert.match(unsupported.data.error, /content-type/i);
+
+    const bodyless = await json(pathname, { method });
+    assert.equal(bodyless.res.status, 400, `${method} ${pathname}`);
+    assert.match(bodyless.data.error, /json object/i);
+  }
+});
+
+test('malformed and non-object JSON bodies return stable 400 responses', async () => {
+  const malformed = await json('/api/sessions', { method: 'POST', body: '{"title":' });
+  assert.equal(malformed.res.status, 400);
+  assert.equal(malformed.data.error, 'Request body contains invalid JSON.');
+
+  const arrayBody = await json('/api/sessions', { method: 'POST', body: '[]' });
+  assert.equal(arrayBody.res.status, 400);
+  assert.match(arrayBody.data.error, /json object/i);
+});
+
+test('request fields reject arrays, objects, and booleans instead of stringifying them', async () => {
+  const folder = await json('/api/folders', {
+    method: 'POST',
+    body: JSON.stringify({ name: { unexpected: true } })
+  });
+  assert.equal(folder.res.status, 400);
+  assert.match(folder.data.error, /folder name must be a string/i);
+
+  const session = await json('/api/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ title: true })
+  });
+  assert.equal(session.res.status, 400);
+  assert.match(session.data.error, /session title must be a string/i);
+
+  const validSession = await createSession({ title: 'Typed request fields' });
+  const message = await json(`/api/sessions/${validSession.id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ text: ['not', 'text'], sender: false })
+  });
+  assert.equal(message.res.status, 400);
+  assert.match(message.data.error, /message text must be a string/i);
+
+  const sender = await json(`/api/sessions/${validSession.id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ text: 'Valid text', sender: false })
+  });
+  assert.equal(sender.res.status, 400);
+  assert.match(sender.data.error, /message sender/i);
+
+  const active = await json('/api/active-session', {
+    method: 'PUT',
+    body: JSON.stringify({ sessionId: { unexpected: true } })
+  });
+  assert.equal(active.res.status, 400);
+  assert.match(active.data.error, /session id/i);
+});
+
 test('health endpoint reports the app is reachable and omits Express fingerprinting', async () => {
   const { res, data } = await json('/api/health');
   assert.equal(res.status, 200);

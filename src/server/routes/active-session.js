@@ -1,5 +1,6 @@
 const { SESSION_ID_PATTERN } = require('../config');
 const { appError } = require('../errors');
+const { requireJsonObjectBody } = require('../middleware/request-body');
 const { validateId } = require('../validation');
 const { asyncRoute } = require('./helpers');
 const { getAppState, setActiveSessionId } = require('../storage/state-store');
@@ -35,6 +36,7 @@ function registerActiveSessionRoutes(app) {
 
   app.put(
     '/api/active-session',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       const sessionId = validateId(req.body.sessionId, SESSION_ID_PATTERN, 'Session ID');
       const found = await findSessionFile(sessionId);

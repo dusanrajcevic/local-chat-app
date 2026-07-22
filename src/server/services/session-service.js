@@ -3,7 +3,14 @@ const path = require('path');
 const { DATA_DIR, TRASH_DIR, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
-const { cleanName, cleanText, normalizeIdempotencyKey, optionalFolderId, validateId } = require('../validation');
+const {
+  cleanName,
+  cleanText,
+  normalizeIdempotencyKey,
+  optionalFolderId,
+  optionalMessageSender,
+  validateId
+} = require('../validation');
 const { requireExistingFolderId } = require('../storage/folder-store');
 const { clearActiveSessionIf } = require('../storage/state-store');
 const { collectSessionSummaries } = require('../storage/session-store');
@@ -25,7 +32,7 @@ function readFoundSession(found, expectedId) {
 }
 
 async function createSession(body) {
-  const title = cleanName(body.title);
+  const title = cleanName(body.title, 160, 'Session title');
   if (!title) throw appError(400, 'Session title is required.');
 
   const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
@@ -34,7 +41,7 @@ async function createSession(body) {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     id: id('chat'),
     title,
-    aiName: cleanName(body.aiName, 80) || 'AI Bot',
+    aiName: cleanName(body.aiName, 80, 'AI bot name') || 'AI Bot',
     createdAt: now,
     updatedAt: now,
     pinnedFolderId,
@@ -53,8 +60,8 @@ async function updateSessionMetadata(sessionId, body) {
 
   if (!hasTitle && !hasAiName) throw appError(400, 'Nothing to update.');
 
-  const title = hasTitle ? cleanName(body.title) : null;
-  const aiName = hasAiName ? cleanName(body.aiName, 80) : null;
+  const title = hasTitle ? cleanName(body.title, 160, 'Session title') : null;
+  const aiName = hasAiName ? cleanName(body.aiName, 80, 'AI bot name') : null;
 
   if (hasTitle && !title) throw appError(400, 'Session title is required.');
   if (hasAiName && !aiName) throw appError(400, 'AI bot name is required.');
@@ -74,7 +81,7 @@ async function updateSessionMetadata(sessionId, body) {
 
 async function updateBotName(sessionId, body) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const aiName = cleanName(body.aiName, 80);
+  const aiName = cleanName(body.aiName, 80, 'AI bot name');
   if (!aiName) throw appError(400, 'AI bot name is required.');
 
   const found = await findSessionFile(safeSessionId, true);
@@ -115,7 +122,7 @@ function nextMessageSender(messages) {
 
 async function addMessage(sessionId, body, rawIdempotencyKey) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const text = cleanText(body.text);
+  const text = cleanText(body.text, 'Message text');
   if (!text) throw appError(400, 'Message text is required.');
 
   const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey || body.idempotencyKey);
@@ -129,7 +136,7 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
       if (existing) return { message: existing, created: false };
     }
 
-    const requestedSender = body.sender === 'me' ? 'me' : body.sender === 'bot' ? 'bot' : null;
+    const requestedSender = optionalMessageSender(body.sender);
     const sender = requestedSender || nextMessageSender(session.messages);
     const now = new Date().toISOString();
     const nextMessage = {
@@ -140,8 +147,14 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     };
 
     if (idempotencyKey) nextMessage.clientIdempotencyKey = idempotencyKey;
-    if (body.source) nextMessage.source = cleanName(body.source, 80);
-    if (body.providerKey) nextMessage.providerKey = cleanName(body.providerKey, 80);
+    if (Object.prototype.hasOwnProperty.call(body, 'source')) {
+      const source = cleanName(body.source, 80, 'Message source');
+      if (source) nextMessage.source = source;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'providerKey')) {
+      const providerKey = cleanName(body.providerKey, 80, 'Provider key');
+      if (providerKey) nextMessage.providerKey = providerKey;
+    }
 
     session.messages.push(nextMessage);
     session.updatedAt = now;
@@ -153,8 +166,8 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
 async function updateMessage(sessionId, messageId, body) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
   const safeMessageId = validateId(messageId, MESSAGE_ID_PATTERN, 'Message ID');
-  const text = cleanText(body.text);
-  const sender = body.sender === 'me' ? 'me' : body.sender === 'bot' ? 'bot' : null;
+  const text = cleanText(body.text, 'Message text');
+  const sender = optionalMessageSender(body.sender);
   if (!text) throw appError(400, 'Message text is required.');
 
   const found = await findSessionFile(safeSessionId);

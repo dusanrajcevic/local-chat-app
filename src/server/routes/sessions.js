@@ -1,3 +1,4 @@
+const { requireJsonObjectBody } = require('../middleware/request-body');
 const { asyncRoute } = require('./helpers');
 const { normalizeLimit, searchResponse } = require('../services/search-service');
 const {
@@ -39,6 +40,7 @@ function registerSessionRoutes(app) {
 
   app.post(
     '/api/sessions',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.status(201).json(await createSession(req.body));
     })
@@ -46,6 +48,7 @@ function registerSessionRoutes(app) {
 
   app.patch(
     '/api/sessions/:sessionId',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.json(await updateSessionMetadata(req.params.sessionId, req.body));
     })
@@ -53,6 +56,7 @@ function registerSessionRoutes(app) {
 
   app.patch(
     '/api/sessions/:sessionId/bot-name',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.json(await updateBotName(req.params.sessionId, req.body));
     })
@@ -74,6 +78,7 @@ function registerSessionRoutes(app) {
 
   app.post(
     '/api/sessions/:sessionId/messages',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       const { message, created } = await addMessage(req.params.sessionId, req.body, req.get('Idempotency-Key'));
       res.status(created ? 201 : 200).json(message);
@@ -82,6 +87,7 @@ function registerSessionRoutes(app) {
 
   app.patch(
     '/api/sessions/:sessionId/messages/:messageId',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.json(await updateMessage(req.params.sessionId, req.params.messageId, req.body));
     })
@@ -97,6 +103,7 @@ function registerSessionRoutes(app) {
 
   app.patch(
     '/api/sessions/:sessionId/pin',
+    requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.json(await pinSession(req.params.sessionId, req.body));
     })
