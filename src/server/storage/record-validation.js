@@ -4,6 +4,7 @@ const {
   MESSAGE_ID_PATTERN,
   FOLDER_ID_PATTERN,
   IDEMPOTENCY_KEY_PATTERN,
+  IDEMPOTENCY_FINGERPRINT_PATTERN,
   CURRENT_SCHEMA_VERSION
 } = require('../config');
 const { appError } = require('../errors');
@@ -77,6 +78,16 @@ function validateMessageRecord(message, index, seenIds) {
   assertPattern(message.clientIdempotencyKey, IDEMPOTENCY_KEY_PATTERN, kind, `${label}.clientIdempotencyKey`, {
     optional: true
   });
+  assertPattern(
+    message.clientIdempotencyFingerprint,
+    IDEMPOTENCY_FINGERPRINT_PATTERN,
+    kind,
+    `${label}.clientIdempotencyFingerprint`,
+    { optional: true }
+  );
+  if (message.clientIdempotencyFingerprint && !message.clientIdempotencyKey) {
+    throw storedDataError(kind, `${label}.clientIdempotencyFingerprint requires a clientIdempotencyKey`);
+  }
   assertOptionalString(message.source, kind, `${label}.source`, 80);
   assertOptionalString(message.providerKey, kind, `${label}.providerKey`, 80);
 }

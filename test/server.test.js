@@ -391,6 +391,68 @@ test('message idempotency works for sequential and concurrent duplicate saves', 
   assert.equal(read.data.messages.length, 2);
 });
 
+test('idempotency keys reject sequential and concurrent payload conflicts', async () => {
+  const session = await createSession({ title: 'Idempotency conflicts' });
+  const sequentialKey = 'payload-conflict-api-0001';
+  const original = await json(`/api/sessions/${session.id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text: '  Captured response  ',
+      sender: 'bot',
+      source: ' browser   extension ',
+      providerKey: ' chatgpt ',
+      idempotencyKey: sequentialKey
+    })
+  });
+  assert.equal(original.res.status, 201);
+
+  const normalizedRetry = await json(`/api/sessions/${session.id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text: 'Captured response',
+      sender: 'bot',
+      source: 'browser extension',
+      providerKey: 'chatgpt',
+      idempotencyKey: sequentialKey
+    })
+  });
+  assert.equal(normalizedRetry.res.status, 200);
+  assert.equal(normalizedRetry.data.id, original.data.id);
+
+  const changed = await json(`/api/sessions/${session.id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text: 'Changed response',
+      sender: 'bot',
+      source: 'browser extension',
+      providerKey: 'chatgpt',
+      idempotencyKey: sequentialKey
+    })
+  });
+  assert.equal(changed.res.status, 409);
+  assert.match(changed.data.error, /different message payload/i);
+
+  const concurrentKey = 'payload-conflict-api-concurrent-0001';
+  const concurrent = await Promise.all([
+    json(`/api/sessions/${session.id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'Concurrent A', sender: 'me', idempotencyKey: concurrentKey })
+    }),
+    json(`/api/sessions/${session.id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'Concurrent B', sender: 'me', idempotencyKey: concurrentKey })
+    })
+  ]);
+  assert.deepEqual(
+    concurrent.map((result) => result.res.status).sort((a, b) => a - b),
+    [201, 409]
+  );
+  assert.match(concurrent.find((result) => result.res.status === 409).data.error, /different message payload/i);
+
+  const read = await json(`/api/sessions/${session.id}`);
+  assert.equal(read.data.messages.length, 2);
+});
+
 test('per-session write locking preserves all concurrent distinct messages', async () => {
   const session = await createSession({ title: 'Concurrent distinct saves' });
   const count = 30;

@@ -54,6 +54,15 @@ test('session validation rejects malformed message collections and fields', () =
   invalidSender.messages[0].sender = 'system';
   assert.throws(() => validateSessionRecord(invalidSender, SESSION_ID), /sender must be/i);
 
+  const invalidFingerprint = validSession();
+  invalidFingerprint.messages[0].clientIdempotencyFingerprint = 'sha256:not-a-digest';
+  assert.throws(() => validateSessionRecord(invalidFingerprint, SESSION_ID), /fingerprint.*invalid format/i);
+
+  const fingerprintWithoutKey = validSession();
+  delete fingerprintWithoutKey.messages[0].clientIdempotencyKey;
+  fingerprintWithoutKey.messages[0].clientIdempotencyFingerprint = `sha256:${'a'.repeat(64)}`;
+  assert.throws(() => validateSessionRecord(fingerprintWithoutKey, SESSION_ID), /requires.*clientIdempotencyKey/i);
+
   const invalidTimestamp = validSession({ createdAt: 'not-a-date' });
   assert.throws(() => validateSessionRecord(invalidTimestamp, SESSION_ID), /createdAt must be a valid timestamp/i);
 });

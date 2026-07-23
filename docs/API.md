@@ -32,7 +32,7 @@ The browser extension uses this to determine where manual saves should go when n
 - `PATCH /api/sessions/:sessionId/messages/:messageId`
 - `DELETE /api/sessions/:sessionId/messages/:messageId`
 
-`POST /messages` accepts an optional `Idempotency-Key` header or `idempotencyKey` body field. When the same key is seen again for the same session, the existing message is returned instead of appending a duplicate.
+`POST /messages` accepts an optional `Idempotency-Key` header or `idempotencyKey` body field. The key is bound to the normalized message request (`text`, requested `sender`, `source`, and `providerKey`). An identical retry returns the existing message instead of appending a duplicate; reusing the key with different normalized content returns `409 Conflict`.
 
 ## Folders
 

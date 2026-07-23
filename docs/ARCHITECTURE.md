@@ -25,7 +25,7 @@ Current hardening includes:
 - atomic JSON writes;
 - private POSIX storage permissions (`0700` directories and `0600` files), including a startup migration for existing data;
 - per-file write locks around read-modify-write operations;
-- idempotency keys for extension auto-save messages.
+- payload-bound idempotency keys for extension auto-save messages.
 
 ### Web UI
 

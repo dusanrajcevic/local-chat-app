@@ -18,6 +18,11 @@ const { findSessionFile, writeJson, withLock, ensureBaseFiles } = require('../st
 const { CURRENT_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
 const { buildSessionExportResponse } = require('./export-service');
+const {
+  createMessageRequestPayload,
+  fingerprintMessageRequest,
+  bindExistingMessageToPayload
+} = require('./message-idempotency');
 
 async function listSessions() {
   return collectSessionSummaries();
@@ -125,7 +130,22 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
   const text = cleanText(body.text, 'Message text');
   if (!text) throw appError(400, 'Message text is required.');
 
+  const requestedSender = optionalMessageSender(body.sender);
+  const source = Object.prototype.hasOwnProperty.call(body, 'source')
+    ? cleanName(body.source, 80, 'Message source')
+    : '';
+  const providerKey = Object.prototype.hasOwnProperty.call(body, 'providerKey')
+    ? cleanName(body.providerKey, 80, 'Provider key')
+    : '';
   const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey || body.idempotencyKey);
+  const idempotencyPayload = createMessageRequestPayload({
+    text,
+    sender: requestedSender,
+    source,
+    providerKey
+  });
+  const idempotencyFingerprint = idempotencyKey ? fingerprintMessageRequest(idempotencyPayload) : '';
+
   const found = await findSessionFile(safeSessionId);
   if (!found) throw appError(404, 'Session not found.');
 
@@ -133,10 +153,17 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     const session = await readFoundSession(found, safeSessionId);
     if (idempotencyKey) {
       const existing = session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey);
-      if (existing) return { message: existing, created: false };
+      if (existing) {
+        const fingerprintAdded = bindExistingMessageToPayload(
+          existing,
+          idempotencyPayload,
+          idempotencyFingerprint
+        );
+        if (fingerprintAdded) await writeJson(found.filePath, session);
+        return { message: existing, created: false };
+      }
     }
 
-    const requestedSender = optionalMessageSender(body.sender);
     const sender = requestedSender || nextMessageSender(session.messages);
     const now = new Date().toISOString();
     const nextMessage = {
@@ -146,15 +173,12 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
       createdAt: now
     };
 
-    if (idempotencyKey) nextMessage.clientIdempotencyKey = idempotencyKey;
-    if (Object.prototype.hasOwnProperty.call(body, 'source')) {
-      const source = cleanName(body.source, 80, 'Message source');
-      if (source) nextMessage.source = source;
+    if (idempotencyKey) {
+      nextMessage.clientIdempotencyKey = idempotencyKey;
+      nextMessage.clientIdempotencyFingerprint = idempotencyFingerprint;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'providerKey')) {
-      const providerKey = cleanName(body.providerKey, 80, 'Provider key');
-      if (providerKey) nextMessage.providerKey = providerKey;
-    }
+    if (source) nextMessage.source = source;
+    if (providerKey) nextMessage.providerKey = providerKey;
 
     session.messages.push(nextMessage);
     session.updatedAt = now;
