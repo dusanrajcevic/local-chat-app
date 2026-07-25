@@ -1,4 +1,4 @@
-const crypto = require('node:crypto');
+const nodeCrypto = require('node:crypto');
 const { appError } = require('../errors');
 
 const FINGERPRINT_VERSION = 1;
@@ -14,7 +14,11 @@ function createMessageRequestPayload({ text, sender, source, providerKey }) {
 }
 
 function fingerprintMessageRequest(payload) {
-  const digest = crypto.createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
+  const digest = nodeCrypto
+    .createHash('sha256')
+    .update(JSON.stringify(payload), 'utf8')
+    .digest('hex');
+
   return `sha256:${digest}`;
 }
 
