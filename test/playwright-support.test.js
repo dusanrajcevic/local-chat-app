@@ -22,8 +22,7 @@ test('required Chromium launch fails when the Playwright browser is missing', as
 
   await assert.rejects(
     launchChromium({ chromium, t: { skip: assert.fail } }),
-    (err) =>
-      err.message.includes('Playwright Chromium is required') && err.cause === originalError
+    (err) => err.message.includes('Playwright Chromium is required') && err.cause === originalError
   );
 });
 
@@ -116,8 +115,5 @@ test('browser monitoring records runtime, console, and network failures', async 
   assert.equal(failures.length, 3);
   assert.match(failures[0], /^console\.error: broken UI$/);
   assert.match(failures[1], /^pageerror: Error: unhandled rejection/);
-  assert.equal(
-    failures[2],
-    'requestfailed: GET http://127.0.0.1:3000/app.mjs (net::ERR_FAILED)'
-  );
+  assert.equal(failures[2], 'requestfailed: GET http://127.0.0.1:3000/app.mjs (net::ERR_FAILED)');
 });

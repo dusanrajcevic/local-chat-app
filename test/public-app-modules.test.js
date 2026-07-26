@@ -164,14 +164,8 @@ test('app API client sends JSON by default, merges headers, and surfaces server 
 
 test('next message sender alternates from the last actual sender', () => {
   assert.equal(stateModule.nextMessageSender({ messages: [] }), 'me');
-  assert.equal(
-    stateModule.nextMessageSender({ messages: [{ sender: 'me' }, { sender: 'me' }] }),
-    'bot'
-  );
-  assert.equal(
-    stateModule.nextMessageSender({ messages: [{ sender: 'bot' }, { sender: 'bot' }] }),
-    'me'
-  );
+  assert.equal(stateModule.nextMessageSender({ messages: [{ sender: 'me' }, { sender: 'me' }] }), 'bot');
+  assert.equal(stateModule.nextMessageSender({ messages: [{ sender: 'bot' }, { sender: 'bot' }] }), 'me');
 });
 
 test('renderer filters folder views and escapes rendered titles', () => {

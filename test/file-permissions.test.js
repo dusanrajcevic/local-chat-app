@@ -25,11 +25,7 @@ function permissionBits(stat) {
 
 async function assertMode(targetPath, expectedMode) {
   const stat = await fs.stat(targetPath);
-  assert.equal(
-    permissionBits(stat),
-    expectedMode,
-    `${targetPath} should use mode ${expectedMode.toString(8)}`
-  );
+  assert.equal(permissionBits(stat), expectedMode, `${targetPath} should use mode ${expectedMode.toString(8)}`);
 }
 
 test.before(async (t) => {

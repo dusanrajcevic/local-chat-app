@@ -805,8 +805,8 @@
 
       return Boolean(
         element.matches?.(RELEVANT_MUTATION_SELECTOR) ||
-          element.closest?.(RELEVANT_MUTATION_SELECTOR) ||
-          element.querySelector?.(RELEVANT_MUTATION_SELECTOR)
+        element.closest?.(RELEVANT_MUTATION_SELECTOR) ||
+        element.querySelector?.(RELEVANT_MUTATION_SELECTOR)
       );
     }
 

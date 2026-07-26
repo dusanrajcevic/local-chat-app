@@ -105,9 +105,18 @@ test('identical normalized retries return the original automatic-sender message'
 test('reusing a key with changed normalized content returns a conflict', async () => {
   const session = await newSession('Payload conflicts');
   const cases = [
-    [{ text: 'Original', sender: 'me' }, { text: 'Changed', sender: 'me' }],
-    [{ text: 'Sender', sender: 'me' }, { text: 'Sender', sender: 'bot' }],
-    [{ text: 'Source', sender: 'me', source: 'extension' }, { text: 'Source', sender: 'me', source: 'manual' }],
+    [
+      { text: 'Original', sender: 'me' },
+      { text: 'Changed', sender: 'me' }
+    ],
+    [
+      { text: 'Sender', sender: 'me' },
+      { text: 'Sender', sender: 'bot' }
+    ],
+    [
+      { text: 'Source', sender: 'me', source: 'extension' },
+      { text: 'Source', sender: 'me', source: 'manual' }
+    ],
     [
       { text: 'Provider', sender: 'me', providerKey: 'chatgpt' },
       { text: 'Provider', sender: 'me', providerKey: 'claude' }

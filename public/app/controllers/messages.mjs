@@ -1,13 +1,4 @@
-function createMessageController({
-  state,
-  el,
-  api,
-  modal,
-  openSession,
-  refreshAll,
-  alertUser,
-  confirmUser
-}) {
+function createMessageController({ state, el, api, modal, openSession, refreshAll, alertUser, confirmUser }) {
   async function saveEditedMessage() {
     if (!state.currentSession || state.currentSession.trashed || !state.editingMessageId) return;
 

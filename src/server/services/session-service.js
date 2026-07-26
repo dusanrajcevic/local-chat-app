@@ -154,11 +154,7 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     if (idempotencyKey) {
       const existing = session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey);
       if (existing) {
-        const fingerprintAdded = bindExistingMessageToPayload(
-          existing,
-          idempotencyPayload,
-          idempotencyFingerprint
-        );
+        const fingerprintAdded = bindExistingMessageToPayload(existing, idempotencyPayload, idempotencyFingerprint);
         if (fingerprintAdded) await writeJson(found.filePath, session);
         return { message: existing, created: false };
       }

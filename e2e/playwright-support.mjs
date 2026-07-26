@@ -14,9 +14,7 @@ export async function launchChromium({ chromium, t, optional = false, executable
     });
   } catch (err) {
     if (optional && !executablePath && playwrightBrowserIsMissingError(err)) {
-      t.skip(
-        'Playwright Chromium is not installed; run `npx playwright install chromium` to enable this smoke test.'
-      );
+      t.skip('Playwright Chromium is not installed; run `npx playwright install chromium` to enable this smoke test.');
       return null;
     }
 

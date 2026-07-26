@@ -108,7 +108,6 @@ async function findActiveSessionPath(sessionId) {
   throw new Error(`Could not locate session file for ${sessionId}`);
 }
 
-
 test('body-bearing routes require a JSON object with a supported content type', async () => {
   const routes = [
     ['POST', '/api/folders'],

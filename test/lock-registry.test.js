@@ -109,9 +109,7 @@ test('many unique lock keys do not accumulate registry entries', async () => {
   const registry = createLockRegistry();
 
   await Promise.all(
-    Array.from({ length: 250 }, (_, index) =>
-      registry.withLock(`session-${index}`, async () => index)
-    )
+    Array.from({ length: 250 }, (_, index) => registry.withLock(`session-${index}`, async () => index))
   );
 
   assert.equal(registry.size, 0);

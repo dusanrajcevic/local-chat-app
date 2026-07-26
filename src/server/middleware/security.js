@@ -44,7 +44,9 @@ function parseHostHeader(hostHeader) {
 }
 
 function normalizeSocketAddress(address) {
-  const normalized = String(address || '').toLowerCase().split('%')[0];
+  const normalized = String(address || '')
+    .toLowerCase()
+    .split('%')[0];
   return normalized.startsWith('::ffff:') ? normalized.slice('::ffff:'.length) : normalized;
 }
 
@@ -95,9 +97,7 @@ function isSameRequestOrigin(origin, req) {
   const parsedHost = parseHostHeader(req.get('host'));
   if (!parsedOrigin || !parsedHost) return false;
 
-  return (
-    parsedOrigin.hostname === parsedHost.hostname && parsedOrigin.port === (parsedHost.port ?? 80)
-  );
+  return parsedOrigin.hostname === parsedHost.hostname && parsedOrigin.port === (parsedHost.port ?? 80);
 }
 
 function isAllowedOrigin(origin, req) {
