@@ -14,10 +14,7 @@ function createMessageRequestPayload({ text, sender, source, providerKey }) {
 }
 
 function fingerprintMessageRequest(payload) {
-  const digest = nodeCrypto
-    .createHash('sha256')
-    .update(JSON.stringify(payload), 'utf8')
-    .digest('hex');
+  const digest = nodeCrypto.createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
 
   return `sha256:${digest}`;
 }
