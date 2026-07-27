@@ -112,7 +112,9 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
   function syncSenderCheckbox() {
     const override = state.nextSenderOverride;
     const sender =
-      override?.sessionId === state.currentSession?.id ? override.sender : nextMessageSender(state.currentSession);
+      override && override.sessionId === state.currentSession?.id
+        ? override.sender
+        : nextMessageSender(state.currentSession);
 
     el.isMeCheckbox.checked = sender === 'me';
     el.isMeCheckbox.disabled = !state.currentSession || state.currentSession.trashed;

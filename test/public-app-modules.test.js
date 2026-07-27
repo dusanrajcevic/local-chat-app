@@ -205,6 +205,17 @@ test('renderer filters folder views and escapes rendered titles', () => {
   assert.doesNotMatch(harness.el.sessionList.textContent, /<Pinned>/);
 });
 
+test('renderer handles cleared session sender state without an override', () => {
+  const harness = createHarness();
+
+  harness.state.currentSession = null;
+  harness.state.nextSenderOverride = null;
+
+  assert.doesNotThrow(() => harness.view.renderMessages());
+  assert.equal(harness.el.isMeCheckbox.checked, true);
+  assert.equal(harness.el.isMeCheckbox.disabled, true);
+});
+
 test('controllers refresh, open, mark active, and render markdown messages', async () => {
   const session = {
     id: 's1',
