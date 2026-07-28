@@ -2,9 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { normalizeRequestError } = require('../src/server/errors');
-const { isJsonMediaType, isPlainObject, requireJsonObjectBody } = require('../src/server/middleware/request-body');
+const {
+  isJsonMediaType,
+  isPlainObject,
+  recordJsonBodyPresence,
+  requireJsonObjectBody
+} = require('../src/server/middleware/request-body');
 
-function runMiddleware({ contentType, body }) {
+function runMiddleware({ contentType, body, rawBody }) {
   return new Promise((resolve) => {
     const req = {
       body,
@@ -12,6 +17,10 @@ function runMiddleware({ contentType, body }) {
         return name.toLowerCase() === 'content-type' ? contentType : undefined;
       }
     };
+
+    const serializedBody = rawBody ?? (body === undefined ? '' : JSON.stringify(body));
+
+    recordJsonBodyPresence(req, {}, Buffer.from(serializedBody));
     requireJsonObjectBody(req, {}, (error) => resolve(error || null));
   });
 }
@@ -37,6 +46,17 @@ test('plain-object detection rejects arrays, null, and non-object values', () =>
 test('request-body middleware accepts parsed JSON objects', async () => {
   assert.equal(await runMiddleware({ contentType: 'application/json; charset=utf-8', body: { title: 'Chat' } }), null);
   assert.equal(await runMiddleware({ contentType: 'application/vnd.local-chat+json', body: {} }), null);
+});
+
+test('request-body middleware rejects an empty JSON request', async () => {
+  const error = await runMiddleware({
+    contentType: 'application/json',
+    body: {},
+    rawBody: ''
+  });
+
+  assert.equal(error.status, 400);
+  assert.match(error.message, /json object/i);
 });
 
 test('request-body middleware rejects missing or unsupported content types with 415', async () => {
