@@ -273,9 +273,11 @@ textarea::-webkit-scrollbar-thumb {
 }
 
 .item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   min-height: 40px;
   padding: 7px 8px;
   border: 1px solid transparent;
@@ -297,8 +299,17 @@ textarea::-webkit-scrollbar-thumb {
 
 .item-main {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   text-align: left;
+}
+
+.item-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
 }
 
 .folder-system-separator {
@@ -317,6 +328,8 @@ textarea::-webkit-scrollbar-thumb {
 }
 
 .item-meta {
+  display: block;
+  max-width: 100%;
   margin-top: 2px;
   overflow: hidden;
   color: var(--muted);
@@ -802,9 +815,7 @@ textarea::placeholder {
 }
 
 .item > .bare {
-  display: block;
   width: 100%;
-  flex: 1;
 }
 
 body.modal-open {
