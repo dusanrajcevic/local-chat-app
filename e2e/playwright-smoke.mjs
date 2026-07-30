@@ -92,21 +92,24 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     await page.locator('#saveAppPromptBtn').click();
     await page.getByRole('heading', { name: 'Smoke Session' }).waitFor();
 
-    const sidebarItemLayout = await page.locator('#sessionList .item').first().evaluate((item) => {
-      const main = item.querySelector('.item-main');
-      const meta = item.querySelector('.item-meta');
-      const actions = item.querySelector('.item-actions');
-      if (!main || !meta || !actions) throw new Error('Session row layout elements are missing.');
+    const sidebarItemLayout = await page
+      .locator('#sessionList .item')
+      .first()
+      .evaluate((item) => {
+        const main = item.querySelector('.item-main');
+        const meta = item.querySelector('.item-meta');
+        const actions = item.querySelector('.item-actions');
+        if (!main || !meta || !actions) throw new Error('Session row layout elements are missing.');
 
-      const mainRect = main.getBoundingClientRect();
-      const metaRect = meta.getBoundingClientRect();
-      const actionsRect = actions.getBoundingClientRect();
-      return {
-        mainRight: mainRect.right,
-        metaRight: metaRect.right,
-        actionsLeft: actionsRect.left
-      };
-    });
+        const mainRect = main.getBoundingClientRect();
+        const metaRect = meta.getBoundingClientRect();
+        const actionsRect = actions.getBoundingClientRect();
+        return {
+          mainRight: mainRect.right,
+          metaRight: metaRect.right,
+          actionsLeft: actionsRect.left
+        };
+      });
     assert.ok(
       sidebarItemLayout.mainRight <= sidebarItemLayout.actionsLeft,
       `Session content overlaps actions: ${JSON.stringify(sidebarItemLayout)}`
