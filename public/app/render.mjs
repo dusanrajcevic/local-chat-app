@@ -181,7 +181,7 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
         (message) => `
       <article class="message ${message.sender === 'me' ? 'me' : 'bot'}">
         <div class="message-top">
-          <span class="message-label">${message.sender === 'me' ? 'Me' : botName()}${message.updatedAt ? ' · edited' : ''}</span>
+          <span class="message-label">${message.sender === 'me' ? 'Me' : htmlEscape(botName())}${message.updatedAt ? ' · edited' : ''}</span>
           ${renderMessageActions(message)}
         </div>
         <div class="message-text" data-message-id="${message.id}">${markdown(message.text)}</div>

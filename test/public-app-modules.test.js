@@ -205,6 +205,33 @@ test('renderer filters folder views and escapes rendered titles', () => {
   assert.doesNotMatch(harness.el.sessionList.textContent, /<Pinned>/);
 });
 
+test('renderer escapes assistant names in message labels', () => {
+  const harness = createHarness();
+  const unsafeName = '<img src=x onerror=alert(1)>';
+  harness.state.currentSession = {
+    id: 's1',
+    title: 'Demo',
+    aiName: unsafeName,
+    trashed: false,
+    messages: [
+      {
+        id: 'm1',
+        sender: 'bot',
+        text: 'Safe message',
+        createdAt: '2026-07-09T09:00:00Z'
+      }
+    ]
+  };
+
+  harness.view.renderMessages();
+
+  const messageLabel = harness.el.messages.querySelector('.message-label');
+  assert.ok(messageLabel);
+  assert.equal(messageLabel.textContent, unsafeName);
+  assert.equal(messageLabel.querySelector('img'), null);
+  assert.doesNotMatch(harness.el.messages.innerHTML, /<img\b/i);
+});
+
 test('renderer handles cleared session sender state without an override', () => {
   const harness = createHarness();
 
