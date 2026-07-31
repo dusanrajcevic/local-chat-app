@@ -1,4 +1,5 @@
 const fs = require('fs/promises');
+const { constants: nodeFsConstants } = require('fs');
 const path = require('path');
 const nodeCrypto = require('crypto');
 const {
@@ -30,6 +31,55 @@ function assertInsideDataDir(filePath) {
     throw appError(400, 'Refusing to access a path outside the local data directory.');
   }
   return resolved;
+}
+
+function unsafeSymlinkError() {
+  return appError(500, 'Refusing to access symbolic links in the local data directory.');
+}
+
+function invalidStorageTypeError(expectedType) {
+  return appError(500, `Refusing to access a path that is not a ${expectedType} in the local data directory.`);
+}
+
+async function lstatIfExists(targetPath) {
+  try {
+    return await fs.lstat(targetPath);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function assertSafeDirectoryPath(dirPath) {
+  const resolved = assertInsideDataDir(dirPath);
+  const relative = path.relative(DATA_DIR, resolved);
+  const segments = relative ? relative.split(path.sep) : [];
+  let current = DATA_DIR;
+
+  for (let index = 0; index <= segments.length; index += 1) {
+    if (index > 0) current = path.join(current, segments[index - 1]);
+    const stat = await fs.lstat(current);
+    if (stat.isSymbolicLink()) throw unsafeSymlinkError();
+    if (!stat.isDirectory()) throw invalidStorageTypeError('directory');
+  }
+
+  return resolved;
+}
+
+async function inspectDataFile(filePath, { allowMissing = false } = {}) {
+  const resolved = assertInsideDataDir(filePath);
+  await assertSafeDirectoryPath(path.dirname(resolved));
+  let stat;
+  try {
+    stat = await fs.lstat(resolved);
+  } catch (error) {
+    if (allowMissing && error.code === 'ENOENT') return { resolved, exists: false };
+    throw error;
+  }
+
+  if (stat.isSymbolicLink()) throw unsafeSymlinkError();
+  if (!stat.isFile()) throw invalidStorageTypeError('regular file');
+  return { resolved, exists: true };
 }
 
 function createLockRegistry() {
@@ -69,7 +119,23 @@ const { withLock } = fileLockRegistry;
 
 async function ensurePrivateDirectory(dirPath) {
   const resolved = assertInsideDataDir(dirPath);
-  await fs.mkdir(resolved, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+
+  if (resolved === DATA_DIR) {
+    const existing = await lstatIfExists(resolved);
+    if (existing?.isSymbolicLink()) throw unsafeSymlinkError();
+    if (existing && !existing.isDirectory()) throw invalidStorageTypeError('directory');
+    if (!existing) await fs.mkdir(resolved, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+  } else {
+    await ensurePrivateDirectory(path.dirname(resolved));
+    const existing = await lstatIfExists(resolved);
+    if (existing?.isSymbolicLink()) throw unsafeSymlinkError();
+    if (existing && !existing.isDirectory()) throw invalidStorageTypeError('directory');
+    if (!existing) await fs.mkdir(resolved, { mode: PRIVATE_DIRECTORY_MODE });
+  }
+
+  const stat = await fs.lstat(resolved);
+  if (stat.isSymbolicLink()) throw unsafeSymlinkError();
+  if (!stat.isDirectory()) throw invalidStorageTypeError('directory');
   if (SUPPORTS_POSIX_PERMISSIONS) await fs.chmod(resolved, PRIVATE_DIRECTORY_MODE);
   return resolved;
 }
@@ -77,7 +143,7 @@ async function ensurePrivateDirectory(dirPath) {
 async function hardenDirectoryTree(dirPath) {
   if (!SUPPORTS_POSIX_PERMISSIONS) return;
 
-  const resolved = assertInsideDataDir(dirPath);
+  const resolved = await assertSafeDirectoryPath(dirPath);
   await fs.chmod(resolved, PRIVATE_DIRECTORY_MODE);
   const entries = await fs.readdir(resolved, { withFileTypes: true });
 
@@ -106,6 +172,7 @@ async function migrateExistingPermissionsOnce() {
 async function atomicWriteFile(filePath, content) {
   const resolved = assertInsideDataDir(filePath);
   await ensurePrivateDirectory(path.dirname(resolved));
+  await inspectDataFile(resolved, { allowMissing: true });
   const tempPath = path.join(
     path.dirname(resolved),
     `.${path.basename(resolved)}.${process.pid}.${Date.now()}.${nodeCrypto.randomBytes(4).toString('hex')}.tmp`
@@ -128,11 +195,20 @@ async function atomicWriteFile(filePath, content) {
 }
 
 async function readJson(filePath, fallback = null) {
+  let handle = null;
   try {
-    return JSON.parse(await fs.readFile(assertInsideDataDir(filePath), 'utf8'));
+    const { resolved } = await inspectDataFile(filePath);
+    const noFollowFlag = nodeFsConstants.O_NOFOLLOW || 0;
+    handle = await fs.open(resolved, nodeFsConstants.O_RDONLY | noFollowFlag);
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw invalidStorageTypeError('regular file');
+    return JSON.parse(await handle.readFile('utf8'));
   } catch (err) {
+    if (err.code === 'ELOOP') throw unsafeSymlinkError();
     if (fallback !== null && (err.code === 'ENOENT' || err instanceof SyntaxError)) return fallback;
     throw err;
+  } finally {
+    if (handle) await handle.close().catch(() => {});
   }
 }
 
@@ -144,15 +220,13 @@ async function ensureBaseFiles() {
   await ensurePrivateDirectory(DATA_DIR);
   await ensurePrivateDirectory(TRASH_DIR);
 
-  try {
-    await fs.access(FOLDERS_FILE);
-  } catch {
+  const foldersFile = await inspectDataFile(FOLDERS_FILE, { allowMissing: true });
+  if (!foldersFile.exists) {
     await writeJson(FOLDERS_FILE, { schemaVersion: CURRENT_SCHEMA_VERSION, folders: [] });
   }
 
-  try {
-    await fs.access(STATE_FILE);
-  } catch {
+  const stateFile = await inspectDataFile(STATE_FILE, { allowMissing: true });
+  if (!stateFile.exists) {
     await writeJson(STATE_FILE, { schemaVersion: CURRENT_SCHEMA_VERSION, activeSessionId: null, updatedAt: null });
   }
 
@@ -162,10 +236,15 @@ async function ensureBaseFiles() {
 async function listDateDirs() {
   await ensureBaseFiles();
   const entries = await fs.readdir(DATA_DIR, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isDirectory() && DATE_DIR_PATTERN.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((a, b) => b.localeCompare(a));
+  const dateDirs = [];
+
+  for (const entry of entries) {
+    if (!DATE_DIR_PATTERN.test(entry.name)) continue;
+    if (entry.isSymbolicLink()) throw unsafeSymlinkError();
+    if (entry.isDirectory()) dateDirs.push(entry.name);
+  }
+
+  return dateDirs.sort((a, b) => b.localeCompare(a));
 }
 
 async function findSessionFile(sessionId, includeTrash = false) {
@@ -174,18 +253,14 @@ async function findSessionFile(sessionId, includeTrash = false) {
 
   for (const dateDir of dateDirs) {
     const filePath = assertInsideDataDir(path.join(DATA_DIR, dateDir, `${safeSessionId}.json`));
-    try {
-      await fs.access(filePath);
-      return { filePath, dateDir, trashed: false };
-    } catch {}
+    const candidate = await inspectDataFile(filePath, { allowMissing: true });
+    if (candidate.exists) return { filePath, dateDir, trashed: false };
   }
 
   if (includeTrash) {
     const trashFilePath = assertInsideDataDir(path.join(TRASH_DIR, `${safeSessionId}.json`));
-    try {
-      await fs.access(trashFilePath);
-      return { filePath: trashFilePath, dateDir: null, trashed: true };
-    } catch {}
+    const candidate = await inspectDataFile(trashFilePath, { allowMissing: true });
+    if (candidate.exists) return { filePath: trashFilePath, dateDir: null, trashed: true };
   }
 
   return null;
