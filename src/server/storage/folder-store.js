@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { DATA_DIR, FOLDERS_FILE } = require('../config');
+const { DATA_DIR, TRASH_DIR, FOLDERS_FILE } = require('../config');
 const { appError } = require('../errors');
 const { id } = require('../ids');
 const { cleanName } = require('../validation');
@@ -54,6 +54,40 @@ async function renameFolder(folderId, name) {
   });
 }
 
+async function readDirectoryEntries(dir) {
+  try {
+    return await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function unpinFolderInDirectory(dir, folderId, { trashed = false } = {}) {
+  const entries = await readDirectoryEntries(dir);
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+
+    const filePath = path.join(dir, entry.name);
+    await withLock(filePath, async () => {
+      let session;
+      try {
+        session = await readSessionRecord(filePath, { trashed });
+      } catch (error) {
+        if (error.code === 'ENOENT') return;
+        throw error;
+      }
+
+      if (session.pinnedFolderId === folderId) {
+        session.pinnedFolderId = null;
+        session.updatedAt = new Date().toISOString();
+        await writeJson(filePath, session);
+      }
+    });
+  }
+}
+
 async function deleteFolderAndUnpinSessions(folderId) {
   await withLock(FOLDERS_FILE, async () => {
     const data = await readFoldersDocument(FOLDERS_FILE);
@@ -63,20 +97,9 @@ async function deleteFolderAndUnpinSessions(folderId) {
 
   const dateDirs = await listDateDirs();
   for (const dateDir of dateDirs) {
-    const dir = path.join(DATA_DIR, dateDir);
-    const files = await fs.readdir(dir).catch(() => []);
-    for (const file of files.filter((f) => f.endsWith('.json'))) {
-      const filePath = path.join(dir, file);
-      await withLock(filePath, async () => {
-        const session = await readSessionRecord(filePath);
-        if (session.pinnedFolderId === folderId) {
-          session.pinnedFolderId = null;
-          session.updatedAt = new Date().toISOString();
-          await writeJson(filePath, session);
-        }
-      });
-    }
+    await unpinFolderInDirectory(path.join(DATA_DIR, dateDir), folderId);
   }
+  await unpinFolderInDirectory(TRASH_DIR, folderId, { trashed: true });
 }
 
 module.exports = {

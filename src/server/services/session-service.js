@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { DATA_DIR, TRASH_DIR, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
+const { DATA_DIR, TRASH_DIR, FOLDERS_FILE, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
 const {
@@ -11,7 +11,7 @@ const {
   optionalMessageSender,
   validateId
 } = require('../validation');
-const { requireExistingFolderId } = require('../storage/folder-store');
+const { folderExists, requireExistingFolderId } = require('../storage/folder-store');
 const { clearActiveSessionIf } = require('../storage/state-store');
 const { collectSessionSummaries } = require('../storage/session-store');
 const { findSessionFile, writeJson, withLock, ensureBaseFiles } = require('../storage/file-store');
@@ -281,11 +281,18 @@ async function restoreSessionFromTrash(sessionId) {
     }
 
     const restoreDate = dateFolderName(new Date(session.createdAt || Date.now()));
-    delete session.deletedAt;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(path.join(DATA_DIR, restoreDate, `${safeSessionId}.json`), session);
-    await fs.unlink(trashFile);
-    return summarizeSession(session, restoreDate);
+    // Keep folder metadata stable until the restored file is written so deletion cannot leave a stale reference.
+    return withLock(FOLDERS_FILE, async () => {
+      if (session.pinnedFolderId && !(await folderExists(session.pinnedFolderId))) {
+        session.pinnedFolderId = null;
+      }
+
+      delete session.deletedAt;
+      session.updatedAt = new Date().toISOString();
+      await writeJson(path.join(DATA_DIR, restoreDate, `${safeSessionId}.json`), session);
+      await fs.unlink(trashFile);
+      return summarizeSession(session, restoreDate);
+    });
   });
 }
 
