@@ -11,7 +11,7 @@
 - `middleware/security.js`: security headers, origin checks, CORS policy, and optional extension-token enforcement;
 - `routes/`: route-level HTTP wiring for health, active-session, folders, sessions/messages/search, and trash;
 - `services/`: session orchestration, search, export formatting, and summary formatting;
-- `storage/`: JSON-file reads/writes, atomic writes, file locks, folder/state/session queries;
+- `storage/`: JSON-file reads/writes, atomic writes, file locks, recovery journaling, and folder/state/session queries;
 - `validation.js`, `ids.js`, and `errors.js`: shared validation, ID/date helpers, and error handling.
 
 The API exposes endpoints for folders, sessions, messages, trash, search, export, and active-session state.
@@ -25,6 +25,7 @@ Current hardening includes:
 - atomic JSON writes;
 - private POSIX storage permissions (`0700` directories and `0600` files), including a startup migration for existing data;
 - per-file write locks around read-modify-write operations;
+- a process-wide mutation coordinator plus a persistent recovery journal for multi-file trash, restore, folder-delete, and permanent-delete workflows;
 - payload-bound idempotency keys for extension auto-save messages.
 
 ### Web UI
@@ -74,6 +75,7 @@ The content-script runtime remains the largest maintenance risk because provider
 
 ```text
 data/
+  .mutation-journal.json  # present only while a recoverable multi-file mutation is in progress
   app-state.json
   folders.json
   YYYY-MM-DD/
@@ -84,13 +86,15 @@ data/
 
 The format is intentionally inspectable and portable. Every chat file contains metadata and a `messages` array. On macOS and Linux, the app creates data directories with mode `0700`, creates JSON and temporary files with mode `0600`, and tightens existing regular files during startup without following symlinks. Windows does not expose equivalent POSIX mode bits, so access remains governed by the user's Windows account and filesystem ACLs.
 
+Multi-file mutations are serialized through a process-wide coordinator. Before changing more than one storage record, the server writes a small intent journal and flushes atomic file/directory metadata where supported. If the process stops after only part of a trash, restore, folder-delete, or permanent-delete workflow, startup replays the idempotent operation and removes the journal only after the intended state is complete. Corrupted journal data is rejected rather than discarded.
+
 ## Recommended next refactor
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
 The next architecture improvement should focus on mutation-resistant provider fixtures and stronger browser-extension integration boundaries. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
 
-The current test suite covers server API/storage behavior, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
+The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
 
 ## Quality gates
 

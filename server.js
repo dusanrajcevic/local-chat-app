@@ -8,6 +8,7 @@ const {
   FOLDER_ID_PATTERN
 } = require('./src/server/config');
 const { ensureBaseFiles, readJson, writeJson } = require('./src/server/storage/file-store');
+const { recoverPendingMutation } = require('./src/server/storage/mutation-coordinator');
 const { buildChatExportText, wrapChatExportForContinuation } = require('./src/server/services/export-service');
 const { readFolders, folderExists } = require('./src/server/storage/folder-store');
 
@@ -18,6 +19,7 @@ async function startServer(options = {}) {
   const port = Number.isFinite(requestedPort) ? requestedPort : 3000;
   const host = options.host || DEFAULT_HOST;
   await ensureBaseFiles();
+  await recoverPendingMutation();
 
   return new Promise((resolve, reject) => {
     const server = app.listen(port, host, () => {

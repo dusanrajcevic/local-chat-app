@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { DATA_DIR, TRASH_DIR, FOLDERS_FILE, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
+const { DATA_DIR, TRASH_DIR, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
 const {
@@ -11,10 +11,15 @@ const {
   optionalMessageSender,
   validateId
 } = require('../validation');
-const { folderExists, requireExistingFolderId } = require('../storage/folder-store');
-const { clearActiveSessionIf } = require('../storage/state-store');
+const { requireExistingFolderId } = require('../storage/folder-store');
 const { collectSessionSummaries } = require('../storage/session-store');
 const { findSessionFile, writeJson, withLock, ensureBaseFiles } = require('../storage/file-store');
+const {
+  withMutationConsistency,
+  moveSessionToTrashRecoverably,
+  restoreSessionRecoverably,
+  permanentlyDeleteTrashRecoverably
+} = require('../storage/mutation-coordinator');
 const { CURRENT_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
 const { buildSessionExportResponse } = require('./export-service');
@@ -40,22 +45,24 @@ async function createSession(body) {
   const title = cleanName(body.title, 160, 'Session title');
   if (!title) throw appError(400, 'Session title is required.');
 
-  const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
-  const now = new Date().toISOString();
-  const session = {
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    id: id('chat'),
-    title,
-    aiName: cleanName(body.aiName, 80, 'AI bot name') || 'AI Bot',
-    createdAt: now,
-    updatedAt: now,
-    pinnedFolderId,
-    messages: []
-  };
+  return withMutationConsistency(async () => {
+    const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
+    const now = new Date().toISOString();
+    const session = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: id('chat'),
+      title,
+      aiName: cleanName(body.aiName, 80, 'AI bot name') || 'AI Bot',
+      createdAt: now,
+      updatedAt: now,
+      pinnedFolderId,
+      messages: []
+    };
 
-  const dateDir = dateFolderName();
-  await writeJson(path.join(DATA_DIR, dateDir, `${session.id}.json`), session);
-  return summarizeSession(session, dateDir);
+    const dateDir = dateFolderName();
+    await writeJson(path.join(DATA_DIR, dateDir, `${session.id}.json`), session);
+    return summarizeSession(session, dateDir);
+  });
 }
 
 async function updateSessionMetadata(sessionId, body) {
@@ -228,16 +235,20 @@ async function deleteMessage(sessionId, messageId) {
 
 async function pinSession(sessionId, body) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
-  const found = await findSessionFile(safeSessionId);
-  if (!found) throw appError(404, 'Session not found.');
+  const requestedFolderId = optionalFolderId(body.pinnedFolderId);
 
-  return withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    session.pinnedFolderId = pinnedFolderId;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(found.filePath, session);
-    return summarizeSession(session, found.dateDir);
+  return withMutationConsistency(async () => {
+    const pinnedFolderId = await requireExistingFolderId(requestedFolderId);
+    const found = await findSessionFile(safeSessionId);
+    if (!found) throw appError(404, 'Session not found.');
+
+    return withLock(found.filePath, async () => {
+      const session = await readFoundSession(found, safeSessionId);
+      session.pinnedFolderId = pinnedFolderId;
+      session.updatedAt = new Date().toISOString();
+      await writeJson(found.filePath, session);
+      return summarizeSession(session, found.dateDir);
+    });
   });
 }
 
@@ -245,14 +256,7 @@ async function moveSessionToTrash(sessionId) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
   const found = await findSessionFile(safeSessionId);
   if (!found) throw appError(404, 'Session not found.');
-
-  await withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    session.deletedAt = new Date().toISOString();
-    await writeJson(path.join(TRASH_DIR, `${safeSessionId}.json`), session);
-    await fs.unlink(found.filePath);
-    await clearActiveSessionIf(safeSessionId);
-  });
+  await moveSessionToTrashRecoverably(safeSessionId, found.dateDir);
 }
 
 async function listTrash() {
@@ -269,43 +273,14 @@ async function listTrash() {
 
 async function restoreSessionFromTrash(sessionId) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const trashFile = path.join(TRASH_DIR, `${safeSessionId}.json`);
-
-  return withLock(trashFile, async () => {
-    let session;
-    try {
-      session = await readSessionRecord(trashFile, { expectedId: safeSessionId, trashed: true });
-    } catch (error) {
-      if (error.code === 'ENOENT') throw appError(404, 'Trashed session not found.');
-      throw error;
-    }
-
-    const restoreDate = dateFolderName(new Date(session.createdAt || Date.now()));
-    // Keep folder metadata stable until the restored file is written so deletion cannot leave a stale reference.
-    return withLock(FOLDERS_FILE, async () => {
-      if (session.pinnedFolderId && !(await folderExists(session.pinnedFolderId))) {
-        session.pinnedFolderId = null;
-      }
-
-      delete session.deletedAt;
-      session.updatedAt = new Date().toISOString();
-      await writeJson(path.join(DATA_DIR, restoreDate, `${safeSessionId}.json`), session);
-      await fs.unlink(trashFile);
-      return summarizeSession(session, restoreDate);
-    });
-  });
+  const restored = await restoreSessionRecoverably(safeSessionId);
+  const restoreDate = dateFolderName(new Date(restored.createdAt));
+  return summarizeSession(restored, restoreDate);
 }
 
 async function permanentlyDeleteTrashedSession(sessionId) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const trashFile = path.join(TRASH_DIR, `${safeSessionId}.json`);
-  try {
-    await fs.unlink(trashFile);
-    await clearActiveSessionIf(safeSessionId);
-  } catch (err) {
-    if (err.code === 'ENOENT') throw appError(404, 'Trashed session not found.');
-    throw err;
-  }
+  await permanentlyDeleteTrashRecoverably(safeSessionId);
 }
 
 module.exports = {

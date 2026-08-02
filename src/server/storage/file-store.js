@@ -119,24 +119,32 @@ const { withLock } = fileLockRegistry;
 
 async function ensurePrivateDirectory(dirPath) {
   const resolved = assertInsideDataDir(dirPath);
+  let created = false;
 
   if (resolved === DATA_DIR) {
     const existing = await lstatIfExists(resolved);
     if (existing?.isSymbolicLink()) throw unsafeSymlinkError();
     if (existing && !existing.isDirectory()) throw invalidStorageTypeError('directory');
-    if (!existing) await fs.mkdir(resolved, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+    if (!existing) {
+      await fs.mkdir(resolved, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+      created = true;
+    }
   } else {
     await ensurePrivateDirectory(path.dirname(resolved));
     const existing = await lstatIfExists(resolved);
     if (existing?.isSymbolicLink()) throw unsafeSymlinkError();
     if (existing && !existing.isDirectory()) throw invalidStorageTypeError('directory');
-    if (!existing) await fs.mkdir(resolved, { mode: PRIVATE_DIRECTORY_MODE });
+    if (!existing) {
+      await fs.mkdir(resolved, { mode: PRIVATE_DIRECTORY_MODE });
+      created = true;
+    }
   }
 
   const stat = await fs.lstat(resolved);
   if (stat.isSymbolicLink()) throw unsafeSymlinkError();
   if (!stat.isDirectory()) throw invalidStorageTypeError('directory');
   if (SUPPORTS_POSIX_PERMISSIONS) await fs.chmod(resolved, PRIVATE_DIRECTORY_MODE);
+  if (created && resolved !== DATA_DIR) await syncDirectoryMetadata(path.dirname(resolved));
   return resolved;
 }
 
@@ -169,6 +177,33 @@ async function migrateExistingPermissionsOnce() {
   await permissionMigration;
 }
 
+async function syncDirectoryMetadata(dirPath) {
+  if (process.platform === 'win32') return;
+  const resolved = await assertSafeDirectoryPath(dirPath);
+  let handle = null;
+  try {
+    handle = await fs.open(resolved, nodeFsConstants.O_RDONLY);
+    await handle.sync();
+  } catch (error) {
+    if (!['EINVAL', 'ENOTSUP', 'EPERM'].includes(error.code)) throw error;
+  } finally {
+    if (handle) await handle.close().catch(() => {});
+  }
+}
+
+async function unlinkDataFile(filePath, { missingOk = false } = {}) {
+  const candidate = await inspectDataFile(filePath, { allowMissing: missingOk });
+  if (!candidate.exists) return false;
+  try {
+    await fs.unlink(candidate.resolved);
+  } catch (error) {
+    if (missingOk && error.code === 'ENOENT') return false;
+    throw error;
+  }
+  await syncDirectoryMetadata(path.dirname(candidate.resolved));
+  return true;
+}
+
 async function atomicWriteFile(filePath, content) {
   const resolved = assertInsideDataDir(filePath);
   await ensurePrivateDirectory(path.dirname(resolved));
@@ -187,6 +222,7 @@ async function atomicWriteFile(filePath, content) {
     await handle.close();
     handle = null;
     await fs.rename(tempPath, resolved);
+    await syncDirectoryMetadata(path.dirname(resolved));
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
     await fs.unlink(tempPath).catch(() => {});
@@ -274,6 +310,7 @@ module.exports = {
   atomicWriteFile,
   readJson,
   writeJson,
+  unlinkDataFile,
   ensureBaseFiles,
   listDateDirs,
   findSessionFile

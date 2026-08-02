@@ -7,6 +7,7 @@ const DATA_DIR = path.resolve(process.env.LOCAL_CHAT_DATA_DIR || path.join(ROOT_
 const TRASH_DIR = path.join(DATA_DIR, 'trash');
 const FOLDERS_FILE = path.join(DATA_DIR, 'folders.json');
 const STATE_FILE = path.join(DATA_DIR, 'app-state.json');
+const MUTATION_JOURNAL_FILE = path.join(DATA_DIR, '.mutation-journal.json');
 const AUTH_TOKEN = String(process.env.LOCAL_CHAT_AUTH_TOKEN || '').trim();
 const EXTRA_ALLOWED_ORIGINS = new Set(
   String(process.env.LOCAL_CHAT_ALLOWED_ORIGINS || '')
@@ -31,6 +32,7 @@ module.exports = {
   TRASH_DIR,
   FOLDERS_FILE,
   STATE_FILE,
+  MUTATION_JOURNAL_FILE,
   AUTH_TOKEN,
   EXTRA_ALLOWED_ORIGINS,
   SESSION_ID_PATTERN,

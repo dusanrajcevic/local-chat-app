@@ -19,8 +19,15 @@ async function setActiveSessionId(sessionId) {
 }
 
 async function clearActiveSessionIf(sessionId) {
-  const state = await getAppState();
-  if (state.activeSessionId === sessionId) await setActiveSessionId(null);
+  return withLock(STATE_FILE, async () => {
+    const state = await getAppState();
+    if (state.activeSessionId !== sessionId) return state;
+    state.schemaVersion = CURRENT_SCHEMA_VERSION;
+    state.activeSessionId = null;
+    state.updatedAt = new Date().toISOString();
+    await writeJson(STATE_FILE, state);
+    return state;
+  });
 }
 
 module.exports = { getAppState, setActiveSessionId, clearActiveSessionIf };
