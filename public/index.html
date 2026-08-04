@@ -19,6 +19,7 @@
 
         <button id="newChatBtn" class="primary-btn">+ New session</button>
         <button id="newFolderBtn" class="ghost-btn">+ Create folder</button>
+        <button id="pairExtensionBtn" class="ghost-btn">Pair browser extension</button>
 
         <div class="sidebar-section folder-section">
           <div class="section-title">Folders</div>
@@ -120,6 +121,24 @@
           <span class="modal-hint">Press Esc to cancel · Enter to save</span>
           <button id="cancelAppPromptBtn" class="ghost-btn compact" type="button">Cancel</button>
           <button id="saveAppPromptBtn" class="primary-btn compact" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="extensionPairingModal" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal-card prompt-modal-card" role="dialog" aria-modal="true" aria-labelledby="extensionPairingTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Browser extension</p>
+            <h3 id="extensionPairingTitle">Pair Local Chat Saver</h3>
+          </div>
+        </div>
+        <p class="modal-copy">Enter this short-lived code in the extension popup. It expires after five minutes.</p>
+        <output id="extensionPairingCode" class="pairing-code" aria-live="polite"></output>
+        <div class="modal-actions">
+          <span id="extensionPairingExpires" class="modal-hint"></span>
+          <button id="copyExtensionPairingCodeBtn" class="ghost-btn compact" type="button">Copy code</button>
+          <button id="closeExtensionPairingModalBtn" class="primary-btn compact" type="button">Close</button>
         </div>
       </div>
     </div>

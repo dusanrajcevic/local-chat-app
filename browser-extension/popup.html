@@ -67,22 +67,25 @@
     <label for="localAppUrl">Local app URL</label>
     <input id="localAppUrl" value="http://localhost:3000" />
 
-    <label for="localChatToken" style="margin-top: 10px">Optional API token</label>
+    <label for="pairingCode" style="margin-top: 10px">Pairing code</label>
     <input
-      id="localChatToken"
-      type="password"
+      id="pairingCode"
+      inputmode="text"
       autocomplete="off"
-      placeholder="Only needed when LOCAL_CHAT_AUTH_TOKEN is set"
+      maxlength="12"
+      placeholder="12-character code from Local Chat App"
     />
     <div class="row">
-      <button id="save" class="primary">Save</button>
-      <button id="test">Test active chat</button>
+      <button id="save">Save URL</button>
+      <button id="pair" class="primary">Pair</button>
+      <button id="test">Test</button>
     </div>
     <p class="hint">
-      Use “New chat” in the local sidebar to create an active local target. If the server runs with
-      LOCAL_CHAT_AUTH_TOKEN, paste the same token here.
+      Generate a short-lived pairing code from the Local Chat App, then enter it here. The extension only connects
+      to HTTP loopback addresses.
     </p>
     <div id="status"></div>
+    <script src="local-api.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

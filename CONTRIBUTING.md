@@ -102,7 +102,7 @@ Run `npm run format` only when you are ready to accept formatter changes across 
 
 Keep route handlers thin. Validate IDs at the route boundary. Do not read or write JSON files directly outside the storage layer. Preserve atomic writes and per-file locking for read-modify-write flows.
 
-Security defaults should stay conservative: bind to loopback, reject untrusted browser origins, keep optional extension-token support working, and do not broaden CORS without a documented reason and tests.
+Security defaults should stay conservative: bind to loopback, reject untrusted browser origins, require paired extension access, keep the manual-token fallback narrow, and do not broaden CORS or local-API URL validation without a documented reason and tests.
 
 ### Web UI
 

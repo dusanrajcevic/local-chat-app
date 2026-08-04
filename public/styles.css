@@ -990,3 +990,25 @@ body.modal-open {
   outline: 2px solid rgba(16, 163, 127, 0.45);
   outline-offset: 2px;
 }
+
+.modal-copy {
+  margin: 0;
+  color: var(--soft);
+  line-height: 1.5;
+}
+
+.pairing-code {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: clamp(20px, 5vw, 28px);
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-align: center;
+  user-select: all;
+}

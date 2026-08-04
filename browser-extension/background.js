@@ -1,52 +1,164 @@
-const DEFAULT_LOCAL_APP_URL = 'http://localhost:3000';
+let localApiConfig;
+if (typeof module !== 'undefined' && module.exports) {
+  localApiConfig = require('./local-api');
+} else {
+  importScripts('local-api.js');
+  localApiConfig = globalThis.LocalChatApiConfig;
+}
 
-function normalizeBaseUrl(value) {
-  const raw = String(value || DEFAULT_LOCAL_APP_URL)
-    .trim()
-    .replace(/\/+$/, '');
-  return raw || DEFAULT_LOCAL_APP_URL;
+const { DEFAULT_LOCAL_APP_URL, DEFAULT_FETCH_TIMEOUT_MS, normalizeBaseUrl, normalizeApiUrl } = localApiConfig;
+const PREFERENCE_KEYS = ['localAppUrl', 'localChatAutoSendEnabled', 'localChatSidebarSelectedFolderId'];
+let storageSecurityPromise = null;
+
+function preferenceStorage() {
+  return chrome.storage.sync || chrome.storage.local;
+}
+
+function resetStorageSecurityForTests() {
+  storageSecurityPromise = null;
+}
+
+async function initializeStorageSecurity() {
+  if (storageSecurityPromise) return storageSecurityPromise;
+
+  storageSecurityPromise = (async () => {
+    const local = chrome.storage.local;
+    const preferences = preferenceStorage();
+
+    if (preferences !== local && local?.get && preferences?.get && preferences?.set) {
+      const legacy = await local.get(PREFERENCE_KEYS);
+      const current = await preferences.get(PREFERENCE_KEYS);
+      const migration = {};
+      for (const key of PREFERENCE_KEYS) {
+        if (current?.[key] === undefined && legacy?.[key] !== undefined) migration[key] = legacy[key];
+      }
+      if (Object.keys(migration).length > 0) await preferences.set(migration);
+      if (local.remove) await local.remove(PREFERENCE_KEYS);
+    }
+
+    if (local?.get && local?.set) {
+      const secrets = await local.get({ localChatToken: '', localChatPairedOrigin: '' });
+      if (secrets.localChatToken && !secrets.localChatPairedOrigin) {
+        const currentPreferences = await preferences.get({ localAppUrl: DEFAULT_LOCAL_APP_URL });
+        await local.set({ localChatPairedOrigin: normalizeBaseUrl(currentPreferences.localAppUrl) });
+      }
+    }
+
+    if (local?.setAccessLevel) {
+      await local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+    }
+  })().catch((error) => {
+    storageSecurityPromise = null;
+    throw error;
+  });
+
+  return storageSecurityPromise;
 }
 
 async function getSettings() {
-  const data = await chrome.storage.local.get({
-    localAppUrl: DEFAULT_LOCAL_APP_URL,
-    localChatToken: ''
-  });
+  await initializeStorageSecurity();
+  const [preferenceData, secretData] = await Promise.all([
+    preferenceStorage().get({ localAppUrl: DEFAULT_LOCAL_APP_URL }),
+    chrome.storage.local.get({ localChatToken: '', localChatPairedOrigin: '' })
+  ]);
 
   return {
-    localAppUrl: normalizeBaseUrl(data.localAppUrl),
-    localChatToken: String(data.localChatToken || '').trim()
+    localAppUrl: normalizeBaseUrl(preferenceData.localAppUrl),
+    localChatToken: String(secretData.localChatToken || '').trim(),
+    localChatPairedOrigin: String(secretData.localChatPairedOrigin || '').trim(),
+    extensionId: String(chrome.runtime?.id || '').trim()
   };
 }
 
-function requestHeaders(settings, options = {}) {
+function requestHeaders(settings, options = {}, { authenticate = true } = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-  if (settings?.localChatToken) headers['X-Local-Chat-Token'] = settings.localChatToken;
+  if (settings?.extensionId) headers['X-Local-Chat-Extension-Id'] = settings.extensionId;
+  if (authenticate && settings?.localChatToken) headers['X-Local-Chat-Token'] = settings.localChatToken;
   return headers;
 }
 
-async function fetchJson(url, options = {}) {
-  const settings = await getSettings();
-  const res = await fetch(url, {
-    ...options,
-    headers: requestHeaders(settings, options)
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || `${res.status} ${res.statusText}`);
+async function fetchJson(url, options = {}, fetchOptions = {}) {
+  const settings = fetchOptions.settings || (await getSettings());
+  const authenticate = fetchOptions.authenticate !== false;
+  if (authenticate && !settings.localChatToken) {
+    throw new Error('Browser extension is not paired with Local Chat App.');
   }
-  return data;
+  if (authenticate && !settings.localChatPairedOrigin) {
+    throw new Error('Browser extension is not paired with Local Chat App.');
+  }
+  if (authenticate && normalizeBaseUrl(settings.localChatPairedOrigin) !== settings.localAppUrl) {
+    throw new Error('Local app URL changed. Pair the browser extension again before sending data.');
+  }
+
+  const safeUrl = normalizeApiUrl(url, settings.localAppUrl);
+  const controller = new AbortController();
+  const timeoutMs = Number(fetchOptions.timeoutMs || DEFAULT_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(safeUrl, {
+      ...options,
+      headers: requestHeaders(settings, options, { authenticate }),
+      signal: controller.signal
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `${res.status} ${res.statusText}`);
+    }
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Local Chat App request timed out.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function pairLocalChatApp(payload = {}) {
+  await initializeStorageSecurity();
+  const code = String(payload.code || '').trim().toUpperCase();
+  if (!/^[A-F0-9]{12}$/.test(code)) throw new Error('Enter the 12-character pairing code from Local Chat App.');
+
+  const currentPreferences = await preferenceStorage().get({ localAppUrl: DEFAULT_LOCAL_APP_URL });
+  const localAppUrl = normalizeBaseUrl(payload.localAppUrl || currentPreferences.localAppUrl);
+  const settings = {
+    localAppUrl,
+    localChatToken: '',
+    extensionId: String(chrome.runtime?.id || '').trim()
+  };
+  if (!settings.extensionId) throw new Error('Could not determine the browser extension ID.');
+
+  const result = await fetchJson(
+    `${localAppUrl}/api/extension/pair`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ code })
+    },
+    { authenticate: false, settings }
+  );
+
+  if (!result?.token) throw new Error('Local Chat App did not return a pairing token.');
+  await Promise.all([
+    preferenceStorage().set({ localAppUrl }),
+    chrome.storage.local.set({ localChatToken: result.token, localChatPairedOrigin: localAppUrl })
+  ]);
+
+  return { ok: true, localAppUrl, extensionId: result.extensionId || settings.extensionId };
 }
 
 async function checkLocalChatApp() {
   const { localAppUrl } = await getSettings();
-  const health = await fetchJson(`${localAppUrl}/api/health`);
+  const [health, active] = await Promise.all([
+    fetchJson(`${localAppUrl}/api/health`),
+    fetchJson(`${localAppUrl}/api/active-session`)
+  ]);
 
   return {
     ok: true,
     localAppUrl,
-    health
+    health,
+    active
   };
 }
 
@@ -320,6 +432,13 @@ async function loadLocalChatExport(payload = {}) {
 function handleRuntimeMessage(message, sender, sendResponse) {
   if (!message) return false;
 
+  if (message.type === 'PAIR_LOCAL_CHAT_APP') {
+    pairLocalChatApp(message.payload || {})
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message.type === 'CHECK_LOCAL_CHAT_APP') {
     checkLocalChatApp()
       .then((result) => sendResponse(result))
@@ -422,16 +541,23 @@ function handleRuntimeMessage(message, sender, sendResponse) {
 }
 
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage?.addListener) {
+  initializeStorageSecurity().catch(() => {});
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     DEFAULT_LOCAL_APP_URL,
+    DEFAULT_FETCH_TIMEOUT_MS,
     normalizeBaseUrl,
+    normalizeApiUrl,
+    preferenceStorage,
+    initializeStorageSecurity,
+    resetStorageSecurityForTests,
     getSettings,
     requestHeaders,
     fetchJson,
+    pairLocalChatApp,
     checkLocalChatApp,
     getActiveSession,
     saveMessage,

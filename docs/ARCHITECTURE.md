@@ -8,9 +8,9 @@
 
 - `app.js`: Express app factory and middleware/route registration;
 - `config.js`: process-env derived configuration, paths, and ID patterns;
-- `middleware/security.js`: security headers, origin checks, CORS policy, and optional extension-token enforcement;
-- `routes/`: route-level HTTP wiring for health, active-session, folders, sessions/messages/search, and trash;
-- `services/`: session orchestration, search, export formatting, and summary formatting;
+- `middleware/security.js`: security headers, origin checks, CORS policy, and paired-extension authorization;
+- `routes/`: route-level HTTP wiring for health, extension pairing, active-session, folders, sessions/messages/search, and trash;
+- `services/`: session orchestration, extension pairing/authentication, search, export formatting, and summary formatting;
 - `storage/`: JSON-file reads/writes, atomic writes, file locks, recovery journaling, and folder/state/session queries;
 - `validation.js`, `ids.js`, and `errors.js`: shared validation, ID/date helpers, and error handling.
 
@@ -20,7 +20,8 @@ Current hardening includes:
 
 - loopback host binding by default;
 - trusted-origin checks before CORS;
-- optional extension token via `LOCAL_CHAT_AUTH_TOKEN`;
+- short-lived browser-extension pairing codes with tokens bound to extension IDs and stored server-side only as SHA-256 hashes;
+- optional manual-token fallback via `LOCAL_CHAT_AUTH_TOKEN` and optional extension-ID allowlisting via `LOCAL_CHAT_EXTENSION_IDS`;
 - route ID validation;
 - atomic JSON writes;
 - private POSIX storage permissions (`0700` directories and `0600` files), including a startup migration for existing data;
@@ -53,7 +54,8 @@ Current hardening includes:
 
 The extension is split into:
 
-- `background.js`: local API calls, extension storage, and message routing;
+- `local-api.js`: shared loopback-only local API URL validation;
+- `background.js`: paired local API calls, protected extension storage, request timeouts, and message routing;
 - `providers/*.js`: provider-specific host matching, turn selectors, content selectors, and sender/container preferences;
 - `content-providers.js`: provider adapter registry used by Node tests and the browser runtime;
 - `content-dom.js`: shared DOM/extraction orchestration used by tests and the runtime;
@@ -63,7 +65,7 @@ The extension is split into:
 - `content-composer.js`: composer detection, transcript insertion, pasted-text attachment fallbacks, Load past conversations modal/search behavior, and top active-folder controls;
 - `content-runtime.js`: local-app availability checks, auto-save toggle state/UI, Save local button target selection/injection, and content-script runtime scheduling;
 - `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, and runtime modules together;
-- `popup.*`: local API URL and optional token configuration.
+- `popup.*`: loopback local API URL and pairing-code configuration.
 
 The content-script runtime remains the largest maintenance risk because provider UIs change often. Reduced DOM fixtures cover provider extraction and Save local injection behavior. Provider-specific selectors and sender/container preferences now live in `providers/*.js`, `content-dom.js` keeps shared extraction and markdown conversion testable, `content-message-save.js` isolates clipboard/manual extraction behavior, `content-autosave.js` isolates autosave timing/dedupe state, `content-sidebar.js` isolates local sidebar replacement, `content-composer.js` isolates composer loading plus modal/search behavior, and `content-runtime.js` isolates app availability, auto-send toggle coordination, and Save local injection from the bootstrap coordinator.
 
@@ -76,6 +78,7 @@ The content-script runtime remains the largest maintenance risk because provider
 ```text
 data/
   .mutation-journal.json  # present only while a recoverable multi-file mutation is in progress
+  extension-auth.json     # paired extension IDs and SHA-256 token hashes
   app-state.json
   folders.json
   YYYY-MM-DD/
@@ -92,7 +95,7 @@ Multi-file mutations are serialized through a process-wide coordinator. Before c
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
-The next architecture improvement should focus on mutation-resistant provider fixtures and stronger browser-extension integration boundaries. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
+The next architecture improvement should focus on mutation-resistant provider fixtures and Electron navigation/shutdown hardening. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
 
 The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
 

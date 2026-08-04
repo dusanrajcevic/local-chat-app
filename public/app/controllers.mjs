@@ -68,6 +68,36 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     confirmUser
   });
 
+  function closeExtensionPairing() {
+    el.extensionPairingModal.classList.add('hidden');
+    el.extensionPairingModal.setAttribute('aria-hidden', 'true');
+    doc.body.classList.remove('modal-open');
+  }
+
+  async function createExtensionPairingCode() {
+    const pairing = await api('/api/extension/pairing-code', {
+      method: 'POST',
+      body: '{}'
+    });
+    el.extensionPairingCode.textContent = pairing.code;
+    el.extensionPairingExpires.textContent = `Expires ${new Date(pairing.expiresAt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
+    el.extensionPairingModal.classList.remove('hidden');
+    el.extensionPairingModal.setAttribute('aria-hidden', 'false');
+    doc.body.classList.add('modal-open');
+    return pairing;
+  }
+
+  async function copyExtensionPairingCode() {
+    const code = String(el.extensionPairingCode.textContent || '').trim();
+    if (!code) return false;
+    if (!win.navigator?.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
+    await win.navigator.clipboard.writeText(code);
+    return true;
+  }
+
   async function boot() {
     await refreshAll();
     await activeController.restoreOpenSession();
@@ -76,6 +106,9 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
 
   return {
     refreshAll,
+    createExtensionPairingCode,
+    copyExtensionPairingCode,
+    closeExtensionPairing,
     ...activeController,
     ...sessionController,
     ...folderController,

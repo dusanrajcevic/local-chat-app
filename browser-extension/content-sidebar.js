@@ -862,7 +862,7 @@
       localSidebarSelectedFolderId = folderId || null;
       renderLocalSidebarReplacement();
       try {
-        await chromeApi.storage.local.set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
+        await (chromeApi.storage.sync || chromeApi.storage.local).set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
       } catch {}
     }
 
@@ -1091,7 +1091,7 @@
         if (!response?.ok) throw new Error(response?.error || 'Could not create folder.');
         localSidebarSelectedFolderId = response.folder?.id || null;
         try {
-          await chromeApi.storage.local.set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
+          await (chromeApi.storage.sync || chromeApi.storage.local).set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
         } catch {}
         showToast(`New local folder created → ${response.folder?.name || trimmedTitle}`);
         scheduleLocalSidebarRefresh(true);
@@ -1340,7 +1340,7 @@
         if (localSidebarSelectedFolderId === folderId) {
           localSidebarSelectedFolderId = null;
           try {
-            await chromeApi.storage.local.set({ [LOCAL_SIDEBAR_STORAGE_KEY]: '' });
+            await (chromeApi.storage.sync || chromeApi.storage.local).set({ [LOCAL_SIDEBAR_STORAGE_KEY]: '' });
           } catch {}
         }
 
@@ -1442,7 +1442,7 @@
 
     async function loadLocalSidebarPreference() {
       try {
-        const data = await chromeApi.storage.local.get({ [LOCAL_SIDEBAR_STORAGE_KEY]: '' });
+        const data = await (chromeApi.storage.sync || chromeApi.storage.local).get({ [LOCAL_SIDEBAR_STORAGE_KEY]: '' });
         localSidebarSelectedFolderId = data[LOCAL_SIDEBAR_STORAGE_KEY] || null;
       } catch {
         localSidebarSelectedFolderId = null;

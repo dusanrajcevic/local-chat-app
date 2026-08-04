@@ -1,9 +1,14 @@
 const net = require('node:net');
 const cors = require('cors');
-const { AUTH_TOKEN, EXTRA_ALLOWED_ORIGINS } = require('../config');
+const { EXTRA_ALLOWED_ORIGINS } = require('../config');
+const {
+  extensionIdFromOrigin,
+  isAllowedExtensionId,
+  authorizeExtension
+} = require('../services/extension-auth-service');
 
 function isChromeExtensionOrigin(origin) {
-  return /^chrome-extension:\/\/[a-z]{32}$/i.test(String(origin || ''));
+  return Boolean(extensionIdFromOrigin(origin));
 }
 
 function parseHostHeader(hostHeader) {
@@ -104,7 +109,9 @@ function isAllowedOrigin(origin, req) {
   if (!origin) return true;
   if (EXTRA_ALLOWED_ORIGINS.has(origin)) return true;
   if (isSameRequestOrigin(origin, req)) return true;
-  if (isChromeExtensionOrigin(origin)) return true;
+  if (isChromeExtensionOrigin(origin)) {
+    return isAllowedExtensionId(extensionIdFromOrigin(origin));
+  }
   return false;
 }
 
@@ -128,17 +135,33 @@ function corsOptionsDelegate(req, callback) {
   callback(null, {
     origin: origin && isAllowedOrigin(origin, req) ? origin : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'X-Local-Chat-Token', 'Idempotency-Key'],
+    allowedHeaders: [
+      'Content-Type',
+      'X-Local-Chat-Token',
+      'X-Local-Chat-Extension-Id',
+      'Idempotency-Key'
+    ],
     maxAge: 600
   });
 }
 
-function requireConfiguredTokenForExtensions(req, res, next) {
-  if (!AUTH_TOKEN || !req.path.startsWith('/api/')) return next();
+function requireExtensionAuthorization(req, res, next) {
+  if (!req.path.startsWith('/api/')) return next();
+
   const origin = req.get('origin');
   if (!isChromeExtensionOrigin(origin)) return next();
-  if (req.get('x-local-chat-token') === AUTH_TOKEN) return next();
-  return res.status(401).json({ error: 'Local Chat token is required for extension access.' });
+  if (req.path === '/api/extension/pair') return next();
+
+  authorizeExtension({
+    origin,
+    extensionIdHeader: req.get('x-local-chat-extension-id'),
+    token: req.get('x-local-chat-token')
+  })
+    .then((authorized) => {
+      if (authorized) return next();
+      return res.status(401).json({ error: 'Browser extension pairing is required.' });
+    })
+    .catch(next);
 }
 
 function setSecurityHeaders(req, res, next) {
@@ -153,7 +176,7 @@ function installSecurityMiddleware(app) {
   app.use(rejectUntrustedHost);
   app.use(rejectUntrustedOrigin);
   app.use(cors(corsOptionsDelegate));
-  app.use(requireConfiguredTokenForExtensions);
+  app.use(requireExtensionAuthorization);
 }
 
 module.exports = {
@@ -168,7 +191,7 @@ module.exports = {
   rejectUntrustedHost,
   rejectUntrustedOrigin,
   corsOptionsDelegate,
-  requireConfiguredTokenForExtensions,
+  requireExtensionAuthorization,
   setSecurityHeaders,
   installSecurityMiddleware
 };

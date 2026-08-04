@@ -3,16 +3,63 @@ const assert = require('node:assert/strict');
 
 const background = require('../browser-extension/background');
 
-function installChromeStorage(settings = {}) {
-  global.chrome = {
-    storage: {
-      local: {
-        async get(defaults) {
-          return { ...defaults, ...settings };
+function createStorageArea(initial = {}) {
+  const data = { ...initial };
+  const calls = { setAccessLevel: [] };
+
+  return {
+    data,
+    calls,
+    area: {
+      async get(keys) {
+        if (keys === undefined || keys === null) return { ...data };
+        if (Array.isArray(keys)) {
+          return Object.fromEntries(keys.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]));
         }
+        if (typeof keys === 'string') return data[keys] === undefined ? {} : { [keys]: data[keys] };
+        const result = { ...keys };
+        for (const key of Object.keys(keys)) {
+          if (data[key] !== undefined) result[key] = data[key];
+        }
+        return result;
+      },
+      async set(values) {
+        Object.assign(data, values);
+      },
+      async remove(keys) {
+        for (const key of Array.isArray(keys) ? keys : [keys]) delete data[key];
+      },
+      async setAccessLevel(options) {
+        calls.setAccessLevel.push(options);
       }
     }
   };
+}
+
+function installChromeStorage(settings = {}) {
+  const local = createStorageArea({
+    localChatToken: 'test-token',
+    localChatPairedOrigin: settings.localAppUrl || 'http://localhost:3000',
+    ...(settings.local || {})
+  });
+  const sync = createStorageArea({
+    localAppUrl: 'http://localhost:3000',
+    ...(settings.sync || {}),
+    ...(settings.localAppUrl ? { localAppUrl: settings.localAppUrl } : {})
+  });
+  if (Object.prototype.hasOwnProperty.call(settings, 'localChatToken')) {
+    local.data.localChatToken = settings.localChatToken;
+    if (!settings.localChatToken) local.data.localChatPairedOrigin = '';
+  }
+
+  global.chrome = {
+    runtime: { id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+    storage: {
+      local: local.area,
+      sync: sync.area
+    }
+  };
+  return { local, sync };
 }
 
 function jsonResponse(data, status = 200) {
@@ -23,24 +70,32 @@ function jsonResponse(data, status = 200) {
 }
 
 test.afterEach(() => {
+  background.resetStorageSecurityForTests();
   delete global.chrome;
   delete global.fetch;
 });
 
 test('normalizes local app URLs without losing the default', () => {
-  assert.equal(background.normalizeBaseUrl(' http://localhost:3000/// '), 'http://localhost:3000');
+  assert.equal(background.normalizeBaseUrl(' http://localhost:3000/ '), 'http://localhost:3000');
   assert.equal(background.normalizeBaseUrl(''), 'http://localhost:3000');
   assert.equal(background.normalizeBaseUrl(null), 'http://localhost:3000');
-  assert.equal(background.normalizeBaseUrl('http://127.0.0.1:4500/app/'), 'http://127.0.0.1:4500/app');
+  assert.throws(() => background.normalizeBaseUrl('http://127.0.0.1:4500/app/'), /path/i);
+  assert.throws(() => background.normalizeBaseUrl('https://attacker.example'), /http|loopback/i);
 });
 
-test('requestHeaders merges caller headers and injects the optional local token', () => {
+test('requestHeaders binds credentials to the extension identity', () => {
   assert.deepEqual(
-    background.requestHeaders({ localChatToken: 'abc123' }, { headers: { 'Idempotency-Key': 'idem-1' } }),
-    { 'Content-Type': 'application/json', 'Idempotency-Key': 'idem-1', 'X-Local-Chat-Token': 'abc123' }
+    background.requestHeaders(
+      { localChatToken: 'abc123', extensionId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      { headers: { 'Idempotency-Key': 'idem-1' } }
+    ),
+    {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'idem-1',
+      'X-Local-Chat-Extension-Id': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      'X-Local-Chat-Token': 'abc123'
+    }
   );
-
-  assert.deepEqual(background.requestHeaders({ localChatToken: '' }), { 'Content-Type': 'application/json' });
 });
 
 test('fetchJson uses stored settings and surfaces API errors', async () => {
@@ -56,7 +111,7 @@ test('fetchJson uses stored settings and surfaces API errors', async () => {
   assert.deepEqual(ok, { ok: true });
   assert.equal(seen[0].options.headers['X-Local-Chat-Token'], 'token-1');
 
-  await assert.rejects(() => background.fetchJson('http://localhost:3000/fail'), /Nope/);
+  await assert.rejects(() => background.fetchJson('http://localhost:3000/api/fail'), /Nope/);
 });
 
 test('saveMessage posts to an explicit session without reading the active session', async () => {
@@ -174,6 +229,7 @@ test('handleRuntimeMessage returns async responses for known message types', asy
   installChromeStorage({ localAppUrl: 'http://localhost:3000' });
   global.fetch = async (url) => {
     if (String(url).endsWith('/api/health')) return jsonResponse({ ok: true });
+    if (String(url).endsWith('/api/active-session')) return jsonResponse({ sessionId: null });
     return jsonResponse({ error: `Unexpected URL ${url}` }, 500);
   };
 
@@ -185,6 +241,7 @@ test('handleRuntimeMessage returns async responses for known message types', asy
   assert.equal(response.ok, true);
   assert.equal(response.localAppUrl, 'http://localhost:3000');
   assert.deepEqual(response.health, { ok: true });
+  assert.deepEqual(response.active, { sessionId: null });
 
   assert.equal(
     background.handleRuntimeMessage({ type: 'UNKNOWN' }, {}, () => {}),
@@ -315,4 +372,115 @@ test('background helpers reject missing required payload fields before fetching'
   await assert.rejects(() => background.deleteLocalChatFolder({}), /folder id/i);
   await assert.rejects(() => background.setActiveLocalChatSession({}), /session id/i);
   await assert.rejects(() => background.loadLocalChatExport({}), /session id/i);
+});
+
+test('pairLocalChatApp exchanges a short-lived code and stores the returned token privately', async () => {
+  const storage = installChromeStorage({ localChatToken: '' });
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return jsonResponse({
+      token: 'paired-secret-token',
+      extensionId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    });
+  };
+
+  const result = await background.pairLocalChatApp({
+    localAppUrl: 'http://localhost:3000',
+    code: 'ABCDEF123456'
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(storage.local.data.localChatToken, 'paired-secret-token');
+  assert.equal(storage.local.data.localChatPairedOrigin, 'http://localhost:3000');
+  assert.equal(storage.sync.data.localAppUrl, 'http://localhost:3000');
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0].url).pathname, '/api/extension/pair');
+  assert.equal(calls[0].options.headers['X-Local-Chat-Token'], undefined);
+  assert.equal(
+    calls[0].options.headers['X-Local-Chat-Extension-Id'],
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  );
+});
+
+test('storage initialization migrates non-sensitive preferences and restricts local storage access', async () => {
+  const storage = installChromeStorage({
+    local: {
+      localAppUrl: 'http://127.0.0.1:4321',
+      localChatAutoSendEnabled: false,
+      localChatSidebarSelectedFolderId: 'folder_1700000000000_12345678',
+      localChatPairedOrigin: ''
+    },
+    sync: { localAppUrl: undefined }
+  });
+
+  await background.initializeStorageSecurity();
+
+  assert.equal(storage.sync.data.localAppUrl, 'http://127.0.0.1:4321');
+  assert.equal(storage.sync.data.localChatAutoSendEnabled, false);
+  assert.equal(storage.sync.data.localChatSidebarSelectedFolderId, 'folder_1700000000000_12345678');
+  assert.equal(storage.local.data.localAppUrl, undefined);
+  assert.equal(storage.local.data.localChatAutoSendEnabled, undefined);
+  assert.equal(storage.local.data.localChatToken, 'test-token');
+  assert.equal(storage.local.data.localChatPairedOrigin, 'http://127.0.0.1:4321');
+  assert.deepEqual(storage.local.calls.setAccessLevel, [{ accessLevel: 'TRUSTED_CONTEXTS' }]);
+});
+
+test('authenticated fetches refuse remote destinations before credentials can be sent', async () => {
+  installChromeStorage({ localChatToken: 'secret-token' });
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return jsonResponse({ ok: true });
+  };
+
+  await assert.rejects(
+    () => background.fetchJson('https://attacker.example/api/health'),
+    /refusing|loopback/i
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test('paired credentials are bound to the local API origin used during pairing', async () => {
+  installChromeStorage({
+    localAppUrl: 'http://127.0.0.1:4321',
+    local: { localChatPairedOrigin: 'http://localhost:3000' }
+  });
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return jsonResponse({ ok: true });
+  };
+
+  await assert.rejects(
+    () => background.fetchJson('http://127.0.0.1:4321/api/health'),
+    /url changed|pair/i
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test('authenticated fetches require pairing and enforce a request timeout', async () => {
+  installChromeStorage({ localChatToken: '' });
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return jsonResponse({ ok: true });
+  };
+  await assert.rejects(
+    () => background.fetchJson('http://localhost:3000/api/health'),
+    /not paired/i
+  );
+  assert.equal(fetchCalls, 0);
+
+  background.resetStorageSecurityForTests();
+  installChromeStorage({ localChatToken: 'secret-token' });
+  global.fetch = (_url, options = {}) =>
+    new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    });
+
+  await assert.rejects(
+    () => background.fetchJson('http://localhost:3000/api/health', {}, { timeoutMs: 5 }),
+    /timed out/i
+  );
 });

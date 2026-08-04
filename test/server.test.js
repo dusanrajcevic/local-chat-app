@@ -188,7 +188,8 @@ test('health endpoint reports the app is reachable and omits Express fingerprint
   const { res, data } = await json('/api/health');
   assert.equal(res.status, 200);
   assert.equal(data.ok, true);
-  assert.equal(data.authRequired, false);
+  assert.equal(data.authRequired, true);
+  assert.equal(data.manualTokenConfigured, false);
   assert.equal(res.headers.get('x-powered-by'), null);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
 });
@@ -232,14 +233,18 @@ test('allows a localhost Host alias on the actual loopback listening port', asyn
   assert.equal(res.headers['access-control-allow-origin'], origin);
 });
 
-test('allows same-origin and Chrome-extension origins through CORS', async () => {
+test('allows same-origin requests and requires pairing for extension API access', async () => {
   const sameOrigin = await json('/api/health', { headers: { Origin: baseUrl } });
   assert.equal(sameOrigin.res.status, 200);
   assert.equal(sameOrigin.res.headers.get('access-control-allow-origin'), baseUrl);
 
-  const extensionOrigin = 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  const extension = await json('/api/health', { headers: { Origin: extensionOrigin } });
-  assert.equal(extension.res.status, 200);
+  const extensionId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const extensionOrigin = `chrome-extension://${extensionId}`;
+  const extension = await json('/api/health', {
+    headers: { Origin: extensionOrigin, 'X-Local-Chat-Extension-Id': extensionId }
+  });
+  assert.equal(extension.res.status, 401);
+  assert.match(extension.data.error, /pair/i);
   assert.equal(extension.res.headers.get('access-control-allow-origin'), extensionOrigin);
 });
 

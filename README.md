@@ -78,13 +78,14 @@ npm run desktop
 4. Enable Developer mode.
 5. Click **Load unpacked**.
 6. Select the `browser-extension/` folder.
-7. Open the extension popup and verify the local app URL.
+7. In Local Chat App, click **Pair browser extension** and generate a short-lived code.
+8. Open the extension popup, confirm the local app URL, enter the pairing code, and click **Pair**.
 
-The extension communicates with the local API through its background worker. If you start the server with `LOCAL_CHAT_AUTH_TOKEN`, enter the same token in the extension popup.
+The extension communicates with the local API only through its background worker. Pairing binds a generated token to the browser extension ID; the server stores only a SHA-256 token hash. Pairing is the normal browser-extension setup. `LOCAL_CHAT_AUTH_TOKEN` remains a server-side compatibility fallback for API clients that already provide the required extension headers, while `LOCAL_CHAT_EXTENSION_IDS` can optionally restrict which extension IDs may pair or use that fallback.
 
 ## Security model
 
-The app is local-first and now binds to `127.0.0.1` by default. The API rejects untrusted browser origins, validates route IDs, writes JSON atomically, and uses per-file write locks for read-modify-write flows.
+The app is local-first and binds to `127.0.0.1` by default. The API rejects untrusted browser origins, requires browser-extension pairing, validates route IDs, writes JSON atomically, and uses per-file write locks for read-modify-write flows.
 
 Important remaining assumptions:
 

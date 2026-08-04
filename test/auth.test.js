@@ -14,7 +14,8 @@ const { startServer } = require('../server');
 let server;
 let baseUrl;
 
-const extensionOrigin = 'chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const extensionId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const extensionOrigin = `chrome-extension://${extensionId}`;
 
 test.before(async () => {
   server = await startServer({ port: 0, host: '127.0.0.1' });
@@ -40,20 +41,29 @@ test('configured extension token is reported by health endpoint', async () => {
   assert.equal(res.status, 200);
   assert.equal(data.ok, true);
   assert.equal(data.authRequired, true);
+  assert.equal(data.manualTokenConfigured, true);
 });
 
-test('Chrome-extension API requests require the configured local token', async () => {
-  const missing = await json('/api/health', { headers: { Origin: extensionOrigin } });
+test('Chrome-extension API requests require a valid pairing or configured local token', async () => {
+  const missing = await json('/api/health', { headers: { Origin: extensionOrigin, 'X-Local-Chat-Extension-Id': extensionId } });
   assert.equal(missing.res.status, 401);
-  assert.match(missing.data.error, /token/i);
+  assert.match(missing.data.error, /pair/i);
 
   const wrong = await json('/api/health', {
-    headers: { Origin: extensionOrigin, 'X-Local-Chat-Token': 'wrong-token' }
+    headers: {
+      Origin: extensionOrigin,
+      'X-Local-Chat-Extension-Id': extensionId,
+      'X-Local-Chat-Token': 'wrong-token'
+    }
   });
   assert.equal(wrong.res.status, 401);
 
   const ok = await json('/api/health', {
-    headers: { Origin: extensionOrigin, 'X-Local-Chat-Token': 'secret-token-for-tests' }
+    headers: {
+      Origin: extensionOrigin,
+      'X-Local-Chat-Extension-Id': extensionId,
+      'X-Local-Chat-Token': 'secret-token-for-tests'
+    }
   });
   assert.equal(ok.res.status, 200);
   assert.equal(ok.data.ok, true);

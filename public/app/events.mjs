@@ -8,6 +8,7 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
   el.sidebarToggleBtn.addEventListener('click', view.toggleSidebar);
   el.newChatBtn.addEventListener('click', () => controllers.createSession().catch(reportError));
   el.newFolderBtn.addEventListener('click', () => controllers.createFolder().catch(reportError));
+  el.pairExtensionBtn.addEventListener('click', () => controllers.createExtensionPairingCode().catch(reportError));
   el.sendBtn.addEventListener('click', () => controllers.sendMessage().catch(reportError));
   el.renameBotBtn.addEventListener('click', () => controllers.renameBotName().catch(reportError));
   el.renameSessionBtn.addEventListener('click', () => controllers.renameSession().catch(reportError));
@@ -19,8 +20,15 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
   });
   el.cancelAppPromptBtn.addEventListener('click', () => modal.closeTextPrompt(null));
   el.saveAppPromptBtn.addEventListener('click', modal.submitTextPrompt);
+  el.copyExtensionPairingCodeBtn.addEventListener('click', () =>
+    controllers.copyExtensionPairingCode().catch(reportError)
+  );
+  el.closeExtensionPairingModalBtn.addEventListener('click', controllers.closeExtensionPairing);
   el.appPromptModal.addEventListener('click', (event) => {
     if (event.target === el.appPromptModal) modal.closeTextPrompt(null);
+  });
+  el.extensionPairingModal.addEventListener('click', (event) => {
+    if (event.target === el.extensionPairingModal) controllers.closeExtensionPairing();
   });
   el.isMeCheckbox.addEventListener('change', () => {
     if (!state.currentSession || state.currentSession.trashed) return;
@@ -37,6 +45,14 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
   });
 
   doc.addEventListener('keydown', (event) => {
+    if (!el.extensionPairingModal.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        controllers.closeExtensionPairing();
+      }
+      return;
+    }
+
     if (!el.appPromptModal.classList.contains('hidden')) {
       if (event.key === 'Escape') {
         event.preventDefault();

@@ -20,6 +20,7 @@ function queryElements(doc = document) {
     sidebarToggleBtn: doc.querySelector('#sidebarToggleBtn'),
     newChatBtn: doc.querySelector('#newChatBtn'),
     newFolderBtn: doc.querySelector('#newFolderBtn'),
+    pairExtensionBtn: doc.querySelector('#pairExtensionBtn'),
     folderList: doc.querySelector('#folderList'),
     sessionList: doc.querySelector('#sessionList'),
     trashList: doc.querySelector('#trashList'),
@@ -44,7 +45,12 @@ function queryElements(doc = document) {
     appPromptLabel: doc.querySelector('#appPromptLabel'),
     appPromptInput: doc.querySelector('#appPromptInput'),
     cancelAppPromptBtn: doc.querySelector('#cancelAppPromptBtn'),
-    saveAppPromptBtn: doc.querySelector('#saveAppPromptBtn')
+    saveAppPromptBtn: doc.querySelector('#saveAppPromptBtn'),
+    extensionPairingModal: doc.querySelector('#extensionPairingModal'),
+    extensionPairingCode: doc.querySelector('#extensionPairingCode'),
+    extensionPairingExpires: doc.querySelector('#extensionPairingExpires'),
+    copyExtensionPairingCodeBtn: doc.querySelector('#copyExtensionPairingCodeBtn'),
+    closeExtensionPairingModalBtn: doc.querySelector('#closeExtensionPairingModalBtn')
   };
 }
 

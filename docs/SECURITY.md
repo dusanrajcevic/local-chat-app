@@ -6,24 +6,32 @@ Local Chat App is intended for a single user on their own machine.
 
 - The server binds to `127.0.0.1` by default.
 - The API rejects requests with untrusted browser `Origin` headers.
-- CORS only reflects same-origin requests, approved extension origins, or explicit `LOCAL_CHAT_ALLOWED_ORIGINS` values.
+- CORS only reflects same-origin requests, allowed Chrome extension origins, or explicit `LOCAL_CHAT_ALLOWED_ORIGINS` values.
 - Route IDs are validated before any file lookup.
-- JSON writes use temp-file-and-rename atomic writes.
-- Read-modify-write operations use in-process per-file locks.
+- JSON writes use temp-file-and-rename atomic writes, private file modes on POSIX systems, and symlink-resistant reads.
+- Read-modify-write operations use in-process locks; multi-file trash/restore/folder-delete workflows use a recovery journal.
+- Browser-extension API access requires pairing or the explicit server-side compatibility token, and pairing tokens are bound to the extension ID.
 - Extension auto-save can send idempotency keys to avoid duplicate message writes.
 - Electron uses `contextIsolation`, disables Node integration, enables sandbox mode, denies permission prompts, and opens external URLs outside the app.
 
-## Optional extension token
+## Browser-extension pairing
 
-Set an API token before starting the server:
+Pairing is the normal browser-extension authentication flow:
+
+1. Start Local Chat App.
+2. Click **Pair browser extension** in the local web or desktop UI.
+3. Generate the short-lived pairing code.
+4. Enter that code in the extension popup.
+
+The server returns a random long-lived token only after a successful pairing exchange and stores only its SHA-256 hash. The extension keeps the token in `chrome.storage.local` with access restricted to trusted extension contexts, while non-sensitive preferences use sync storage when available.
+
+For compatibility with API clients that already provide the extension identity header, a server-side manual token can still be configured:
 
 ```bash
 LOCAL_CHAT_AUTH_TOKEN="replace-with-a-random-token" npm start
 ```
 
-Then paste the same token into the extension popup.
-
-The token is mainly useful for extension-origin requests. The local web UI is same-origin and does not need it.
+The extension popup does not accept this compatibility token. Same-origin local web-app requests do not require extension authentication. `LOCAL_CHAT_EXTENSION_IDS` can optionally restrict which Chrome extension IDs may pair or use the compatibility token.
 
 ## Do not expose the API
 

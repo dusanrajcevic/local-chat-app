@@ -8,7 +8,18 @@ const TRASH_DIR = path.join(DATA_DIR, 'trash');
 const FOLDERS_FILE = path.join(DATA_DIR, 'folders.json');
 const STATE_FILE = path.join(DATA_DIR, 'app-state.json');
 const MUTATION_JOURNAL_FILE = path.join(DATA_DIR, '.mutation-journal.json');
+const EXTENSION_AUTH_FILE = path.join(DATA_DIR, 'extension-auth.json');
 const AUTH_TOKEN = String(process.env.LOCAL_CHAT_AUTH_TOKEN || '').trim();
+const EXTENSION_ID_PATTERN = /^[a-p]{32}$/;
+const configuredExtensionIds = String(process.env.LOCAL_CHAT_EXTENSION_IDS || '')
+  .split(',')
+  .map((extensionId) => extensionId.trim().toLowerCase())
+  .filter(Boolean);
+const invalidExtensionId = configuredExtensionIds.find((extensionId) => !EXTENSION_ID_PATTERN.test(extensionId));
+if (invalidExtensionId) {
+  throw new Error(`LOCAL_CHAT_EXTENSION_IDS contains an invalid extension ID: ${invalidExtensionId}`);
+}
+const ALLOWED_EXTENSION_IDS = new Set(configuredExtensionIds);
 const EXTRA_ALLOWED_ORIGINS = new Set(
   String(process.env.LOCAL_CHAT_ALLOWED_ORIGINS || '')
     .split(',')
@@ -33,7 +44,10 @@ module.exports = {
   FOLDERS_FILE,
   STATE_FILE,
   MUTATION_JOURNAL_FILE,
+  EXTENSION_AUTH_FILE,
   AUTH_TOKEN,
+  EXTENSION_ID_PATTERN,
+  ALLOWED_EXTENSION_IDS,
   EXTRA_ALLOWED_ORIGINS,
   SESSION_ID_PATTERN,
   MESSAGE_ID_PATTERN,

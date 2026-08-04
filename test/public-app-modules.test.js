@@ -380,6 +380,26 @@ test('message controller honors a manual sender selection before continuing alte
   assert.equal(harness.el.isMeCheckbox.checked, false);
 });
 
+test('extension pairing code controller renders a short-lived code in the local app', async () => {
+  const harness = createHarness({
+    routes: {
+      'POST /api/extension/pairing-code': {
+        body: { code: 'ABCDEF123456', expiresAt: '2026-08-11T03:00:00.000Z' }
+      }
+    }
+  });
+
+  const result = await harness.controllers.createExtensionPairingCode();
+  assert.equal(result.code, 'ABCDEF123456');
+  assert.equal(harness.el.extensionPairingCode.textContent, 'ABCDEF123456');
+  assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'false');
+  assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), true);
+
+  harness.controllers.closeExtensionPairing();
+  assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'true');
+  assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), false);
+});
+
 test('text prompt modal resolves values and toggles the global modal class', async () => {
   const harness = createHarness();
   const pending = harness.modal.openTextPrompt({ title: 'Rename', label: 'Name', defaultValue: 'Old' });

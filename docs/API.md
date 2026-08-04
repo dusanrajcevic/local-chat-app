@@ -6,7 +6,16 @@ All endpoints are served from the local Express server.
 
 `GET /api/health`
 
-Returns `{ ok: true, authRequired: boolean }`.
+Returns `{ ok: true, authRequired: true, manualTokenConfigured: boolean }`. Browser-extension API requests require either a valid pairing token or the configured manual fallback token; same-origin local-app requests do not.
+
+## Browser extension pairing
+
+- `POST /api/extension/pairing-code` with `{}` creates a short-lived pairing code. This endpoint is available only to the local app origin.
+- `POST /api/extension/pair` with `{ "code": "..." }` exchanges a valid code for a long-lived extension token. The request must come from a `chrome-extension://` origin and its `X-Local-Chat-Extension-Id` header must match that origin.
+
+Paired tokens are bound to the extension ID. The server persists only a SHA-256 token hash in `extension-auth.json`; the raw token is returned once to the extension. All subsequent extension API requests include `X-Local-Chat-Extension-Id` and `X-Local-Chat-Token`. A pairing code expires after five minutes and is consumed after a successful exchange.
+
+`LOCAL_CHAT_AUTH_TOKEN` remains a manual fallback. `LOCAL_CHAT_EXTENSION_IDS` may contain a comma-separated allowlist of extension IDs; when configured, other extension origins are rejected before pairing or token authorization.
 
 ## Active session
 

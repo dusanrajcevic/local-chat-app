@@ -1,17 +1,14 @@
-const DEFAULT_LOCAL_APP_URL = 'http://localhost:3000';
+const { DEFAULT_LOCAL_APP_URL, normalizeBaseUrl } = globalThis.LocalChatApiConfig;
 
 const urlInput = document.querySelector('#localAppUrl');
+const pairingCodeInput = document.querySelector('#pairingCode');
 const statusEl = document.querySelector('#status');
-const tokenInput = document.querySelector('#localChatToken');
 const saveBtn = document.querySelector('#save');
+const pairBtn = document.querySelector('#pair');
 const testBtn = document.querySelector('#test');
 
-function normalizeBaseUrl(value) {
-  return (
-    String(value || DEFAULT_LOCAL_APP_URL)
-      .trim()
-      .replace(/\/+$/, '') || DEFAULT_LOCAL_APP_URL
-  );
+function preferenceStorage() {
+  return chrome.storage.sync || chrome.storage.local;
 }
 
 function setStatus(message, isError = false) {
@@ -19,48 +16,57 @@ function setStatus(message, isError = false) {
   statusEl.style.color = isError ? '#b91c1c' : '#52525b';
 }
 
-async function fetchJson(url) {
-  const token = String(tokenInput.value || '').trim();
-  const headers = token ? { 'X-Local-Chat-Token': token } : {};
-  const res = await fetch(url, { headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
-  return data;
+async function sendRuntimeMessage(message) {
+  const response = await chrome.runtime.sendMessage(message);
+  if (!response?.ok) throw new Error(response?.error || 'Extension request failed.');
+  return response;
 }
 
 async function load() {
-  const data = await chrome.storage.local.get({ localAppUrl: DEFAULT_LOCAL_APP_URL, localChatToken: '' });
+  const data = await preferenceStorage().get({ localAppUrl: DEFAULT_LOCAL_APP_URL });
   urlInput.value = normalizeBaseUrl(data.localAppUrl);
-  tokenInput.value = String(data.localChatToken || '');
 }
 
 async function save() {
   const localAppUrl = normalizeBaseUrl(urlInput.value);
-  const localChatToken = String(tokenInput.value || '').trim();
-  await chrome.storage.local.set({ localAppUrl, localChatToken });
+  await preferenceStorage().set({ localAppUrl });
   urlInput.value = localAppUrl;
-  setStatus('Saved.');
+  setStatus('Local app URL saved.');
+  return localAppUrl;
+}
+
+async function pair() {
+  try {
+    const localAppUrl = await save();
+    const code = String(pairingCodeInput.value || '').trim().toUpperCase();
+    const response = await sendRuntimeMessage({
+      type: 'PAIR_LOCAL_CHAT_APP',
+      payload: { localAppUrl, code }
+    });
+    pairingCodeInput.value = '';
+    setStatus(`Paired with Local Chat App (${response.extensionId}).`);
+  } catch (error) {
+    setStatus(`Could not pair: ${error.message}`, true);
+  }
 }
 
 async function test() {
-  await save();
-  const baseUrl = normalizeBaseUrl(urlInput.value);
-
   try {
-    await fetchJson(`${baseUrl}/api/health`);
-    const active = await fetchJson(`${baseUrl}/api/active-session`);
-    if (!active?.sessionId) {
-      setStatus('Connected, but no active chat is selected. Open a session in the local app.', true);
+    await save();
+    const result = await sendRuntimeMessage({ type: 'CHECK_LOCAL_CHAT_APP' });
+    const active = result.active?.sessionId;
+    if (!active) {
+      setStatus('Connected and paired. No active chat is selected.');
       return;
     }
-
-    setStatus(`Connected. Active chat: ${active.session?.title || active.sessionId}`);
+    setStatus(`Connected. Active chat: ${active}`);
   } catch (error) {
     setStatus(`Could not connect: ${error.message}`, true);
   }
 }
 
-saveBtn.addEventListener('click', save);
+saveBtn.addEventListener('click', () => save().catch((error) => setStatus(error.message, true)));
+pairBtn.addEventListener('click', pair);
 testBtn.addEventListener('click', test);
 
 load().catch((error) => setStatus(error.message, true));

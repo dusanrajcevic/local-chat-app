@@ -365,7 +365,7 @@
 
     async function loadAutoSendPreference() {
       try {
-        const data = await chromeApi.storage.local.get({ [config.autoSendStorageKey]: true });
+        const data = await (chromeApi.storage.sync || chromeApi.storage.local).get({ [config.autoSendStorageKey]: true });
         localChatAutoSendEnabled = data[config.autoSendStorageKey] !== false;
       } catch {
         localChatAutoSendEnabled = true;
@@ -387,7 +387,7 @@
       updateAutoSendToggles();
 
       try {
-        await chromeApi.storage.local.set({ [config.autoSendStorageKey]: localChatAutoSendEnabled });
+        await (chromeApi.storage.sync || chromeApi.storage.local).set({ [config.autoSendStorageKey]: localChatAutoSendEnabled });
       } catch (error) {
         showToast(error.message || 'Could not save the auto-save setting.', true);
       }
@@ -843,7 +843,7 @@
     function installStorageListener() {
       try {
         chromeApi.storage.onChanged.addListener((changes, areaName) => {
-          if (areaName !== 'local') return;
+          if (areaName !== 'sync' && areaName !== 'local') return;
 
           if (changes.localAppUrl) {
             localChatAppAvailable = false;
