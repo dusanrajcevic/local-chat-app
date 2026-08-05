@@ -30,7 +30,10 @@ Artifacts are written to `dist/` and should not be committed.
 
 - The BrowserWindow uses `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`.
 - Electron denies permission prompts by default.
-- Navigation and new-window handling compare URL origins rather than string prefixes.
+- Top-level navigation is limited to the local app document; renderer-created child windows are denied.
+- External links are handed to the operating system only for `http:`, `https:`, and `mailto:` URLs. File, script, data, custom-protocol, and credential-bearing web URLs are rejected.
+- The local server sends a restrictive Content Security Policy, Permissions Policy, frame protection, referrer policy, and MIME-sniffing protection.
+- Quit waits for the local HTTP server to stop accepting requests and finish active work; lingering connections are force-closed after a short grace period.
 - A second app instance focuses the existing window instead of starting another server.
 
 ## Troubleshooting

@@ -192,6 +192,10 @@ test('health endpoint reports the app is reachable and omits Express fingerprint
   assert.equal(data.manualTokenConfigured, false);
   assert.equal(res.headers.get('x-powered-by'), null);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+  assert.match(res.headers.get('content-security-policy') || '', /script-src 'self'/);
+  assert.match(res.headers.get('permissions-policy') || '', /camera=\(\)/);
 });
 
 test('rejects untrusted browser origins before CORS can expose responses', async () => {

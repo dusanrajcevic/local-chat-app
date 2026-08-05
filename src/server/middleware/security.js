@@ -6,6 +6,7 @@ const {
   isAllowedExtensionId,
   authorizeExtension
 } = require('../services/extension-auth-service');
+const { setSecurityHeaders } = require('./security-headers');
 
 function isChromeExtensionOrigin(origin) {
   return Boolean(extensionIdFromOrigin(origin));
@@ -162,12 +163,6 @@ function requireExtensionAuthorization(req, res, next) {
       return res.status(401).json({ error: 'Browser extension pairing is required.' });
     })
     .catch(next);
-}
-
-function setSecurityHeaders(req, res, next) {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  next();
 }
 
 function installSecurityMiddleware(app) {

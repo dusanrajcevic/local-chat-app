@@ -12,7 +12,9 @@ Local Chat App is intended for a single user on their own machine.
 - Read-modify-write operations use in-process locks; multi-file trash/restore/folder-delete workflows use a recovery journal.
 - Browser-extension API access requires pairing or the explicit server-side compatibility token, and pairing tokens are bound to the extension ID.
 - Extension auto-save can send idempotency keys to avoid duplicate message writes.
-- Electron uses `contextIsolation`, disables Node integration, enables sandbox mode, denies permission prompts, and opens external URLs outside the app.
+- Electron uses `contextIsolation`, disables Node integration, enables sandbox mode, denies permission prompts, blocks unexpected top-level navigation and child windows, and only opens allowlisted external URL schemes.
+- The local web UI is served with a restrictive Content Security Policy, Permissions Policy, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and MIME-sniffing protection.
+- Electron shutdown waits for the local HTTP server to close so in-flight API work can finish before the process exits.
 
 ## Browser-extension pairing
 

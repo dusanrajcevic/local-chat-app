@@ -85,7 +85,7 @@ The extension communicates with the local API only through its background worker
 
 ## Security model
 
-The app is local-first and binds to `127.0.0.1` by default. The API rejects untrusted browser origins, requires browser-extension pairing, validates route IDs, writes JSON atomically, and uses per-file write locks for read-modify-write flows.
+The app is local-first and binds to `127.0.0.1` by default. The API rejects untrusted browser origins, requires browser-extension pairing, validates route IDs, writes JSON atomically, and uses per-file write locks for read-modify-write flows. The Electron shell blocks unexpected navigation and child windows, allowlists external URL schemes, serves the UI with restrictive browser security headers, and waits for the local HTTP server to close during shutdown.
 
 Important remaining assumptions:
 

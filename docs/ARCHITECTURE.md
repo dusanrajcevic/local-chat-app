@@ -71,7 +71,7 @@ The content-script runtime remains the largest maintenance risk because provider
 
 ### Electron shell
 
-`electron/main.js` starts the same Express server on `127.0.0.1`, stores user data in Electron's app data directory, and opens the local UI in a sandboxed BrowserWindow.
+`electron/main.js` starts the same Express server on `127.0.0.1`, stores user data in Electron's app data directory, and opens the local UI in a sandboxed BrowserWindow. `electron/security.js` isolates navigation/external-link policy from Electron APIs so it can be unit-tested, while `electron/server-lifecycle.js` coordinates graceful HTTP shutdown before the app exits. Renderer-created child windows are denied, top-level navigation is limited to the local app document, and only allowlisted external URL schemes are delegated to the operating system.
 
 ## Storage layout
 
@@ -95,9 +95,9 @@ Multi-file mutations are serialized through a process-wide coordinator. Before c
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
-The next architecture improvement should focus on mutation-resistant provider fixtures and Electron navigation/shutdown hardening. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
+The next architecture improvement should focus on mutation-resistant provider fixtures, accessibility, and a real packaged-Electron launch smoke test. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
 
-The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, and runtime behavior for auto-send toggles, local-app availability, and Save local delegation.
+The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, runtime behavior for auto-send toggles, local-app availability, Save local delegation, and dependency-free Electron navigation/security/shutdown helpers.
 
 ## Quality gates
 

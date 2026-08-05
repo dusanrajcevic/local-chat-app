@@ -1,22 +1,18 @@
 const { app, BrowserWindow, dialog, shell, session } = require('electron');
 const path = require('path');
+const { installNavigationGuards } = require('./security');
+const { closeHttpServer } = require('./server-lifecycle');
 
 const LOCAL_CHAT_PORT = Number(process.env.PORT) || 3000;
 
 let mainWindow = null;
 let localServer = null;
 let isQuitting = false;
+let shutdownComplete = false;
+let shutdownPromise = null;
 
 function getLocalChatUrl() {
   return `http://127.0.0.1:${LOCAL_CHAT_PORT}`;
-}
-
-function isLocalChatUrl(value) {
-  try {
-    return new URL(value).origin === new URL(getLocalChatUrl()).origin;
-  } catch {
-    return false;
-  }
 }
 
 function configureLocalDataPath() {
@@ -57,6 +53,19 @@ async function startLocalServer() {
   }
 }
 
+async function stopLocalServer() {
+  if (!localServer) return;
+
+  const server = localServer;
+  localServer = null;
+  await closeHttpServer(server);
+}
+
+function beginShutdown() {
+  if (!shutdownPromise) shutdownPromise = stopLocalServer();
+  return shutdownPromise;
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -83,19 +92,9 @@ function createMainWindow() {
     mainWindow = null;
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isLocalChatUrl(url)) {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    }
-    return { action: 'allow' };
-  });
-
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isLocalChatUrl(url)) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
+  installNavigationGuards(mainWindow.webContents, {
+    localChatUrl: getLocalChatUrl(),
+    openExternal: (url) => shell.openExternal(url)
   });
 
   mainWindow.loadURL(getLocalChatUrl());
@@ -126,11 +125,18 @@ if (!gotSingleInstanceLock) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     isQuitting = true;
-  });
+    if (shutdownComplete) return;
 
-  app.on('quit', () => {
-    if (localServer) localServer.close();
+    event.preventDefault();
+    beginShutdown()
+      .catch((error) => {
+        console.error('Could not shut down the local server cleanly:', error);
+      })
+      .finally(() => {
+        shutdownComplete = true;
+        app.quit();
+      });
   });
 }
