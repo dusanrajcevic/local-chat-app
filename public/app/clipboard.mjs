@@ -5,7 +5,8 @@ function createClipboardController({
   win = window,
   navigatorRef,
   exportService,
-  getBotName
+  getBotName,
+  announceStatus = () => {}
 }) {
   const nav = navigatorRef || (typeof navigator !== 'undefined' ? navigator : null);
 
@@ -41,6 +42,7 @@ function createClipboardController({
 
     await copyTextToClipboard(message.text);
     flashButtonText(button);
+    announceStatus('Message copied to clipboard.');
   }
 
   function selectedMessageMarkdown(selection) {
@@ -63,6 +65,7 @@ function createClipboardController({
     const text = exportService.buildChatExportText(state.currentSession, { getBotName });
     await copyTextToClipboard(text);
     flashButtonText(el.copyChatBtn);
+    announceStatus('Chat copied to clipboard.');
   }
 
   function handleCopyEvent(event) {

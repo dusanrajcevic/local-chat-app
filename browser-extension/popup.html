@@ -55,6 +55,11 @@
         margin-top: 10px;
         color: #71717a;
       }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid #2563eb;
+        outline-offset: 2px;
+      }
       #status {
         min-height: 18px;
         margin-top: 10px;
@@ -65,7 +70,7 @@
   <body>
     <h1>Local Chat Saver</h1>
     <label for="localAppUrl">Local app URL</label>
-    <input id="localAppUrl" value="http://localhost:3000" />
+    <input id="localAppUrl" type="url" value="http://localhost:3000" />
 
     <label for="pairingCode" style="margin-top: 10px">Pairing code</label>
     <input
@@ -74,17 +79,18 @@
       autocomplete="off"
       maxlength="12"
       placeholder="12-character code from Local Chat App"
+      aria-describedby="pairingHint"
     />
     <div class="row">
       <button id="save">Save URL</button>
       <button id="pair" class="primary">Pair</button>
       <button id="test">Test</button>
     </div>
-    <p class="hint">
+    <p id="pairingHint" class="hint">
       Generate a short-lived pairing code from the Local Chat App, then enter it here. The extension only connects
       to HTTP loopback addresses.
     </p>
-    <div id="status"></div>
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
     <script src="local-api.js"></script>
     <script src="popup.js"></script>
   </body>

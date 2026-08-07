@@ -3,7 +3,18 @@ import { createFolderController } from './controllers/folders.mjs';
 import { createMessageController } from './controllers/messages.mjs';
 import { createSessionController } from './controllers/sessions.mjs';
 
-function createControllers({ state, el, api, view, modal, stateUtils, storage, win = window, doc = document }) {
+function createControllers({
+  state,
+  el,
+  api,
+  view,
+  modal,
+  stateUtils,
+  storage,
+  win = window,
+  doc = document,
+  announceStatus = () => {}
+}) {
   const alertUser = win.alert?.bind(win) || (typeof alert !== 'undefined' ? alert : () => {});
   const confirmUser = win.confirm?.bind(win) || (typeof confirm !== 'undefined' ? confirm : () => true);
 
@@ -44,7 +55,8 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     active: activeController,
     refreshAll,
     alertUser,
-    confirmUser
+    confirmUser,
+    announceStatus
   });
 
   const folderController = createFolderController({
@@ -54,7 +66,8 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     modal,
     refreshAll,
     alertUser,
-    confirmUser
+    confirmUser,
+    announceStatus
   });
 
   const messageController = createMessageController({
@@ -65,13 +78,12 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     openSession: sessionController.openSession,
     refreshAll,
     alertUser,
-    confirmUser
+    confirmUser,
+    announceStatus
   });
 
   function closeExtensionPairing() {
-    el.extensionPairingModal.classList.add('hidden');
-    el.extensionPairingModal.setAttribute('aria-hidden', 'true');
-    doc.body.classList.remove('modal-open');
+    modal.closeExtensionPairingModal();
   }
 
   async function createExtensionPairingCode() {
@@ -84,9 +96,8 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
       hour: '2-digit',
       minute: '2-digit'
     })}`;
-    el.extensionPairingModal.classList.remove('hidden');
-    el.extensionPairingModal.setAttribute('aria-hidden', 'false');
-    doc.body.classList.add('modal-open');
+    modal.openExtensionPairingModal();
+    announceStatus('Browser extension pairing code generated.');
     return pairing;
   }
 
@@ -95,6 +106,7 @@ function createControllers({ state, el, api, view, modal, stateUtils, storage, w
     if (!code) return false;
     if (!win.navigator?.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
     await win.navigator.clipboard.writeText(code);
+    announceStatus('Pairing code copied to clipboard.');
     return true;
   }
 

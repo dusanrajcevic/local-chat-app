@@ -84,9 +84,14 @@ For a lightweight local check that may skip only when the Playwright browser is 
 npm run test:smoke:optional
 ```
 
-Do not use the optional command in CI or release verification. The smoke test also fails on uncaught page errors, browser `console.error` messages, and failed network requests.
+Do not use the optional command in CI or release verification. The smoke test also fails on uncaught page errors, browser `console.error` messages, failed network requests, missing accessible control names, invalid ARIA references, and dialog focus regressions.
 
 Run `npm run format` only when you are ready to accept formatter changes across the repo.
+
+
+### Accessibility
+
+Keep interactive controls programmatically labelled, preserve visible keyboard focus, expose selected/expanded state with ARIA where appropriate, and route transient copy/save feedback through the live status region. Dialog changes must preserve focus containment while open and return focus to the control that opened the dialog when it closes.
 
 ## Architecture expectations
 

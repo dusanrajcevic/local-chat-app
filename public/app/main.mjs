@@ -42,6 +42,9 @@ export function createRuntime({
     nextMessageSender
   });
   const modal = createModalController({ state, el, doc, raf: win.requestAnimationFrame?.bind(win) });
+  const announceStatus = (message) => {
+    if (el.appStatus) el.appStatus.textContent = String(message || '');
+  };
   const clipboard = createClipboardController({
     state,
     el,
@@ -49,7 +52,8 @@ export function createRuntime({
     win,
     navigatorRef: win.navigator,
     exportService,
-    getBotName
+    getBotName,
+    announceStatus
   });
   const controllers = createControllers({
     state,
@@ -60,7 +64,8 @@ export function createRuntime({
     stateUtils,
     storage,
     win,
-    doc
+    doc,
+    announceStatus
   });
 
   wireEvents({ state, el, view, modal, controllers, clipboard, doc });

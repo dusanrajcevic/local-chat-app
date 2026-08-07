@@ -15,6 +15,7 @@ let clipboardModule;
 let controllersModule;
 let eventsModule;
 let mainModule;
+let accessibilityModule;
 
 function publicModulePath(name) {
   return pathToFileURL(path.join(__dirname, '..', 'public', 'app', name)).href;
@@ -31,7 +32,8 @@ before(async () => {
     clipboardModule,
     controllersModule,
     eventsModule,
-    mainModule
+    mainModule,
+    accessibilityModule
   ] = await Promise.all([
     import(publicModulePath('markdown.mjs')),
     import(publicModulePath('api.mjs')),
@@ -42,7 +44,8 @@ before(async () => {
     import(publicModulePath('clipboard.mjs')),
     import(publicModulePath('controllers.mjs')),
     import(publicModulePath('events.mjs')),
-    import(publicModulePath('main.mjs'))
+    import(publicModulePath('main.mjs')),
+    import(pathToFileURL(path.join(__dirname, '..', 'e2e', 'accessibility-support.mjs')).href)
   ]);
 });
 
@@ -105,6 +108,9 @@ function createHarness({ routes = {} } = {}) {
     doc: dom.window.document,
     raf: (callback) => callback()
   });
+  const announceStatus = (message) => {
+    el.appStatus.textContent = String(message || '');
+  };
   const clipboard = clipboardModule.createClipboardController({
     state,
     el,
@@ -118,7 +124,8 @@ function createHarness({ routes = {} } = {}) {
       }
     },
     exportService: exportModule,
-    getBotName: stateModule.getBotName
+    getBotName: stateModule.getBotName,
+    announceStatus
   });
   const controllers = controllersModule.createControllers({
     state,
@@ -129,7 +136,8 @@ function createHarness({ routes = {} } = {}) {
     stateUtils: stateModule,
     storage,
     win: dom.window,
-    doc: dom.window.document
+    doc: dom.window.document,
+    announceStatus
   });
 
   return { dom, storage, calls, state, el, api, view, modal, clipboard, controllers };
@@ -141,6 +149,18 @@ test('web UI loads a single native ES module entry point instead of ordered glob
   assert.doesNotMatch(html, /<script src="app-/);
   assert.doesNotMatch(html, /<script src="markdown\.js"/);
   assert.equal(typeof mainModule.createRuntime, 'function');
+});
+
+test('core controls expose accessible names and valid ARIA references', () => {
+  const harness = createHarness();
+  const issues = accessibilityModule.findAccessibilityIssues(harness.dom.window.document);
+
+  assert.deepEqual(issues, []);
+  assert.equal(harness.el.messageInput.labels[0].textContent.trim(), 'Message');
+  assert.equal(harness.el.pinSelect.labels[0].textContent.trim(), 'Pin current session to folder');
+  assert.equal(harness.el.editMessageTextarea.labels[0].textContent.trim(), 'Edit message text');
+  assert.equal(harness.el.appStatus.getAttribute('role'), 'status');
+  assert.equal(harness.el.appStatus.getAttribute('aria-live'), 'polite');
 });
 
 test('app API client sends JSON by default, merges headers, and surfaces server errors', async () => {
@@ -203,6 +223,32 @@ test('renderer filters folder views and escapes rendered titles', () => {
   harness.view.renderSessions();
   assert.match(harness.el.sessionList.textContent, /Unfiled/);
   assert.doesNotMatch(harness.el.sessionList.textContent, /<Pinned>/);
+});
+
+test('renderer exposes selected folder, session, and trash state to assistive technology', () => {
+  const harness = createHarness();
+  harness.state.folders = [{ id: 'f1', name: 'Work' }];
+  harness.state.selectedFolderId = 'f1';
+  harness.state.sessions = [
+    {
+      id: 's1',
+      title: 'Selected session',
+      pinnedFolderId: 'f1',
+      dateFolder: '2026-07-09',
+      messageCount: 0,
+      updatedAt: '2026-07-09T10:00:00Z'
+    }
+  ];
+  harness.state.currentSession = { id: 's1', trashed: false, messages: [] };
+  harness.state.trashOpen = true;
+
+  harness.view.renderFolders();
+  harness.view.renderSessions();
+  harness.view.renderTrash();
+
+  assert.equal(harness.el.folderList.querySelector('[data-folder="f1"]').getAttribute('aria-current'), 'true');
+  assert.equal(harness.el.sessionList.querySelector('[data-open-session="s1"]').getAttribute('aria-current'), 'true');
+  assert.equal(harness.el.toggleTrashBtn.getAttribute('aria-expanded'), 'true');
 });
 
 test('renderer escapes assistant names in message labels', () => {
@@ -330,6 +376,7 @@ test('message controller sends alternating sender messages and refreshes current
   assert.equal(harness.el.messageInput.value, '');
   assert.equal(harness.state.currentSession.messages.length, 1);
   assert.equal(harness.el.isMeCheckbox.checked, false);
+  assert.equal(harness.el.appStatus.textContent, 'Message sent.');
 });
 
 test('message controller honors a manual sender selection before continuing alternation', async () => {
@@ -414,6 +461,46 @@ test('text prompt modal resolves values and toggles the global modal class', asy
   assert.equal(await pending, 'New');
   assert.equal(harness.el.appPromptModal.getAttribute('aria-hidden'), 'true');
   assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), false);
+});
+
+test('modals trap keyboard focus and restore it to the opening control', async () => {
+  const harness = createHarness();
+  harness.el.newFolderBtn.focus();
+  const pending = harness.modal.openTextPrompt({ title: 'Create folder', label: 'Folder name' });
+
+  assert.equal(harness.dom.window.document.activeElement, harness.el.appPromptInput);
+  assert.equal(harness.el.appShell.hasAttribute('inert'), true);
+
+  const backwardTab = new harness.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true });
+  assert.equal(harness.modal.trapFocus(backwardTab), true);
+  assert.equal(backwardTab.defaultPrevented, true);
+  assert.equal(harness.dom.window.document.activeElement, harness.el.saveAppPromptBtn);
+
+  const forwardTab = new harness.dom.window.KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+  assert.equal(harness.modal.trapFocus(forwardTab), true);
+  assert.equal(forwardTab.defaultPrevented, true);
+  assert.equal(harness.dom.window.document.activeElement, harness.el.appPromptInput);
+
+  harness.modal.closeTextPrompt(null);
+  assert.equal(await pending, null);
+  assert.equal(harness.el.appShell.hasAttribute('inert'), false);
+  assert.equal(harness.dom.window.document.activeElement, harness.el.newFolderBtn);
+});
+
+test('clipboard actions announce completion through the live status region', async () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 's1',
+    title: 'Demo',
+    aiName: 'Assistant',
+    trashed: false,
+    createdAt: '2026-07-09T09:00:00Z',
+    updatedAt: '2026-07-09T09:00:00Z',
+    messages: [{ id: 'm1', sender: 'me', text: 'Hello', createdAt: '2026-07-09T09:00:00Z' }]
+  };
+
+  await harness.clipboard.copyEntireChat();
+  assert.equal(harness.el.appStatus.textContent, 'Chat copied to clipboard.');
 });
 
 test('copying part of a rendered message preserves only the selected text', () => {

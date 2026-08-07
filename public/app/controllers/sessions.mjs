@@ -1,4 +1,15 @@
-function createSessionController({ state, api, view, modal, stateUtils, active, refreshAll, alertUser, confirmUser }) {
+function createSessionController({
+  state,
+  api,
+  view,
+  modal,
+  stateUtils,
+  active,
+  refreshAll,
+  alertUser,
+  confirmUser,
+  announceStatus = () => {}
+}) {
   const getBotName = stateUtils.getBotName;
 
   async function openSession(sessionId, options = {}) {
@@ -29,6 +40,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     });
     await refreshAll();
     await openSession(session.id);
+    announceStatus('Session created.');
   }
 
   async function getSessionForRename(sessionId) {
@@ -68,6 +80,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     }
 
     await refreshAll();
+    announceStatus('Session renamed.');
   }
 
   async function renameBotName(sessionId = state.currentSession?.id) {
@@ -105,6 +118,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     }
 
     await refreshAll();
+    announceStatus('AI name updated.');
   }
 
   async function pinCurrentSession(folderId) {
@@ -115,6 +129,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     });
     await openSession(state.currentSession.id);
     await refreshAll();
+    announceStatus(folderId ? 'Session pinned to folder.' : 'Session unpinned.');
   }
 
   async function trashSession(sessionId) {
@@ -128,11 +143,13 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     }
     await refreshAll();
     view.renderMessages();
+    announceStatus('Session moved to trash.');
   }
 
   async function restoreSession(sessionId) {
     await api(`/api/trash/${sessionId}/restore`, { method: 'POST' });
     await refreshAll();
+    announceStatus('Session restored.');
   }
 
   async function deleteTrashSession(sessionId) {
@@ -146,6 +163,7 @@ function createSessionController({ state, api, view, modal, stateUtils, active, 
     }
     await refreshAll();
     view.renderMessages();
+    announceStatus('Session permanently deleted.');
   }
 
   return {

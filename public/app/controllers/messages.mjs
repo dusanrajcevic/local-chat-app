@@ -1,4 +1,14 @@
-function createMessageController({ state, el, api, modal, openSession, refreshAll, alertUser, confirmUser }) {
+function createMessageController({
+  state,
+  el,
+  api,
+  modal,
+  openSession,
+  refreshAll,
+  alertUser,
+  confirmUser,
+  announceStatus = () => {}
+}) {
   async function saveEditedMessage() {
     if (!state.currentSession || state.currentSession.trashed || !state.editingMessageId) return;
 
@@ -16,6 +26,7 @@ function createMessageController({ state, el, api, modal, openSession, refreshAl
     modal.closeEditMessageModal();
     await openSession(state.currentSession.id);
     await refreshAll();
+    announceStatus('Message updated.');
   }
 
   async function sendMessage() {
@@ -33,6 +44,7 @@ function createMessageController({ state, el, api, modal, openSession, refreshAl
     el.messageInput.value = '';
     await openSession(state.currentSession.id);
     await refreshAll();
+    announceStatus('Message sent.');
   }
 
   async function deleteMessage(messageId) {
@@ -42,6 +54,7 @@ function createMessageController({ state, el, api, modal, openSession, refreshAl
     await api(`/api/sessions/${state.currentSession.id}/messages/${messageId}`, { method: 'DELETE' });
     await openSession(state.currentSession.id);
     await refreshAll();
+    announceStatus('Message deleted.');
   }
 
   function openMessageForEdit(messageId) {

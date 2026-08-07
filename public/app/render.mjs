@@ -20,10 +20,10 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
 
   function renderFolders() {
     const base = `
-      <button class="item folder-system-item ${state.selectedFolderId === null ? 'active' : ''}" data-folder="all">
+      <button class="item folder-system-item ${state.selectedFolderId === null ? 'active' : ''}" data-folder="all" ${state.selectedFolderId === null ? 'aria-current="true"' : ''}>
         <span class="item-main"><span class="item-title">All conversations</span><span class="item-meta">Everything sorted by latest activity</span></span>
       </button>
-      <button class="item folder-system-item ${state.selectedFolderId === 'unfiled' ? 'active' : ''}" data-folder="unfiled">
+      <button class="item folder-system-item ${state.selectedFolderId === 'unfiled' ? 'active' : ''}" data-folder="unfiled" ${state.selectedFolderId === 'unfiled' ? 'aria-current="true"' : ''}>
         <span class="item-main"><span class="item-title">Unfiled</span><span class="item-meta">No pinned folder</span></span>
       </button>
       <div class="folder-system-separator" aria-hidden="true"></div>
@@ -33,13 +33,13 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
       .map(
         (folder) => `
       <div class="item ${state.selectedFolderId === folder.id ? 'active' : ''}">
-        <button class="item-main bare" data-folder="${folder.id}">
+        <button class="item-main bare" data-folder="${folder.id}" ${state.selectedFolderId === folder.id ? 'aria-current="true"' : ''}>
           <span class="item-title">${htmlEscape(folder.name)}</span>
           <span class="item-meta">Pinned chats</span>
         </button>
-        <span class="item-actions" aria-label="Folder actions">
-          <button class="icon-btn" data-rename-folder="${folder.id}" title="Rename folder" aria-label="Rename folder">✎</button>
-          <button class="icon-btn danger" data-delete-folder="${folder.id}" title="Delete folder" aria-label="Delete folder">×</button>
+        <span class="item-actions" role="group" aria-label="Actions for ${htmlEscape(folder.name)}">
+          <button class="icon-btn" data-rename-folder="${folder.id}" title="Rename folder" aria-label="Rename ${htmlEscape(folder.name)} folder">✎</button>
+          <button class="icon-btn danger" data-delete-folder="${folder.id}" title="Delete folder" aria-label="Delete ${htmlEscape(folder.name)} folder">×</button>
         </span>
       </div>
     `
@@ -75,13 +75,13 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
       .map(
         (session) => `
       <div class="item ${state.currentSession?.id === session.id ? 'active' : ''}">
-        <button class="item-main bare" data-open-session="${session.id}">
+        <button class="item-main bare" data-open-session="${session.id}" ${state.currentSession?.id === session.id ? 'aria-current="true"' : ''}>
           <span class="item-title">${htmlEscape(session.title)}</span>
           <span class="item-meta">${session.dateFolder} · ${session.messageCount} messages · ${dateFormatter(session.updatedAt)}</span>
         </button>
-        <span class="item-actions" aria-label="Session actions">
-          <button class="icon-btn" data-rename-session="${session.id}" title="Rename session" aria-label="Rename session">✎</button>
-          <button class="icon-btn danger" data-trash-session="${session.id}" title="Move to trash" aria-label="Move to trash">×</button>
+        <span class="item-actions" role="group" aria-label="Actions for ${htmlEscape(session.title)}">
+          <button class="icon-btn" data-rename-session="${session.id}" title="Rename session" aria-label="Rename ${htmlEscape(session.title)} session">✎</button>
+          <button class="icon-btn danger" data-trash-session="${session.id}" title="Move to trash" aria-label="Move ${htmlEscape(session.title)} to trash">×</button>
         </span>
       </div>
     `
@@ -91,6 +91,7 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
 
   function renderTrash() {
     el.trashList.classList.toggle('hidden', !state.trashOpen);
+    el.toggleTrashBtn.setAttribute('aria-expanded', String(state.trashOpen));
     if (!state.trash.length) {
       el.trashList.innerHTML = `<div class="item"><div class="item-main"><div class="item-title">Trash is empty</div></div></div>`;
       return;
@@ -100,14 +101,14 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
       .map(
         (session) => `
       <div class="item">
-        <button class="item-main bare" data-open-session="${session.id}">
+        <button class="item-main bare" data-open-session="${session.id}" ${state.currentSession?.id === session.id ? 'aria-current="true"' : ''}>
           <span class="item-title">${htmlEscape(session.title)}</span>
           <span class="item-meta">${session.messageCount} messages</span>
         </button>
-        <span class="item-actions" aria-label="Trash actions">
-          <button class="icon-btn" data-rename-session="${session.id}" title="Rename session" aria-label="Rename session">✎</button>
-          <button class="icon-btn" data-restore-session="${session.id}" title="Restore" aria-label="Restore session">↩</button>
-          <button class="icon-btn danger" data-delete-trash="${session.id}" title="Delete forever" aria-label="Delete forever">×</button>
+        <span class="item-actions" role="group" aria-label="Actions for ${htmlEscape(session.title)}">
+          <button class="icon-btn" data-rename-session="${session.id}" title="Rename session" aria-label="Rename ${htmlEscape(session.title)} session">✎</button>
+          <button class="icon-btn" data-restore-session="${session.id}" title="Restore" aria-label="Restore ${htmlEscape(session.title)}">↩</button>
+          <button class="icon-btn danger" data-delete-trash="${session.id}" title="Delete forever" aria-label="Permanently delete ${htmlEscape(session.title)}">×</button>
         </span>
       </div>
     `
@@ -128,14 +129,14 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
 
   function renderMessageActions(message) {
     return `
-      <span class="message-actions">
-        <button class="mini-btn" data-copy-message="${message.id}">Copy Markdown</button>
+      <span class="message-actions" role="group" aria-label="Message actions">
+        <button class="mini-btn" data-copy-message="${message.id}" aria-label="Copy message as Markdown">Copy Markdown</button>
         ${
           state.currentSession.trashed
             ? ''
             : `
-          <button class="mini-btn" data-edit-message="${message.id}">Edit</button>
-          <button class="mini-btn danger" data-delete-message="${message.id}">Delete</button>
+          <button class="mini-btn" data-edit-message="${message.id}" aria-label="Edit message">Edit</button>
+          <button class="mini-btn danger" data-delete-message="${message.id}" aria-label="Delete message">Delete</button>
         `
         }
       </span>
@@ -185,9 +186,6 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
           ${renderMessageActions(message)}
         </div>
         <div class="message-text" data-message-id="${message.id}">${markdown(message.text)}</div>
-        <div class="message-bottom" aria-label="Message actions">
-          ${renderMessageActions(message)}
-        </div>
       </article>
     `
       )

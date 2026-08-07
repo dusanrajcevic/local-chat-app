@@ -30,6 +30,18 @@ body {
   min-height: 100vh;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   font-family:
     Inter,
@@ -179,7 +191,10 @@ button {
 .ghost-btn:focus-visible,
 .icon-btn:focus-visible,
 .mini-btn:focus-visible,
+.send-btn:focus-visible,
+.bare:focus-visible,
 .sidebar-toggle:focus-visible,
+input:focus-visible,
 textarea:focus-visible,
 .pin-select:focus-visible {
   outline: 2px solid rgba(16, 163, 127, 0.45);
@@ -514,23 +529,6 @@ textarea::-webkit-scrollbar-thumb {
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 7px;
-}
-
-.message-bottom {
-  display: flex;
-  justify-content: flex-end;
-  max-height: 0;
-  margin-top: 0;
-  overflow: hidden;
-  transition:
-    max-height 0.18s ease,
-    margin-top 0.18s ease;
-}
-
-.message:hover .message-bottom,
-.message:focus-within .message-bottom {
-  max-height: 32px;
-  margin-top: 8px;
 }
 
 .message-label {

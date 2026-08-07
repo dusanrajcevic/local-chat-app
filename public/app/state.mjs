@@ -50,7 +50,8 @@ function queryElements(doc = document) {
     extensionPairingCode: doc.querySelector('#extensionPairingCode'),
     extensionPairingExpires: doc.querySelector('#extensionPairingExpires'),
     copyExtensionPairingCodeBtn: doc.querySelector('#copyExtensionPairingCodeBtn'),
-    closeExtensionPairingModalBtn: doc.querySelector('#closeExtensionPairingModalBtn')
+    closeExtensionPairingModalBtn: doc.querySelector('#closeExtensionPairingModalBtn'),
+    appStatus: doc.querySelector('#appStatus')
   };
 }
 

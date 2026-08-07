@@ -45,6 +45,8 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
   });
 
   doc.addEventListener('keydown', (event) => {
+    if (modal.trapFocus(event)) return;
+
     if (!el.extensionPairingModal.classList.contains('hidden')) {
       if (event.key === 'Escape') {
         event.preventDefault();

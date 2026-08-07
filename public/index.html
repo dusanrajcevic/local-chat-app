@@ -22,18 +22,26 @@
         <button id="pairExtensionBtn" class="ghost-btn">Pair browser extension</button>
 
         <div class="sidebar-section folder-section">
-          <div class="section-title">Folders</div>
-          <div id="folderList" class="list"></div>
+          <div id="foldersHeading" class="section-title">Folders</div>
+          <div id="folderList" class="list" role="group" aria-labelledby="foldersHeading"></div>
         </div>
 
         <div class="sidebar-section grow">
-          <div class="section-title">Conversations</div>
-          <div id="sessionList" class="list"></div>
+          <div id="conversationsHeading" class="section-title">Conversations</div>
+          <div id="sessionList" class="list" role="group" aria-labelledby="conversationsHeading"></div>
         </div>
 
         <div class="sidebar-section trash-section">
-          <button id="toggleTrashBtn" class="ghost-btn full">Trash</button>
-          <div id="trashList" class="list hidden"></div>
+          <button
+            id="toggleTrashBtn"
+            class="ghost-btn full"
+            type="button"
+            aria-expanded="false"
+            aria-controls="trashList"
+          >
+            Trash
+          </button>
+          <div id="trashList" class="list hidden" role="group" aria-label="Trashed conversations"></div>
         </div>
       </aside>
 
@@ -58,13 +66,14 @@
             <button id="renameBotBtn" class="ghost-btn compact" disabled>Set AI name</button>
             <button id="renameSessionBtn" class="ghost-btn compact" disabled>Rename session</button>
             <button id="copyChatBtn" class="ghost-btn compact" disabled>Copy entire chat</button>
+            <label class="sr-only" for="pinSelect">Pin current session to folder</label>
             <select id="pinSelect" class="pin-select" disabled>
               <option value="">No pinned folder</option>
             </select>
           </div>
         </header>
 
-        <section id="messages" class="messages empty-state">
+        <section id="messages" class="messages empty-state" aria-label="Conversation messages">
           <div class="empty-card">
             <span>☁</span>
             <h3>Start a new local chat</h3>
@@ -78,6 +87,7 @@
             <span>Sent by me</span>
           </label>
           <div class="input-row">
+            <label class="sr-only" for="messageInput">Message</label>
             <textarea id="messageInput" placeholder="Type your message..." rows="2"></textarea>
             <button id="sendBtn" class="send-btn" disabled>Send</button>
           </div>
@@ -93,14 +103,16 @@
             <h3 id="editMessageTitle">Update message text</h3>
           </div>
         </div>
+        <label class="sr-only" for="editMessageTextarea">Edit message text</label>
         <textarea
           id="editMessageTextarea"
+          aria-describedby="editMessageHint"
           class="modal-textarea"
           placeholder="Edit your message..."
           rows="10"
         ></textarea>
         <div class="modal-actions">
-          <span class="modal-hint">Press Esc to cancel · Ctrl/⌘ + Enter to save</span>
+          <span id="editMessageHint" class="modal-hint">Press Esc to cancel · Ctrl/⌘ + Enter to save</span>
           <button id="cancelEditMessageBtn" class="ghost-btn compact" type="button">Cancel</button>
           <button id="saveEditMessageBtn" class="primary-btn compact" type="button">Save changes</button>
         </div>
@@ -126,14 +138,22 @@
     </div>
 
     <div id="extensionPairingModal" class="modal-backdrop hidden" aria-hidden="true">
-      <div class="modal-card prompt-modal-card" role="dialog" aria-modal="true" aria-labelledby="extensionPairingTitle">
+      <div
+        class="modal-card prompt-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="extensionPairingTitle"
+        aria-describedby="extensionPairingDescription"
+      >
         <div class="modal-header">
           <div>
             <p class="eyebrow">Browser extension</p>
             <h3 id="extensionPairingTitle">Pair Local Chat Saver</h3>
           </div>
         </div>
-        <p class="modal-copy">Enter this short-lived code in the extension popup. It expires after five minutes.</p>
+        <p id="extensionPairingDescription" class="modal-copy">
+          Enter this short-lived code in the extension popup. It expires after five minutes.
+        </p>
         <output id="extensionPairingCode" class="pairing-code" aria-live="polite"></output>
         <div class="modal-actions">
           <span id="extensionPairingExpires" class="modal-hint"></span>
@@ -142,6 +162,8 @@
         </div>
       </div>
     </div>
+
+    <div id="appStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="./app/main.mjs"></script>
   </body>

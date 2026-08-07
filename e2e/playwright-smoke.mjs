@@ -7,6 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { chromium } from '@playwright/test';
 
+import { collectAccessibilityIssues } from './accessibility-support.mjs';
 import { launchChromium, monitorBrowserFailures } from './playwright-support.mjs';
 
 const OPTIONAL_SMOKE_TEST = process.argv.includes('--optional');
@@ -80,17 +81,31 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
 
     await page.goto(baseUrl, { waitUntil: 'networkidle' });
     await page.getByRole('heading', { name: 'Start a new local chat' }).waitFor();
+    assert.deepEqual(await collectAccessibilityIssues(page), [], 'Initial UI accessibility audit failed.');
 
     await page.locator('#newFolderBtn').click();
+    await page.locator('#appPromptInput').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'appPromptInput');
+    assert.equal(await page.locator('#appShell').getAttribute('inert'), '');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saveAppPromptBtn');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'appPromptInput');
     await page.locator('#appPromptInput').fill('Smoke Folder');
     await page.locator('#saveAppPromptBtn').click();
     await page.locator('#folderList').getByText('Smoke Folder').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'newFolderBtn');
+    assert.equal(await page.locator('#appShell').getAttribute('inert'), null);
 
     await page.locator('#folderList').getByText('Smoke Folder').click();
     await page.locator('#newChatBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session');
     await page.locator('#saveAppPromptBtn').click();
     await page.getByRole('heading', { name: 'Smoke Session' }).waitFor();
+    assert.equal(await page.locator('[data-open-session][aria-current="true"]').count(), 1);
+    assert.equal(await page.locator('[data-folder="all"][aria-current="true"]').count(), 0);
+    assert.equal(await page.getByLabel('Message').count(), 1);
+    assert.equal(await page.getByLabel('Pin current session to folder').count(), 1);
 
     const sidebarItemLayout = await page
       .locator('#sessionList .item')
@@ -132,6 +147,7 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     await page.getByRole('heading', { name: 'No session selected' }).waitFor();
 
     await page.locator('#toggleTrashBtn').click();
+    assert.equal(await page.locator('#toggleTrashBtn').getAttribute('aria-expanded'), 'true');
     await page.locator('#trashList').getByText('Smoke Session Renamed').waitFor();
     await page.locator('[data-restore-session]').first().click();
     await page.locator('#sessionList').getByText('Smoke Session Renamed').waitFor();
@@ -141,6 +157,7 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0].title, 'Smoke Session Renamed');
     assert.equal(sessions[0].messageCount, 1);
+    assert.deepEqual(await collectAccessibilityIssues(page), [], 'Dynamic UI accessibility audit failed.');
     assert.deepEqual(browserFailures, [], browserFailures.join('\n'));
   } finally {
     await browser.close();

@@ -1,4 +1,13 @@
-function createFolderController({ state, api, view, modal, refreshAll, alertUser, confirmUser }) {
+function createFolderController({
+  state,
+  api,
+  view,
+  modal,
+  refreshAll,
+  alertUser,
+  confirmUser,
+  announceStatus = () => {}
+}) {
   async function createFolder() {
     const name = await modal.openTextPrompt({
       eyebrow: 'New folder',
@@ -9,6 +18,7 @@ function createFolderController({ state, api, view, modal, refreshAll, alertUser
     if (!name || !name.trim()) return;
     await api('/api/folders', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
     await refreshAll();
+    announceStatus('Folder created.');
   }
 
   async function renameFolder(folderId) {
@@ -32,6 +42,7 @@ function createFolderController({ state, api, view, modal, refreshAll, alertUser
     });
 
     await refreshAll();
+    announceStatus('Folder renamed.');
   }
 
   function toggleTrash() {
@@ -50,6 +61,7 @@ function createFolderController({ state, api, view, modal, refreshAll, alertUser
     await api(`/api/folders/${folderId}`, { method: 'DELETE' });
     if (state.selectedFolderId === folderId) state.selectedFolderId = null;
     await refreshAll();
+    announceStatus('Folder deleted.');
   }
 
   return {

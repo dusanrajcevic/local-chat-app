@@ -14,7 +14,10 @@ function preferenceStorage() {
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.style.color = isError ? '#b91c1c' : '#52525b';
+  statusEl.setAttribute('role', isError ? 'alert' : 'status');
+  statusEl.setAttribute('aria-live', isError ? 'assertive' : 'polite');
 }
+
 
 async function sendRuntimeMessage(message) {
   const response = await chrome.runtime.sendMessage(message);
