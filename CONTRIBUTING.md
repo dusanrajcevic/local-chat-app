@@ -64,9 +64,12 @@ npm test
 npm run test:coverage
 npm run test:smoke
 npm run test:smoke:optional
+npm run test:electron-smoke
 ```
 
-The required Playwright smoke test fails when Chromium is unavailable. This keeps `npm run verify` and CI from succeeding without browser-level coverage. In CI, Chromium is installed with:
+The required web Playwright smoke test fails when Chromium is unavailable. This keeps `npm run verify` and CI from succeeding without browser-level coverage. The packaged-Electron smoke test is also part of `npm run verify`; it builds the current platform with `electron-builder --dir` and launches the packaged executable. Linux CI runs verification under `xvfb-run` so Electron has a display.
+
+In CI, Chromium is installed with:
 
 ```bash
 npx playwright install --with-deps chromium
@@ -78,10 +81,16 @@ Locally, you may also point Playwright at an existing Chromium binary:
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium npm run test:smoke
 ```
 
-For a lightweight local check that may skip only when the Playwright browser is missing, use:
+For a lightweight local web check that may skip only when the Playwright browser is missing, use:
 
 ```bash
 npm run test:smoke:optional
+```
+
+Run the packaged desktop check separately with:
+
+```bash
+npm run test:electron-smoke
 ```
 
 Do not use the optional command in CI or release verification. The smoke test also fails on uncaught page errors, browser `console.error` messages, failed network requests, missing accessible control names, invalid ARIA references, and dialog focus regressions.

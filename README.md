@@ -103,7 +103,7 @@ npm run verify
 npm run test:coverage
 ```
 
-`npm run verify` runs ESLint, Prettier format checks, recursive syntax checks across `server.js`, `src/server/`, the native-ES-module web UI, shared markdown renderer, extension scripts, Electron entrypoint, the Node/jsdom test suite, and a Playwright smoke test against a live local server. The tests cover API/session/folder/message/trash flows, origin/token security behavior, concurrent JSON writes, message idempotency, markdown rendering/sanitization, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, the single module entrypoint, extension background API calls, provider-adapter resolution, content-script DOM fixture extraction/injection for ChatGPT, Claude, DeepSeek, and Gemini, autosave behavior, local sidebar replacement behavior, composer/load-past modal behavior, runtime auto-send/availability/Save local behavior, keyboard focus behavior for dialogs, accessible names/state, live status announcements, and browser-level accessibility invariants.
+`npm run verify` runs ESLint, Prettier format checks, recursive syntax checks across `server.js`, `src/server/`, the native-ES-module web UI, shared markdown renderer, extension scripts, Electron entrypoint, the Node/jsdom test suite, a Playwright smoke test against a live local server, and a packaged-Electron launch smoke test built with `electron-builder --dir`. The tests cover API/session/folder/message/trash flows, origin/token security behavior, concurrent JSON writes, message idempotency, markdown rendering/sanitization, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, the single module entrypoint, extension background API calls, provider-adapter resolution, content-script DOM fixture extraction/injection for ChatGPT, Claude, DeepSeek, and Gemini, autosave behavior, local sidebar replacement behavior, composer/load-past modal behavior, runtime auto-send/availability/Save local behavior, keyboard focus behavior for dialogs, accessible names/state, live status announcements, and browser-level accessibility invariants.
 
 Additional quality-gate commands:
 
@@ -112,9 +112,10 @@ npm run lint
 npm run format:check
 npm run test:smoke
 npm run test:smoke:optional
+npm run test:electron-smoke
 ```
 
-`npm run test:smoke` requires Playwright/Chromium and fails when the browser is unavailable, so `npm run verify` cannot silently pass without browser coverage. In CI, install the browser with `npx playwright install --with-deps chromium`; locally, Playwright can also use a system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Use `npm run test:smoke:optional` only for lightweight local checks where a missing Playwright browser is allowed to skip the smoke test. The required smoke flow also checks accessible control names, ARIA references/state, dialog focus containment/restoration, and dynamic UI accessibility after session/trash operations.
+`npm run test:smoke` requires Playwright/Chromium and fails when the browser is unavailable, so `npm run verify` cannot silently pass without browser coverage. In CI, install the browser with `npx playwright install --with-deps chromium`; locally, Playwright can also use a system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Use `npm run test:smoke:optional` only for lightweight local checks where a missing Playwright browser is allowed to skip the smoke test. The required web smoke flow also checks accessible control names, ARIA references/state, dialog focus containment/restoration, and dynamic UI accessibility after session/trash operations. `npm run test:electron-smoke` builds an unpacked production package, launches its real executable through Playwright Electron automation, verifies `app.isPackaged`, ASAR loading, BrowserWindow hardening, local-server/security headers, blocked navigation/window creation, and graceful port release on quit.
 
 ## Build desktop packages
 

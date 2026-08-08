@@ -39,3 +39,15 @@ Artifacts are written to `dist/` and should not be committed.
 ## Troubleshooting
 
 If the app cannot start because the port is in use, close the other Local Chat App process or start the Node version with a different `PORT`.
+
+## Packaged launch smoke test
+
+Run:
+
+```bash
+npm run test:electron-smoke
+```
+
+The test uses `electron-builder --dir` to create the current platform's unpacked production package, launches the packaged executable through Playwright's Electron API, confirms the application is running from `app.asar`, checks the hardened BrowserWindow and navigation behavior, verifies the bundled local server, then quits through Electron and confirms the listening port is released. The test uses an isolated temporary Electron user-data directory and does not touch normal desktop data.
+
+On headless Linux, run it under Xvfb, for example `xvfb-run -a npm run test:electron-smoke`.

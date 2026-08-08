@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, shell, session } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { installNavigationGuards } = require('./security');
 const { closeHttpServer } = require('./server-lifecycle');
@@ -13,6 +14,15 @@ let shutdownPromise = null;
 
 function getLocalChatUrl() {
   return `http://127.0.0.1:${LOCAL_CHAT_PORT}`;
+}
+
+function configureElectronUserDataPath() {
+  const override = process.env.LOCAL_CHAT_ELECTRON_USER_DATA_DIR;
+  if (!override) return;
+
+  const userDataDir = path.resolve(override);
+  fs.mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
+  app.setPath('userData', userDataDir);
 }
 
 function configureLocalDataPath() {
@@ -99,6 +109,8 @@ function createMainWindow() {
 
   mainWindow.loadURL(getLocalChatUrl());
 }
+
+configureElectronUserDataPath();
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 

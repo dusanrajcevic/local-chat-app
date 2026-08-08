@@ -95,9 +95,9 @@ Multi-file mutations are serialized through a process-wide coordinator. Before c
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
-The next architecture improvement should focus on mutation-resistant provider fixtures and a real packaged-Electron launch smoke test. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
+The next architecture improvement should focus on mutation-resistant provider fixtures and large-archive performance; the packaged-Electron launch smoke test now exercises the production bundle directly. A TypeScript migration can still be considered later, but it is no longer required to express the current module boundaries.
 
-The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, runtime behavior for auto-send toggles, local-app availability, Save local delegation, and dependency-free Electron navigation/security/shutdown helpers, web UI accessibility contracts, modal focus behavior, and browser-level accessibility assertions.
+The current test suite covers server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, runtime behavior for auto-send toggles, local-app availability, Save local delegation, dependency-free Electron navigation/security/shutdown helpers, a packaged-Electron launch smoke test, web UI accessibility contracts, modal focus behavior, and browser-level accessibility assertions.
 
 ## Quality gates
 
@@ -105,7 +105,7 @@ The repo now has public-portfolio quality gates:
 
 - ESLint flat config in `eslint.config.mjs` for Node, browser, WebExtension, CommonJS, and native ES module files.
 - Prettier config in `.prettierrc.json` with `.prettierignore` for generated/runtime artifacts.
-- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, and the required Playwright smoke test.
+- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, the required web Playwright smoke test, and a packaged-Electron launch smoke test built with `electron-builder --dir`.
 - `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium, including accessible-name/ARIA checks and modal focus containment/restoration.
 - The required smoke test fails when Chromium is unavailable and also rejects uncaught page errors, browser `console.error` messages, and failed network requests.
 - `npm run test:smoke:optional` is available only for lightweight local development where a missing browser may be skipped.

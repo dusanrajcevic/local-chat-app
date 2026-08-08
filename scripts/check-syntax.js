@@ -2,7 +2,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const roots = ['server.js', 'src', 'public', 'browser-extension', 'electron', 'scripts'];
+const roots = ['server.js', 'src', 'public', 'browser-extension', 'electron', 'e2e', 'scripts'];
 
 function walk(entry) {
   if (!fs.existsSync(entry)) return [];
