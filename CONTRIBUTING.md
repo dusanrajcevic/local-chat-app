@@ -141,6 +141,7 @@ Current extension boundaries:
 
 - `content-providers.js` and `providers/*` for provider adapters
 - `content-dom.js` for shared DOM extraction orchestration
+- `content-diagnostics.js` for privacy-preserving adapter health reporting
 - `content-message-save.js` for manual save and clipboard extraction
 - `content-autosave.js` for autosave state and scheduling
 - `content-sidebar.js` for local sidebar replacement
@@ -167,7 +168,7 @@ Use this checklist when adding support for another AI chat site.
    - transient/status-text patterns, if needed
 3. Register the adapter in `browser-extension/content-providers.js`.
 4. Update `browser-extension/manifest.json` match patterns if the provider uses a new domain.
-5. Add reduced DOM fixtures under the relevant content-script tests. Do not rely only on live-site manual testing.
+5. Add reduced DOM fixtures under the relevant content-script tests. Do not rely only on live-site manual testing. Add at least one mutation case that changes neutral wrappers or presentation-oriented classes/test IDs while preserving semantic message structure.
 6. Test at least these behaviors:
    - provider detection
    - user/assistant sender inference
@@ -175,6 +176,8 @@ Use this checklist when adding support for another AI chat site.
    - Save local button injection
    - status/transient text rejection
    - code-copy or nested-copy button rejection, if applicable
+   - provider diagnostics report the expected adapter and do not expose message text
+   - neutral wrapper/presentation-attribute mutations do not silently change sender inference or extraction
 7. Update `browser-extension/README.md` and the root README support list if the provider is user-visible.
 8. Run:
 

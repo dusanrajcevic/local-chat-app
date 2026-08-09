@@ -32,6 +32,7 @@
         "providers/gemini.js",
         "content-providers.js",
         "content-dom.js",
+        "content-diagnostics.js",
         "content-message-save.js",
         "content-autosave.js",
         "content-sidebar.js",

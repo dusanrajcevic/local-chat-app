@@ -35,6 +35,7 @@
       }
       .row {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         margin-top: 10px;
       }
@@ -65,6 +66,25 @@
         margin-top: 10px;
         color: #52525b;
       }
+      .diagnostics {
+        margin-top: 12px;
+        border-top: 1px solid #e4e4e7;
+        padding-top: 10px;
+      }
+      .diagnostics h2 {
+        margin: 0 0 6px;
+        font-size: 13px;
+      }
+      .diagnostics p,
+      .diagnostics ul {
+        margin: 6px 0 0;
+      }
+      .diagnostics ul {
+        padding-left: 18px;
+      }
+      .diagnostics code {
+        overflow-wrap: anywhere;
+      }
     </style>
   </head>
   <body>
@@ -85,12 +105,17 @@
       <button id="save">Save URL</button>
       <button id="pair" class="primary">Pair</button>
       <button id="test">Test</button>
+      <button id="diagnose">Diagnose page</button>
     </div>
     <p id="pairingHint" class="hint">
       Generate a short-lived pairing code from the Local Chat App, then enter it here. The extension only connects
       to HTTP loopback addresses.
     </p>
     <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
+    <section id="diagnostics" class="diagnostics" aria-labelledby="diagnosticsTitle" hidden>
+      <h2 id="diagnosticsTitle">Provider diagnostics</h2>
+      <div id="diagnosticsBody"></div>
+    </section>
     <script src="local-api.js"></script>
     <script src="popup.js"></script>
   </body>
