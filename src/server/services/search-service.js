@@ -1,13 +1,7 @@
 const { cleanName } = require('../validation');
 const { summarizeSession } = require('./session-format');
 const { collectSearchableSessions, collectSessionSummaries } = require('../storage/session-store');
-
-function normalizeSearchText(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const { normalizeSearchText } = require('./search-text');
 
 function compactSnippet(value, query, maxLength = 220) {
   const text = String(value || '')
@@ -29,7 +23,7 @@ function compactSnippet(value, query, maxLength = 220) {
 
 async function searchSessions(query, limit = 100) {
   const normalizedQuery = normalizeSearchText(query);
-  const allSessions = await collectSearchableSessions();
+  const allSessions = await collectSearchableSessions(normalizedQuery);
   const results = [];
 
   for (const { session, dateDir } of allSessions) {

@@ -13,6 +13,7 @@ const {
 } = require('../config');
 const { appError } = require('../errors');
 const { validateId } = require('../validation');
+const { emitStorageChange } = require('./storage-events');
 
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
@@ -201,6 +202,7 @@ async function unlinkDataFile(filePath, { missingOk = false } = {}) {
     throw error;
   }
   await syncDirectoryMetadata(path.dirname(candidate.resolved));
+  emitStorageChange({ type: 'delete', filePath: candidate.resolved });
   return true;
 }
 
@@ -249,7 +251,9 @@ async function readJson(filePath, fallback = null) {
 }
 
 async function writeJson(filePath, data) {
-  await atomicWriteFile(filePath, `${JSON.stringify(data, null, 2)}\n`);
+  const resolved = assertInsideDataDir(filePath);
+  await atomicWriteFile(resolved, `${JSON.stringify(data, null, 2)}\n`);
+  emitStorageChange({ type: 'write', filePath: resolved });
 }
 
 async function ensureBaseFiles() {
@@ -313,5 +317,6 @@ module.exports = {
   unlinkDataFile,
   ensureBaseFiles,
   listDateDirs,
-  findSessionFile
+  findSessionFile,
+  inspectDataFile
 };

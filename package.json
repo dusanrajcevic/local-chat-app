@@ -27,7 +27,8 @@
     "test:smoke": "node e2e/playwright-smoke.mjs",
     "test:smoke:optional": "node e2e/playwright-smoke.mjs --optional",
     "build:desktop:dir": "electron-builder --dir --publish never",
-    "test:electron-smoke": "node e2e/electron-smoke.mjs"
+    "test:electron-smoke": "node e2e/electron-smoke.mjs",
+    "benchmark:index": "node scripts/benchmark-session-index.js"
   },
   "keywords": [
     "local-first",

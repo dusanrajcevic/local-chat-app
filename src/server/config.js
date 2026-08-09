@@ -9,6 +9,7 @@ const FOLDERS_FILE = path.join(DATA_DIR, 'folders.json');
 const STATE_FILE = path.join(DATA_DIR, 'app-state.json');
 const MUTATION_JOURNAL_FILE = path.join(DATA_DIR, '.mutation-journal.json');
 const EXTENSION_AUTH_FILE = path.join(DATA_DIR, 'extension-auth.json');
+const SESSION_INDEX_FILE = path.join(DATA_DIR, '.session-index.json');
 const AUTH_TOKEN = String(process.env.LOCAL_CHAT_AUTH_TOKEN || '').trim();
 const EXTENSION_ID_PATTERN = /^[a-p]{32}$/;
 const configuredExtensionIds = String(process.env.LOCAL_CHAT_EXTENSION_IDS || '')
@@ -45,6 +46,7 @@ module.exports = {
   STATE_FILE,
   MUTATION_JOURNAL_FILE,
   EXTENSION_AUTH_FILE,
+  SESSION_INDEX_FILE,
   AUTH_TOKEN,
   EXTENSION_ID_PATTERN,
   ALLOWED_EXTENSION_IDS,

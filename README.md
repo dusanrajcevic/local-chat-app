@@ -92,9 +92,11 @@ Important remaining assumptions:
 - This is still a single-user localhost app.
 - Do not expose the port to a LAN or the internet.
 - Browser-extension capture depends on third-party website DOM structures, which can break without notice. The extension popup includes a privacy-preserving provider diagnostic report to surface selector/extraction degradation without exposing conversation text.
-- JSON-file storage is inspectable and portable, but it is not a replacement for a transactional database under heavy concurrent writes.
+- JSON-file storage is inspectable and portable. Routine list/recent/search operations use a derived `.session-index.json` cache, but the canonical chat files remain the source of truth. The index can be deleted and rebuilt safely.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) for details.
+
+For large archives, the server maintains a private derived session index containing summary metadata, filesystem signatures, and a fixed-size Bloom search projection. Normal in-app writes invalidate only the affected session entry; a periodic full reconciliation catches out-of-band edits. Long search queries use the Bloom projection to discard non-candidate sessions before reading canonical transcripts, while queries shorter than three characters deliberately fall back to exact full-file scanning so search behavior does not change.
 
 ## Verification
 
@@ -113,6 +115,7 @@ npm run format:check
 npm run test:smoke
 npm run test:smoke:optional
 npm run test:electron-smoke
+npm run benchmark:index -- 1000
 ```
 
 `npm run test:smoke` requires Playwright/Chromium and fails when the browser is unavailable, so `npm run verify` cannot silently pass without browser coverage. In CI, install the browser with `npx playwright install --with-deps chromium`; locally, Playwright can also use a system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Use `npm run test:smoke:optional` only for lightweight local checks where a missing Playwright browser is allowed to skip the smoke test. The required web smoke flow also checks accessible control names, ARIA references/state, dialog focus containment/restoration, and dynamic UI accessibility after session/trash operations. `npm run test:electron-smoke` builds an unpacked production package, launches its real executable through Playwright Electron automation, verifies `app.isPackaged`, ASAR loading, BrowserWindow hardening, local-server/security headers, blocked navigation/window creation, and graceful port release on quit.
