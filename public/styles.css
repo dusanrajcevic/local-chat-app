@@ -13,6 +13,7 @@
   --danger: #ff6b6b;
   --user-bubble: #2f2f2f;
   --code-bg: #0d0d0d;
+  --code-header-bg: #212121;
   --input-bg: #303030;
   --button-bg: #ececec;
   --button-text: #212121;
@@ -800,13 +801,103 @@ textarea::-webkit-scrollbar-thumb {
   white-space: pre;
 }
 
+.markdown-body .code-block {
+  overflow: hidden;
+  margin: 0 0 0.85em;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--code-bg);
+}
+
+.markdown-body .code-block-header {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 14px;
+  background: var(--code-header-bg);
+}
+
 .markdown-body .code-language {
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--soft);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-body .code-copy-btn {
+  position: relative;
+  display: inline-grid;
+  width: 34px;
+  margin-left: auto;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--soft);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.markdown-body .code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.markdown-body .code-copy-btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.markdown-body .code-copy-icon,
+.markdown-body .code-copy-check {
+  grid-area: 1 / 1;
+  width: 21px;
+  height: 21px;
+}
+
+.markdown-body .code-copy-icon svg,
+.markdown-body .code-copy-check svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.markdown-body .code-copy-check {
+  display: none;
+}
+
+.markdown-body .code-copy-btn[data-copied='true'] {
+  color: var(--text);
+}
+
+.markdown-body .code-copy-btn[data-copied='true'] .code-copy-icon {
+  display: none;
+}
+
+.markdown-body .code-copy-btn[data-copied='true'] .code-copy-check {
+  display: block;
+}
+
+.markdown-body .code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 14px 16px 16px;
 }
 
 .markdown-body a {

@@ -210,6 +210,38 @@ test('message navigator renders one preview rail item per user message and jumps
   assert.equal(items[0].tabIndex, 0);
 });
 
+test('rendered code blocks expose language labels and copy only code text', async () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 's-code',
+    title: 'Code test',
+    aiName: 'Assistant',
+    trashed: false,
+    messages: [
+      {
+        id: 'm-code',
+        sender: 'bot',
+        text: '```cpp\nstd::cout << "hello";\n```',
+        createdAt: '2026-08-11T04:00:00Z'
+      }
+    ]
+  };
+
+  harness.view.renderMessages();
+
+  const block = harness.el.messages.querySelector('.code-block');
+  const button = block.querySelector('[data-copy-code]');
+  assert.equal(block.querySelector('.code-language').textContent, 'c++');
+  assert.equal(button.getAttribute('aria-label'), 'Copy code');
+
+  await harness.clipboard.copyCodeBlock(button);
+
+  assert.equal(harness.clipboard.lastText, 'std::cout << "hello";');
+  assert.equal(harness.el.appStatus.textContent, 'Code copied to clipboard.');
+  assert.equal(button.dataset.copied, 'true');
+  assert.equal(button.getAttribute('aria-label'), 'Code copied');
+});
+
 test('app API client sends JSON by default, merges headers, and surfaces server errors', async () => {
   const calls = [];
   const api = apiModule.createApiClient({
@@ -633,6 +665,7 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
   const harness = createHarness();
   let selectedFolder = null;
   let copiedMessage = null;
+  let copiedCode = false;
   eventsModule.wireEvents({
     state: harness.state,
     el: harness.el,
@@ -663,6 +696,9 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
       copyMessageMarkdown: async (messageId) => {
         copiedMessage = messageId;
       },
+      copyCodeBlock: async () => {
+        copiedCode = true;
+      },
       copyEntireChat: async () => {},
       handleCopyEvent() {}
     },
@@ -677,6 +713,11 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
   harness.el.messages.querySelector('[data-copy-message]').click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(copiedMessage, 'm1');
+
+  harness.el.messages.innerHTML = '<button data-copy-code>Copy code</button>';
+  harness.el.messages.querySelector('[data-copy-code]').click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(copiedCode, true);
 
   harness.state.currentSession = {
     id: 's1',

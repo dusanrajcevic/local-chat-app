@@ -70,8 +70,30 @@ const x = "<safe>";
   assert.match(html, /<div class="table-wrap"><table>/);
   assert.match(html, /<td>&lt;x&gt;<\/td>/);
   assert.match(html, /<td style="text-align: right">\|<\/td>/);
-  assert.match(html, /<div class="code-language">js<\/div>/);
+  assert.match(html, /<span class="code-language">js<\/span>/);
+  assert.match(html, /class="code-copy-btn"/);
+  assert.match(html, /data-copy-code/);
   assert.match(html, /const x = &quot;&lt;safe&gt;&quot;/);
+});
+
+test('code fences render ChatGPT-style language headers and copy controls', () => {
+  assert.equal(markdown.normalizeCodeLanguage('bash'), 'bash');
+  assert.equal(markdown.normalizeCodeLanguage('cpp'), 'c++');
+  assert.equal(markdown.normalizeCodeLanguage('cxx extra-metadata'), 'c++');
+  assert.equal(markdown.normalizeCodeLanguage(''), '');
+
+  const bash = markdown.renderMarkdown('```bash\necho hello\n```');
+  assert.match(bash, /<div class="code-block">/);
+  assert.match(bash, /<span class="code-language">bash<\/span>/);
+  assert.match(bash, /aria-label="Copy code"/);
+  assert.match(bash, /<code>echo hello<\/code>/);
+
+  const cpp = markdown.renderMarkdown('```cpp\nstd::cout &lt;&lt; "hi";\n```');
+  assert.match(cpp, /<span class="code-language">c\+\+<\/span>/);
+
+  const unlabeled = markdown.renderMarkdown('```\nplain code\n```');
+  assert.doesNotMatch(unlabeled, /class="code-language"/);
+  assert.match(unlabeled, /data-copy-code/);
 });
 
 test('renderMarkdown returns a stable empty wrapper for empty input', () => {

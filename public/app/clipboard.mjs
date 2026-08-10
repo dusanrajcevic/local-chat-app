@@ -45,6 +45,25 @@ function createClipboardController({
     announceStatus('Message copied to clipboard.');
   }
 
+  async function copyCodeBlock(button) {
+    const code = button?.closest('.code-block')?.querySelector('pre code');
+    if (!code) return;
+
+    await copyTextToClipboard(code.textContent || '');
+    button.dataset.copied = 'true';
+    button.setAttribute('aria-label', 'Code copied');
+    button.title = 'Copied';
+    announceStatus('Code copied to clipboard.');
+
+    const resetTimer = setTimeout(() => {
+      if (!button.isConnected) return;
+      delete button.dataset.copied;
+      button.setAttribute('aria-label', 'Copy code');
+      button.title = 'Copy code';
+    }, 1200);
+    resetTimer?.unref?.();
+  }
+
   function selectedMessageMarkdown(selection) {
     if (!state.currentSession || !selection || selection.isCollapsed) return '';
 
@@ -81,6 +100,7 @@ function createClipboardController({
     copyTextToClipboard,
     flashButtonText,
     copyMessageMarkdown,
+    copyCodeBlock,
     selectedMessageMarkdown,
     copyEntireChat,
     handleCopyEvent

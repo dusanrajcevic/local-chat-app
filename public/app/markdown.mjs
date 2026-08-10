@@ -304,6 +304,41 @@ function renderList(lines, startIndex, baseIndent = null, listType = null) {
   };
 }
 
+
+function normalizeCodeLanguage(language) {
+  const token = String(language || '').trim().split(/\s+/, 1)[0].toLowerCase();
+  if (!token) return '';
+
+  if (['cpp', 'cxx', 'cc'].includes(token)) return 'c++';
+  return token;
+}
+
+function renderCodeCopyButton() {
+  return `
+    <button class="code-copy-btn" type="button" data-copy-code aria-label="Copy code" title="Copy code">
+      <span class="code-copy-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+        </svg>
+      </span>
+      <span class="code-copy-check" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="m5 12 4 4L19 6"></path>
+        </svg>
+      </span>
+    </button>`;
+}
+
+function renderCodeBlock(code, language = '') {
+  const normalizedLanguage = normalizeCodeLanguage(language);
+  const languageLabel = normalizedLanguage
+    ? `<span class="code-language">${escapeHtml(normalizedLanguage)}</span>`
+    : '';
+
+  return `<div class="code-block"><div class="code-block-header">${languageLabel}${renderCodeCopyButton()}</div><pre><code>${escapeHtml(code)}</code></pre></div>`;
+}
+
 function renderMarkdown(markdown) {
   const lines = String(markdown || '')
     .replace(/\r\n?/g, '\n')
@@ -328,8 +363,7 @@ function renderMarkdown(markdown) {
         i += 1;
       }
       if (i < lines.length) i += 1;
-      const languageLabel = language ? `<div class="code-language">${escapeHtml(language)}</div>` : '';
-      blocks.push(`<pre>${languageLabel}<code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+      blocks.push(renderCodeBlock(codeLines.join('\n'), language));
       continue;
     }
 
@@ -390,5 +424,7 @@ export {
   isTableDelimiterCell,
   isMarkdownTableStart,
   renderMarkdownTable,
+  normalizeCodeLanguage,
+  renderCodeBlock,
   renderMarkdown
 };
