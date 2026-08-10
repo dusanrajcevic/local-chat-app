@@ -138,6 +138,24 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     await page.locator('#sendBtn').click();
     await page.locator('.message-text').getByText('Hello from Playwright smoke').waitFor();
 
+    const messageNavigator = page.locator('#messageNavigator');
+    assert.equal(await messageNavigator.isHidden(), false);
+    assert.equal(await messageNavigator.locator('[data-message-nav-id]').count(), 1);
+    assert.equal(await messageNavigator.locator('.message-nav-line').count(), 1);
+    assert.equal(
+      await messageNavigator.locator('.message-nav-preview').textContent(),
+      'Hello from Playwright smoke'
+    );
+    await messageNavigator.hover();
+    await page.waitForTimeout(200);
+    const expandedNavigatorWidth = await messageNavigator.evaluate(
+      (element) => element.getBoundingClientRect().width
+    );
+    assert.ok(
+      expandedNavigatorWidth > 200,
+      `Message navigator did not expand: ${expandedNavigatorWidth}px`
+    );
+
     await page.locator('#renameSessionBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session Renamed');
     await page.locator('#saveAppPromptBtn').click();

@@ -73,13 +73,21 @@
           </div>
         </header>
 
-        <section id="messages" class="messages empty-state" aria-label="Conversation messages">
-          <div class="empty-card">
-            <span>☁</span>
-            <h3>Start a new local chat</h3>
-            <p>Your conversations are stored as JSON files by date.</p>
-          </div>
-        </section>
+        <div class="conversation-stage">
+          <section id="messages" class="messages empty-state" aria-label="Conversation messages">
+            <div class="empty-card">
+              <span>☁</span>
+              <h3>Start a new local chat</h3>
+              <p>Your conversations are stored as JSON files by date.</p>
+            </div>
+          </section>
+          <nav
+            id="messageNavigator"
+            class="message-navigator"
+            aria-label="Jump between your messages in this conversation"
+            hidden
+          ></nav>
+        </div>
 
         <footer class="composer">
           <label class="checkbox-row">

@@ -7,6 +7,7 @@ import { createModalController } from './modals.mjs';
 import { createClipboardController } from './clipboard.mjs';
 import { createControllers } from './controllers.mjs';
 import { wireEvents } from './events.mjs';
+import { createMessageNavigator } from './message-navigator.mjs';
 
 const stateUtils = {
   createInitialState,
@@ -31,6 +32,11 @@ export function createRuntime({
   const state = createInitialState({ storage });
   const el = queryElements(doc);
   const api = createApiClient({ fetchImpl });
+  const messageNavigator = createMessageNavigator({
+    messagesElement: el.messages,
+    navigatorElement: el.messageNavigator,
+    raf: win.requestAnimationFrame?.bind(win)
+  });
   const view = createRenderer({
     state,
     el,
@@ -39,7 +45,8 @@ export function createRuntime({
     renderMarkdown,
     formatDate,
     getBotName,
-    nextMessageSender
+    nextMessageSender,
+    messageNavigator
   });
   const modal = createModalController({ state, el, doc, raf: win.requestAnimationFrame?.bind(win) });
   const announceStatus = (message) => {
@@ -69,7 +76,7 @@ export function createRuntime({
   });
 
   wireEvents({ state, el, view, modal, controllers, clipboard, doc });
-  return { state, el, api, view, modal, clipboard, controllers };
+  return { state, el, api, view, modal, clipboard, controllers, messageNavigator };
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

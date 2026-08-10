@@ -37,6 +37,7 @@ Current hardening includes:
 - `api.mjs`: fetch wrapper and API error handling;
 - `state.mjs`: initial state, DOM element lookup, formatting helpers, and sender-name helpers;
 - `render.mjs`: folder/session/trash/message rendering and sidebar state;
+- `message-navigator.mjs`: right-side user-message markers, hover/focus previews, active-turn tracking, and jump navigation;
 - `export.mjs`: chat export text and continuation-context wrapping;
 - `modals.mjs`: edit-message and text-prompt modal state;
 - `clipboard.mjs`: copy helpers, selected-message Markdown extraction, and full-chat copy;

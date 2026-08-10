@@ -32,6 +32,7 @@ function queryElements(doc = document) {
     renameSessionBtn: doc.querySelector('#renameSessionBtn'),
     copyChatBtn: doc.querySelector('#copyChatBtn'),
     messages: doc.querySelector('#messages'),
+    messageNavigator: doc.querySelector('#messageNavigator'),
     isMeCheckbox: doc.querySelector('#isMeCheckbox'),
     messageInput: doc.querySelector('#messageInput'),
     sendBtn: doc.querySelector('#sendBtn'),

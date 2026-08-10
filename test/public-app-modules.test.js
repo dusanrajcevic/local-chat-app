@@ -16,6 +16,7 @@ let controllersModule;
 let eventsModule;
 let mainModule;
 let accessibilityModule;
+let messageNavigatorModule;
 
 function publicModulePath(name) {
   return pathToFileURL(path.join(__dirname, '..', 'public', 'app', name)).href;
@@ -33,7 +34,8 @@ before(async () => {
     controllersModule,
     eventsModule,
     mainModule,
-    accessibilityModule
+    accessibilityModule,
+    messageNavigatorModule
   ] = await Promise.all([
     import(publicModulePath('markdown.mjs')),
     import(publicModulePath('api.mjs')),
@@ -45,7 +47,8 @@ before(async () => {
     import(publicModulePath('controllers.mjs')),
     import(publicModulePath('events.mjs')),
     import(publicModulePath('main.mjs')),
-    import(pathToFileURL(path.join(__dirname, '..', 'e2e', 'accessibility-support.mjs')).href)
+    import(pathToFileURL(path.join(__dirname, '..', 'e2e', 'accessibility-support.mjs')).href),
+    import(publicModulePath('message-navigator.mjs'))
   ]);
 });
 
@@ -92,6 +95,11 @@ function createHarness({ routes = {} } = {}) {
   const state = stateModule.createInitialState({ storage });
   const el = stateModule.queryElements(dom.window.document);
   const api = apiModule.createApiClient({ fetchImpl });
+  const messageNavigator = messageNavigatorModule.createMessageNavigator({
+    messagesElement: el.messages,
+    navigatorElement: el.messageNavigator,
+    raf: (callback) => callback()
+  });
   const view = renderModule.createRenderer({
     state,
     el,
@@ -100,7 +108,8 @@ function createHarness({ routes = {} } = {}) {
     renderMarkdown: markdown.renderMarkdown,
     formatDate: stateModule.formatDate,
     getBotName: stateModule.getBotName,
-    nextMessageSender: stateModule.nextMessageSender
+    nextMessageSender: stateModule.nextMessageSender,
+    messageNavigator
   });
   const modal = modalModule.createModalController({
     state,
@@ -140,7 +149,7 @@ function createHarness({ routes = {} } = {}) {
     announceStatus
   });
 
-  return { dom, storage, calls, state, el, api, view, modal, clipboard, controllers };
+  return { dom, storage, calls, state, el, api, view, modal, clipboard, controllers, messageNavigator };
 }
 
 test('web UI loads a single native ES module entry point instead of ordered global scripts', () => {
@@ -161,6 +170,44 @@ test('core controls expose accessible names and valid ARIA references', () => {
   assert.equal(harness.el.editMessageTextarea.labels[0].textContent.trim(), 'Edit message text');
   assert.equal(harness.el.appStatus.getAttribute('role'), 'status');
   assert.equal(harness.el.appStatus.getAttribute('aria-live'), 'polite');
+});
+
+test('message navigator renders one preview rail item per user message and jumps to its target', () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 'chat_nav',
+    title: 'Navigator test',
+    trashed: false,
+    messages: [
+      { id: 'm1', sender: 'me', text: 'One two three four five six seven eight nine ten' },
+      { id: 'm2', sender: 'bot', text: 'Assistant response' },
+      { id: 'm3', sender: 'me', text: 'Follow-up question' }
+    ]
+  };
+
+  harness.view.renderMessages();
+
+  const items = harness.el.messageNavigator.querySelectorAll('[data-message-nav-id]');
+  assert.equal(harness.el.messageNavigator.hidden, false);
+  assert.equal(items.length, 2);
+  assert.equal(
+    items[0].querySelector('.message-nav-preview').textContent,
+    'One two three four five six seven eight...'
+  );
+  assert.equal(items[1].querySelector('.message-nav-preview').textContent, 'Follow-up question');
+  assert.equal(harness.el.messageNavigator.querySelectorAll('.message-nav-line').length, 2);
+  assert.match(items[0].getAttribute('aria-label'), /your message 1/i);
+
+  const target = harness.el.messages.querySelector('[data-chat-message-id="m1"]');
+  let scrollOptions = null;
+  target.scrollIntoView = (options) => {
+    scrollOptions = options;
+  };
+  items[0].click();
+
+  assert.deepEqual(scrollOptions, { behavior: 'smooth', block: 'start' });
+  assert.equal(items[0].getAttribute('aria-current'), 'location');
+  assert.equal(items[0].tabIndex, 0);
 });
 
 test('app API client sends JSON by default, merges headers, and surfaces server errors', async () => {

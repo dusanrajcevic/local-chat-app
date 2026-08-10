@@ -1,4 +1,14 @@
-function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, formatDate, getBotName, nextMessageSender }) {
+function createRenderer({
+  state,
+  el,
+  storage,
+  escapeHtml,
+  renderMarkdown,
+  formatDate,
+  getBotName,
+  nextMessageSender,
+  messageNavigator
+}) {
   const htmlEscape = escapeHtml || ((value) => String(value || ''));
   const markdown = renderMarkdown || htmlEscape;
   const dateFormatter = formatDate || ((value) => String(value || ''));
@@ -159,6 +169,7 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
       el.messages.innerHTML = `
         <div class="empty-card"><span>☁</span><h3>Start a new local chat</h3><p>Your conversations are stored as JSON files by date.</p></div>
       `;
+      messageNavigator?.render(null);
       return;
     }
 
@@ -174,13 +185,14 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
 
     if (!state.currentSession.messages.length) {
       el.messages.innerHTML = `<div class="empty-card"><span>✍</span><h3>No messages yet</h3><p>Write the first message below.</p></div>`;
+      messageNavigator?.render(state.currentSession);
       return;
     }
 
     el.messages.innerHTML = state.currentSession.messages
       .map(
         (message) => `
-      <article class="message ${message.sender === 'me' ? 'me' : 'bot'}">
+      <article class="message ${message.sender === 'me' ? 'me' : 'bot'}" data-chat-message-id="${htmlEscape(message.id)}">
         <div class="message-top">
           <span class="message-label">${message.sender === 'me' ? 'Me' : htmlEscape(botName())}${message.updatedAt ? ' · edited' : ''}</span>
           ${renderMessageActions(message)}
@@ -191,6 +203,7 @@ function createRenderer({ state, el, storage, escapeHtml, renderMarkdown, format
       )
       .join('');
     el.messages.scrollTop = el.messages.scrollHeight;
+    messageNavigator?.render(state.currentSession);
   }
 
   return {
