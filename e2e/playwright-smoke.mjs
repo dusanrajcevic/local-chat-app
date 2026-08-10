@@ -176,6 +176,17 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     assert.equal(await messageNavigator.isHidden(), false);
     assert.equal(await messageNavigator.locator('[data-message-nav-id]').count(), 1);
     assert.equal(await messageNavigator.locator('.message-nav-line').count(), 1);
+    const collapsedMarker = await messageNavigator.locator('.message-nav-line').evaluate((line) => {
+      const style = getComputedStyle(line);
+      return {
+        width: Number.parseFloat(style.width),
+        height: Number.parseFloat(style.height),
+        opacity: style.opacity
+      };
+    });
+    assert.equal(collapsedMarker.width, 17);
+    assert.equal(collapsedMarker.height, 1.5);
+    assert.equal(collapsedMarker.opacity, '1');
     assert.equal(
       await messageNavigator.locator('.message-nav-preview').textContent(),
       'Hello from Playwright smoke'
@@ -189,6 +200,15 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       expandedNavigatorWidth > 200,
       `Message navigator did not expand: ${expandedNavigatorWidth}px`
     );
+    const expandedMarker = await messageNavigator.locator('.message-nav-line').evaluate((line) => {
+      const style = getComputedStyle(line);
+      return {
+        width: Number.parseFloat(style.width),
+        opacity: style.opacity
+      };
+    });
+    assert.equal(expandedMarker.width, 0);
+    assert.equal(expandedMarker.opacity, '0');
 
     await page.locator('#renameSessionBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session Renamed');

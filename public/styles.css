@@ -486,7 +486,7 @@ textarea::-webkit-scrollbar-thumb {
   z-index: 12;
   top: 50%;
   right: 10px;
-  width: 46px;
+  width: 29px;
   max-height: min(70vh, 620px);
   padding: 8px 6px;
   overflow: hidden;
@@ -519,7 +519,7 @@ textarea::-webkit-scrollbar-thumb {
   display: flex;
   max-height: min(64vh, 580px);
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
@@ -531,12 +531,12 @@ textarea::-webkit-scrollbar-thumb {
 
 .message-nav-item {
   width: 100%;
-  min-height: 18px;
+  min-height: 9px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 3px 0;
+  padding: 1.5px 0;
   overflow: hidden;
   border: 0;
   border-radius: 10px;
@@ -550,13 +550,16 @@ textarea::-webkit-scrollbar-thumb {
 }
 
 .message-nav-line {
-  width: 34px;
-  height: 3px;
-  flex: 0 0 34px;
+  width: 17px;
+  height: 1.5px;
+  flex: 0 0 17px;
   border-radius: 999px;
   background: #707070;
+  opacity: 1;
   transition:
     width 0.12s ease,
+    flex-basis 0.12s ease,
+    opacity 0.1s ease,
     background 0.12s ease;
 }
 
@@ -585,7 +588,15 @@ textarea::-webkit-scrollbar-thumb {
 .message-navigator:hover .message-nav-item,
 .message-navigator:focus-within .message-nav-item {
   min-height: 40px;
+  gap: 0;
   padding: 8px 10px;
+}
+
+.message-navigator:hover .message-nav-line,
+.message-navigator:focus-within .message-nav-line {
+  width: 0;
+  flex-basis: 0;
+  opacity: 0;
 }
 
 .message-navigator:hover .message-nav-preview,

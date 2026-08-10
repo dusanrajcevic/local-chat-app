@@ -1,5 +1,6 @@
 const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -42,4 +43,26 @@ test('message navigator handles missing and empty sessions without entries', () 
   assert.deepEqual(navigatorModule.getNavigableMessages(null), []);
   assert.deepEqual(navigatorModule.getNavigableMessages({ messages: [] }), []);
   assert.equal(navigatorModule.createMessagePreview('   '), 'Empty message');
+});
+
+
+test('message navigator keeps compact collapsed markers and hides them when expanded', () => {
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
+
+  assert.match(
+    styles,
+    /\.message-nav-list\s*\{[^}]*gap:\s*1px;/s
+  );
+  assert.match(
+    styles,
+    /\.message-nav-item\s*\{[^}]*min-height:\s*9px;[^}]*padding:\s*1\.5px 0;/s
+  );
+  assert.match(
+    styles,
+    /\.message-nav-line\s*\{[^}]*width:\s*17px;[^}]*height:\s*1\.5px;[^}]*flex:\s*0 0 17px;/s
+  );
+  assert.match(
+    styles,
+    /\.message-navigator:hover \.message-nav-line,[\s\S]*?\.message-navigator:focus-within \.message-nav-line\s*\{[^}]*width:\s*0;[^}]*flex-basis:\s*0;[^}]*opacity:\s*0;/
+  );
 });
