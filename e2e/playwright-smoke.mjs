@@ -164,6 +164,11 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       '1'
     );
     const footerCopyButton = footerMessageActions.locator('[data-copy-message]');
+    await footerMessageActions.hover();
+    assert.equal(
+      await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity),
+      '1'
+    );
     await footerCopyButton.hover();
     const copyTooltip = await footerCopyButton.evaluate((button) => ({
       content: getComputedStyle(button, '::after').content,

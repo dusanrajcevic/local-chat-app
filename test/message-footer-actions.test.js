@@ -54,3 +54,15 @@ test('trashed messages remain read-only while keeping the bottom copy action', a
   assert.doesNotMatch(html, /data-delete-message=/);
   assert.equal((html.match(/class="message-action-icon/g) || []).length, 1);
 });
+
+test('message quick-action hit area bridges the message and icon row', () => {
+  const fs = require('node:fs');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
+  const footerRule = css.match(/\.message-footer-actions\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.match(footerRule, /position\s*:\s*absolute/i);
+  assert.match(footerRule, /(?:^|\n)\s*top\s*:\s*100%/i);
+  assert.match(footerRule, /min-height\s*:\s*35px/i);
+  assert.match(footerRule, /padding-top\s*:\s*3px/i);
+  assert.doesNotMatch(footerRule, /top\s*:\s*calc\(100%\s*\+\s*3px\)/i);
+});

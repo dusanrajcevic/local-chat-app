@@ -992,11 +992,13 @@ textarea::-webkit-scrollbar-thumb {
 
 .message-footer-actions {
   position: absolute;
-  top: calc(100% + 3px);
+  top: 100%;
   display: flex;
+  min-height: 35px;
+  padding-top: 3px;
+  box-sizing: border-box;
   align-items: center;
   gap: 2px;
-  min-height: 32px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast);
