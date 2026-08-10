@@ -200,15 +200,27 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       expandedNavigatorWidth > 200,
       `Message navigator did not expand: ${expandedNavigatorWidth}px`
     );
-    const expandedMarker = await messageNavigator.locator('.message-nav-line').evaluate((line) => {
-      const style = getComputedStyle(line);
-      return {
-        width: Number.parseFloat(style.width),
-        opacity: style.opacity
-      };
-    });
-    assert.equal(expandedMarker.width, 0);
-    assert.equal(expandedMarker.opacity, '0');
+    const expandedMarkerDisplay = await messageNavigator
+      .locator('.message-nav-line')
+      .evaluate((line) => getComputedStyle(line).display);
+    assert.equal(expandedMarkerDisplay, 'none');
+    const expandedPreview = await messageNavigator
+      .locator('.message-nav-preview')
+      .evaluate((preview) => {
+        const style = getComputedStyle(preview);
+        const item = preview.closest('.message-nav-item');
+        return {
+          display: style.display,
+          previewLeft: preview.getBoundingClientRect().left,
+          itemLeft:
+            item.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(item).paddingLeft)
+        };
+      });
+    assert.equal(expandedPreview.display, 'block');
+    assert.ok(
+      Math.abs(expandedPreview.previewLeft - expandedPreview.itemLeft) < 1,
+      `Message preview kept a blank left column: ${JSON.stringify(expandedPreview)}`
+    );
 
     await page.locator('#renameSessionBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session Renamed');

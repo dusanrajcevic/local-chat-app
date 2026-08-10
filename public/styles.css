@@ -519,7 +519,7 @@ textarea::-webkit-scrollbar-thumb {
   display: flex;
   max-height: min(64vh, 580px);
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
@@ -531,12 +531,14 @@ textarea::-webkit-scrollbar-thumb {
 
 .message-nav-item {
   width: 100%;
-  min-height: 9px;
+  height: 6px;
+  min-height: 6px;
   display: flex;
+  flex: 0 0 6px;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 1.5px 0;
+  gap: 0;
+  padding: 0;
   overflow: hidden;
   border: 0;
   border-radius: 10px;
@@ -564,20 +566,14 @@ textarea::-webkit-scrollbar-thumb {
 }
 
 .message-nav-preview {
+  display: none;
   min-width: 0;
-  max-width: 0;
-  flex: 0 1 auto;
   overflow: hidden;
   color: #f3f3f3;
   font-size: 13px;
   line-height: 1.35;
-  opacity: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
-  visibility: hidden;
-  transition:
-    max-width 0.16s ease,
-    opacity 0.12s ease;
 }
 
 .message-nav-item.active .message-nav-line,
@@ -587,24 +583,22 @@ textarea::-webkit-scrollbar-thumb {
 
 .message-navigator:hover .message-nav-item,
 .message-navigator:focus-within .message-nav-item {
+  height: auto;
   min-height: 40px;
-  gap: 0;
+  flex-basis: auto;
+  justify-content: flex-start;
   padding: 8px 10px;
 }
 
 .message-navigator:hover .message-nav-line,
 .message-navigator:focus-within .message-nav-line {
-  width: 0;
-  flex-basis: 0;
-  opacity: 0;
+  display: none;
 }
 
 .message-navigator:hover .message-nav-preview,
 .message-navigator:focus-within .message-nav-preview {
-  max-width: 260px;
-  flex: 1 1 auto;
-  opacity: 1;
-  visibility: visible;
+  display: block;
+  width: 100%;
 }
 
 .message-navigator:hover .message-nav-item.active,

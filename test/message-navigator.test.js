@@ -45,24 +45,25 @@ test('message navigator handles missing and empty sessions without entries', () 
   assert.equal(navigatorModule.createMessagePreview('   '), 'Empty message');
 });
 
-
-test('message navigator keeps compact collapsed markers and hides them when expanded', () => {
+test('message navigator keeps tightly packed collapsed markers and removes the marker column when expanded', () => {
   const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 
+  assert.match(styles, /\.message-nav-list\s*\{[^}]*gap:\s*0;/s);
   assert.match(
     styles,
-    /\.message-nav-list\s*\{[^}]*gap:\s*1px;/s
+    /\.message-nav-item\s*\{[^}]*height:\s*6px;[^}]*min-height:\s*6px;[^}]*flex:\s*0 0 6px;[^}]*padding:\s*0;/s
   );
-  assert.match(
-    styles,
-    /\.message-nav-item\s*\{[^}]*min-height:\s*9px;[^}]*padding:\s*1\.5px 0;/s
-  );
+  assert.match(styles, /\.message-nav-preview\s*\{[^}]*display:\s*none;/s);
   assert.match(
     styles,
     /\.message-nav-line\s*\{[^}]*width:\s*17px;[^}]*height:\s*1\.5px;[^}]*flex:\s*0 0 17px;/s
   );
   assert.match(
     styles,
-    /\.message-navigator:hover \.message-nav-line,[\s\S]*?\.message-navigator:focus-within \.message-nav-line\s*\{[^}]*width:\s*0;[^}]*flex-basis:\s*0;[^}]*opacity:\s*0;/
+    /\.message-navigator:hover \.message-nav-line,[\s\S]*?\.message-navigator:focus-within \.message-nav-line\s*\{[^}]*display:\s*none;/
+  );
+  assert.match(
+    styles,
+    /\.message-navigator:hover \.message-nav-preview,[\s\S]*?\.message-navigator:focus-within \.message-nav-preview\s*\{[^}]*display:\s*block;[^}]*width:\s*100%;/
   );
 });
