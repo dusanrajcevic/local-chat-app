@@ -1,9 +1,17 @@
 const { requireJsonObjectBody } = require('../middleware/request-body');
 const { asyncRoute } = require('./helpers');
-const { normalizeLimit, searchResponse } = require('../services/search-service');
+const { searchResponse } = require('../services/search-service');
+const { collectionRevision } = require('../storage/session-store');
+const {
+  paginationFromQuery,
+  paginateItems,
+  applyPaginationHeaders,
+  collectionEtag,
+  applyConditionalHeaders,
+  sendNotModifiedIfFresh
+} = require('../http/collection-response');
 const {
   listSessions,
-  recentChats,
   createSession,
   updateSessionMetadata,
   updateBotName,
@@ -16,25 +24,68 @@ const {
   moveSessionToTrash
 } = require('../services/session-service');
 
+async function currentCollectionEtag(namespace, params = {}) {
+  return collectionEtag(namespace, await collectionRevision(), params);
+}
+
+function searchPaginationHeaders(res, originalUrl, data) {
+  applyPaginationHeaders(res, originalUrl, {
+    total: data.total,
+    offset: data.offset,
+    limit: data.limit,
+    hasMore: data.hasMore,
+    nextOffset: data.nextOffset
+  });
+}
+
 function registerSessionRoutes(app) {
   app.get(
     '/api/sessions',
     asyncRoute(async (req, res) => {
-      res.json(await listSessions());
+      const pagination = paginationFromQuery(req.query, {
+        fallback: 100,
+        max: 1000,
+        unlimitedWhenOmitted: true
+      });
+      const etagParams = { offset: pagination.offset, limit: pagination.limit };
+      const initialEtag = await currentCollectionEtag('sessions', etagParams);
+      if (sendNotModifiedIfFresh(req, res, initialEtag)) return;
+
+      const page = paginateItems(await listSessions(), pagination);
+      applyPaginationHeaders(res, req.originalUrl, page);
+      applyConditionalHeaders(res, await currentCollectionEtag('sessions', etagParams));
+      res.json(page.items);
     })
   );
 
   app.get(
     '/api/recent-chats',
     asyncRoute(async (req, res) => {
-      res.json(await recentChats(normalizeLimit(req.query.limit || 100)));
+      const pagination = paginationFromQuery(req.query, { fallback: 100, max: 500 });
+      const etagParams = { offset: pagination.offset, limit: pagination.limit };
+      const initialEtag = await currentCollectionEtag('recent-chats', etagParams);
+      if (sendNotModifiedIfFresh(req, res, initialEtag)) return;
+
+      const page = paginateItems(await listSessions(), pagination);
+      applyPaginationHeaders(res, req.originalUrl, page);
+      applyConditionalHeaders(res, await currentCollectionEtag('recent-chats', etagParams));
+      res.json(page.items);
     })
   );
 
   app.get(
     '/api/search-chats',
     asyncRoute(async (req, res) => {
-      res.json(await searchResponse(req.query.q || req.query.query || '', req.query.limit || 100));
+      const pagination = paginationFromQuery(req.query, { fallback: 100, max: 500 });
+      const rawQuery = req.query.q || req.query.query || '';
+      const etagParams = { query: String(rawQuery), offset: pagination.offset, limit: pagination.limit };
+      const initialEtag = await currentCollectionEtag('search-chats', etagParams);
+      if (sendNotModifiedIfFresh(req, res, initialEtag)) return;
+
+      const data = await searchResponse(rawQuery, pagination.limit, pagination.offset);
+      searchPaginationHeaders(res, req.originalUrl, data);
+      applyConditionalHeaders(res, await currentCollectionEtag('search-chats', etagParams));
+      res.json(data);
     })
   );
 

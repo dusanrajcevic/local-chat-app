@@ -140,7 +140,16 @@ function corsOptionsDelegate(req, callback) {
       'Content-Type',
       'X-Local-Chat-Token',
       'X-Local-Chat-Extension-Id',
-      'Idempotency-Key'
+      'Idempotency-Key',
+      'If-None-Match'
+    ],
+    exposedHeaders: [
+      'ETag',
+      'X-Total-Count',
+      'X-Page-Offset',
+      'X-Page-Limit',
+      'X-Has-More',
+      'Link'
     ],
     maxAge: 600
   });

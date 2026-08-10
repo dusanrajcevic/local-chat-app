@@ -577,6 +577,51 @@ test('search, recent, and export endpoints expose useful summaries without trash
   assert.match(renderedByHelper, /Helper message/);
 });
 
+
+
+test('session collections support pagination and conditional ETag revalidation', async () => {
+  for (let index = 0; index < 3; index += 1) {
+    const session = await createSession({ title: `Pagination target ${index}` });
+    await postLocalMessage(session.id, { sender: 'me', text: `pagination marker shared ${index}` });
+  }
+
+  const page = await json('/api/sessions?limit=2&offset=1');
+  assert.equal(page.res.status, 200);
+  assert.equal(page.data.length, 2);
+  assert.equal(page.res.headers.get('x-page-offset'), '1');
+  assert.equal(page.res.headers.get('x-page-limit'), '2');
+  assert.ok(Number(page.res.headers.get('x-total-count')) >= 3);
+  assert.match(page.res.headers.get('link') || '', /rel="prev"/);
+  assert.match(page.res.headers.get('cache-control') || '', /no-cache/);
+
+  const etag = page.res.headers.get('etag');
+  assert.ok(etag);
+  const unchanged = await json('/api/sessions?limit=2&offset=1', {
+    headers: { 'If-None-Match': etag }
+  });
+  assert.equal(unchanged.res.status, 304);
+
+  await createSession({ title: 'Pagination invalidates the collection validator' });
+  const changed = await json('/api/sessions?limit=2&offset=1', {
+    headers: { 'If-None-Match': etag }
+  });
+  assert.equal(changed.res.status, 200);
+  assert.notEqual(changed.res.headers.get('etag'), etag);
+
+  const recent = await json('/api/recent-chats?limit=1&offset=1');
+  assert.equal(recent.res.status, 200);
+  assert.equal(recent.data.length, 1);
+  assert.equal(recent.res.headers.get('x-page-offset'), '1');
+
+  const search = await json('/api/search-chats?q=pagination%20marker%20shared&limit=1&offset=1');
+  assert.equal(search.res.status, 200);
+  assert.equal(search.data.count, 1);
+  assert.equal(search.data.offset, 1);
+  assert.equal(search.data.limit, 1);
+  assert.equal(search.data.hasMore, true);
+  assert.equal(search.data.nextOffset, 2);
+});
+
 test('trash lifecycle moves sessions out of active lists, supports restore, and permanent delete', async () => {
   const session = await createSession({ title: 'Trash me' });
   await postLocalMessage(session.id, { text: 'Temporary message', sender: 'me' });

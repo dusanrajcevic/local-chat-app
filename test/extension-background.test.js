@@ -114,6 +114,35 @@ test('fetchJson uses stored settings and surfaces API errors', async () => {
   await assert.rejects(() => background.fetchJson('http://localhost:3000/api/fail'), /Nope/);
 });
 
+
+
+test('fetchJson revalidates cached GETs and clears them after mutations', async () => {
+  installChromeStorage({ localAppUrl: 'http://localhost:3000', localChatToken: 'token-cache' });
+  const seen = [];
+  let getCount = 0;
+  global.fetch = async (url, options = {}) => {
+    seen.push({ url: String(url), options });
+    if ((options.method || 'GET') === 'POST') return jsonResponse({ ok: true }, 201);
+    getCount += 1;
+    if (getCount === 2) {
+      return new Response(null, { status: 304, headers: { ETag: 'W/"health-1"' } });
+    }
+    return new Response(JSON.stringify({ ok: true, request: getCount }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ETag: 'W/"health-1"' }
+    });
+  };
+
+  const first = await background.fetchJson('http://localhost:3000/api/health');
+  const second = await background.fetchJson('http://localhost:3000/api/health');
+  assert.deepEqual(second, first);
+  assert.equal(seen[1].options.headers['If-None-Match'], 'W/"health-1"');
+
+  await background.fetchJson('http://localhost:3000/api/sessions', { method: 'POST', body: '{}' });
+  await background.fetchJson('http://localhost:3000/api/health');
+  assert.equal(seen[3].options.headers['If-None-Match'], undefined);
+});
+
 test('saveMessage posts to an explicit session without reading the active session', async () => {
   installChromeStorage({ localAppUrl: 'http://127.0.0.1:3333', localChatToken: 'token-2' });
   const calls = [];

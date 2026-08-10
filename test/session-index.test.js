@@ -14,10 +14,11 @@ process.env.LOCAL_CHAT_DATA_DIR = dataDir;
 const { SESSION_INDEX_FILE } = require('../src/server/config');
 const { writeJson, ensureBaseFiles } = require('../src/server/storage/file-store');
 const { collectSessionSummaries } = require('../src/server/storage/session-store');
-const { searchSessions } = require('../src/server/services/search-service');
+const { searchSessions, searchSessionsPage } = require('../src/server/services/search-service');
 const {
   resetSessionIndexForTests,
   sessionIndexMetricsForTests,
+  sessionIndexRevision,
   refreshSessionIndex
 } = require('../src/server/storage/session-index');
 
@@ -135,6 +136,32 @@ test('short substring searches preserve exact semantics by falling back to canon
   assert.ok(results.some((session) => session.id === sessionId(17)));
   assert.equal(after.searchCandidates - before.searchCandidates, archiveSize);
   assert.equal(after.sessionReads - before.sessionReads, archiveSize);
+});
+
+
+
+test('session index revision changes when canonical session data changes', async () => {
+  const before = await sessionIndexRevision();
+  await writeSession(31, ' revision change');
+  const after = await sessionIndexRevision();
+
+  assert.notEqual(after, before);
+});
+
+test('paginated exact search stops after the requested window plus one match', async () => {
+  await resetSessionIndexForTests();
+  await collectSessionSummaries();
+  const before = sessionIndexMetricsForTests();
+  const page = await searchSessionsPage('archive', { offset: 10, limit: 5 });
+  const after = sessionIndexMetricsForTests();
+
+  assert.equal(page.results.length, 5);
+  assert.equal(page.offset, 10);
+  assert.equal(page.limit, 5);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.nextOffset, 15);
+  assert.ok(after.sessionReads - before.sessionReads <= 16);
+  assert.ok(after.sessionReads - before.sessionReads < archiveSize);
 });
 
 test('a malformed derived index is rebuilt from canonical session files', async () => {

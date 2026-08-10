@@ -116,7 +116,7 @@ Keep interactive controls programmatically labelled, preserve visible keyboard f
 
 Keep route handlers thin. Validate IDs at the route boundary. Do not read or write JSON files directly outside the storage layer. Preserve atomic writes and per-file locking for read-modify-write flows.
 
-Session-list/search performance depends on `src/server/storage/session-index.js`. Treat `.session-index.json` as derived data only: never make correctness depend on it, never store raw transcript text in it, and ensure new session mutation paths continue to flow through `writeJson()` / `unlinkDataFile()` so index invalidation events are emitted. For performance changes, run `npm run benchmark:index -- 1000` in addition to the normal verification suite.
+Session-list/search performance depends on `src/server/storage/session-index.js`. Treat `.session-index.json` as derived data only: never make correctness depend on it, never store raw transcript text in it, and ensure new session mutation paths continue to flow through `writeJson()` / `unlinkDataFile()` so index invalidation events are emitted. For performance changes, preserve the optional `/api/sessions` pagination compatibility contract, keep ETags tied to canonical-session/index changes rather than wall-clock time, and run `npm run benchmark:index -- 1000` in addition to the normal verification suite.
 
 Security defaults should stay conservative: bind to loopback, reject untrusted browser origins, require paired extension access, keep the manual-token fallback narrow, and do not broaden CORS or local-API URL validation without a documented reason and tests.
 

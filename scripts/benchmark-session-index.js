@@ -10,7 +10,7 @@ process.env.LOCAL_CHAT_DATA_DIR = path.join(tempRoot, 'data');
 const { DATA_DIR } = require('../src/server/config');
 const { ensureBaseFiles, writeJson } = require('../src/server/storage/file-store');
 const { collectSessionSummaries } = require('../src/server/storage/session-store');
-const { searchSessions } = require('../src/server/services/search-service');
+const { searchSessions, searchSessionsPage } = require('../src/server/services/search-service');
 const { resetSessionIndexForTests, sessionIndexMetricsForTests } = require('../src/server/storage/session-index');
 
 function id(prefix, index) {
@@ -56,14 +56,19 @@ async function main() {
     const selectiveSearch = await timed('indexed search (one marker)', () =>
       searchSessions(`search-marker-${Math.floor(sessionCount / 2)}`, 100)
     );
+    const paginatedBroadSearch = await timed('paginated broad search (offset 100, limit 25)', () =>
+      searchSessionsPage('large archive message', { offset: 100, limit: 25 })
+    );
     const shortSearch = await timed('short-query fallback search', () => searchSessions('ai', 100));
 
     console.table(
-      [coldList, warmList, restartList, selectiveSearch, shortSearch].map(({ label, durationMs, result }) => ({
-        operation: label,
-        durationMs,
-        sessions: result.length
-      }))
+      [coldList, warmList, restartList, selectiveSearch, paginatedBroadSearch, shortSearch].map(
+        ({ label, durationMs, result }) => ({
+          operation: label,
+          durationMs,
+          sessions: Array.isArray(result) ? result.length : result.results.length
+        })
+      )
     );
     console.log('Index metrics:', sessionIndexMetricsForTests());
   } finally {

@@ -28,6 +28,7 @@ The browser extension uses this to determine where manual saves should go when n
 ## Sessions
 
 - `GET /api/sessions`
+- `GET /api/sessions?offset=0&limit=100` for optional pagination
 - `POST /api/sessions`
 - `GET /api/sessions/:sessionId`
 - `PATCH /api/sessions/:sessionId`
@@ -52,8 +53,13 @@ The browser extension uses this to determine where manual saves should go when n
 
 ## Search and recent chats
 
-- `GET /api/recent-chats?limit=100`
-- `GET /api/search-chats?q=query&limit=100`
+- `GET /api/recent-chats?limit=100&offset=0`
+- `GET /api/search-chats?q=query&limit=100&offset=0`
+
+Collection pagination is offset-based. `limit` is clamped to 500 for recent/search endpoints and 1000 for `/api/sessions`. Calling `GET /api/sessions` without either `limit` or `offset` preserves the legacy behavior and returns the complete session array. Paginated session/recent responses remain arrays and publish metadata through `X-Total-Count`, `X-Page-Offset`, `X-Page-Limit`, `X-Has-More`, and RFC-style `Link` headers. Search keeps its existing object response and adds `offset`, `limit`, `hasMore`, and `nextOffset`; an empty-query search also includes `total`.
+
+Session/recent/search responses include an `ETag` and `Cache-Control: private, no-cache, must-revalidate`. Clients may send `If-None-Match`; when the derived session index revision and request window are unchanged, the server returns `304 Not Modified` before doing transcript-level search work. Browser-extension CORS explicitly allows `If-None-Match` and exposes the pagination/ETag response headers.
+
 
 ## Trash
 
@@ -72,4 +78,5 @@ String fields are type-checked before whitespace normalization. Arrays, objects,
 - Route IDs must match the generated `chat_...`, `msg_...`, or `folder_...` formats. Invalid IDs return `400` before any file path is touched.
 - `pinnedFolderId` is optional, but when provided it must refer to an existing folder. Missing folders return `404`.
 - Message bodies require non-empty `text`.
-- Search and recent endpoints clamp large `limit` values to keep local requests bounded.
+- Search and recent endpoints clamp large `limit` values to keep local requests bounded. Paginated search reads exact candidate transcripts only until it fills the requested offset/window plus one extra match needed to determine `hasMore`.
+- Collection ETags are process-local validators derived from the session-index revision; restarting the server intentionally invalidates validators from the previous process.

@@ -9,6 +9,7 @@ if (typeof module !== 'undefined' && module.exports) {
 const { DEFAULT_LOCAL_APP_URL, DEFAULT_FETCH_TIMEOUT_MS, normalizeBaseUrl, normalizeApiUrl } = localApiConfig;
 const PREFERENCE_KEYS = ['localAppUrl', 'localChatAutoSendEnabled', 'localChatSidebarSelectedFolderId'];
 let storageSecurityPromise = null;
+const responseCache = new Map();
 
 function preferenceStorage() {
   return chrome.storage.sync || chrome.storage.local;
@@ -16,6 +17,7 @@ function preferenceStorage() {
 
 function resetStorageSecurityForTests() {
   storageSecurityPromise = null;
+  responseCache.clear();
 }
 
 async function initializeStorageSecurity() {
@@ -77,7 +79,24 @@ function requestHeaders(settings, options = {}, { authenticate = true } = {}) {
   return headers;
 }
 
-async function fetchJson(url, options = {}, fetchOptions = {}) {
+function responseMetadata(res) {
+  const read = (name) => res.headers?.get?.(name) || null;
+  return {
+    etag: read('etag'),
+    totalCount: read('x-total-count'),
+    pageOffset: read('x-page-offset'),
+    pageLimit: read('x-page-limit'),
+    hasMore: read('x-has-more'),
+    link: read('link')
+  };
+}
+
+function cloneJson(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
+async function fetchJsonResult(url, options = {}, fetchOptions = {}) {
   const settings = fetchOptions.settings || (await getSettings());
   const authenticate = fetchOptions.authenticate !== false;
   if (authenticate && !settings.localChatToken) {
@@ -91,28 +110,50 @@ async function fetchJson(url, options = {}, fetchOptions = {}) {
   }
 
   const safeUrl = normalizeApiUrl(url, settings.localAppUrl);
+  const method = String(options.method || 'GET').toUpperCase();
+  const cached = method === 'GET' ? responseCache.get(safeUrl) : null;
+  const requestOptions = {
+    ...options,
+    headers: requestHeaders(settings, options, { authenticate })
+  };
+  if (cached?.metadata?.etag && !requestOptions.headers['If-None-Match']) {
+    requestOptions.headers['If-None-Match'] = cached.metadata.etag;
+  }
+
   const controller = new AbortController();
   const timeoutMs = Number(fetchOptions.timeoutMs || DEFAULT_FETCH_TIMEOUT_MS);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(safeUrl, {
-      ...options,
-      headers: requestHeaders(settings, options, { authenticate }),
-      signal: controller.signal
-    });
+    const res = await fetch(safeUrl, { ...requestOptions, signal: controller.signal });
+    if (res.status === 304) {
+      if (!cached) throw new Error('Received a cache response without a cached value.');
+      return { data: cloneJson(cached.data), metadata: { ...cached.metadata }, status: 304 };
+    }
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || `${res.status} ${res.statusText}`);
     }
-    return data;
+
+    const metadata = responseMetadata(res);
+    if (method === 'GET') {
+      if (metadata.etag) responseCache.set(safeUrl, { data: cloneJson(data), metadata: { ...metadata } });
+      else responseCache.delete(safeUrl);
+    } else {
+      responseCache.clear();
+    }
+    return { data, metadata, status: res.status };
   } catch (error) {
     if (error?.name === 'AbortError') throw new Error('Local Chat App request timed out.');
     throw error;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJson(url, options = {}, fetchOptions = {}) {
+  return (await fetchJsonResult(url, options, fetchOptions)).data;
 }
 
 async function pairLocalChatApp(payload = {}) {
@@ -332,18 +373,34 @@ async function deleteLocalChatFolder(payload = {}) {
 async function listRecentLocalChats(payload = {}) {
   const rawLimit = Number(payload.limit || 100);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 100;
+  const rawOffset = Number(payload.offset || 0);
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset) : 0;
 
   const { localAppUrl } = await getSettings();
   await fetchJson(`${localAppUrl}/api/health`);
-  const chats = await fetchJson(`${localAppUrl}/api/recent-chats?limit=${encodeURIComponent(limit)}`);
+  const response = await fetchJsonResult(
+    `${localAppUrl}/api/recent-chats?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+  );
+  const chats = Array.isArray(response.data) ? response.data : [];
+  const hasMore = response.metadata.hasMore === 'true';
 
-  return { ok: true, chats };
+  return {
+    ok: true,
+    chats,
+    offset,
+    limit,
+    hasMore,
+    nextOffset: hasMore ? offset + chats.length : null,
+    total: response.metadata.totalCount === null ? null : Number(response.metadata.totalCount)
+  };
 }
 
 async function searchLocalChats(payload = {}) {
   const query = String(payload.query || payload.q || '').trim();
   const rawLimit = Number(payload.limit || 100);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 100;
+  const rawOffset = Number(payload.offset || 0);
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset) : 0;
 
   const { localAppUrl } = await getSettings();
   await fetchJson(`${localAppUrl}/api/health`);
@@ -351,13 +408,19 @@ async function searchLocalChats(payload = {}) {
   const params = new URLSearchParams();
   params.set('q', query);
   params.set('limit', String(limit));
+  params.set('offset', String(offset));
   const data = await fetchJson(`${localAppUrl}/api/search-chats?${params.toString()}`);
 
   return {
     ok: true,
     chats: Array.isArray(data.results) ? data.results : [],
     query: data.query || query,
-    count: data.count || 0
+    count: data.count || 0,
+    offset: data.offset ?? offset,
+    limit: data.limit ?? limit,
+    hasMore: Boolean(data.hasMore),
+    nextOffset: data.nextOffset ?? null,
+    total: data.total ?? null
   };
 }
 
@@ -370,7 +433,7 @@ async function listLocalSidebarData(payload = {}) {
 
   const [folders, sessions, active] = await Promise.all([
     fetchJson(`${localAppUrl}/api/folders`),
-    fetchJson(`${localAppUrl}/api/sessions`),
+    fetchJson(`${localAppUrl}/api/sessions?limit=${encodeURIComponent(limit)}&offset=0`),
     fetchJson(`${localAppUrl}/api/active-session`)
   ]);
 
@@ -557,6 +620,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getSettings,
     requestHeaders,
     fetchJson,
+    fetchJsonResult,
     pairLocalChatApp,
     checkLocalChatApp,
     getActiveSession,

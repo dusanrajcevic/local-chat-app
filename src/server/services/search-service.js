@@ -1,7 +1,12 @@
 const { cleanName } = require('../validation');
 const { summarizeSession } = require('./session-format');
-const { collectSearchableSessions, collectSessionSummaries } = require('../storage/session-store');
+const {
+  collectSearchCandidates,
+  readSearchCandidate,
+  collectSessionSummaries
+} = require('../storage/session-store');
 const { normalizeSearchText } = require('./search-text');
+const { normalizeOffset, normalizePageLimit } = require('../http/collection-response');
 
 function compactSnippet(value, query, maxLength = 220) {
   const text = String(value || '')
@@ -21,73 +26,127 @@ function compactSnippet(value, query, maxLength = 220) {
   return `${prefix}${text.slice(start, end)}${suffix}`;
 }
 
-async function searchSessions(query, limit = 100) {
-  const normalizedQuery = normalizeSearchText(query);
-  const allSessions = await collectSearchableSessions(normalizedQuery);
-  const results = [];
+function buildSearchResult(session, dateDir, normalizedQuery) {
+  const summary = summarizeSession(session, dateDir);
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const searchParts = [session.title, session.aiName, dateDir, ...messages.map((message) => message.text)];
+  const haystack = normalizeSearchText(searchParts.join(' '));
 
-  for (const { session, dateDir } of allSessions) {
-    const summary = summarizeSession(session, dateDir);
-    const messages = Array.isArray(session.messages) ? session.messages : [];
-    const searchParts = [session.title, session.aiName, dateDir, ...messages.map((message) => message.text)];
-    const haystack = normalizeSearchText(searchParts.join(' '));
+  if (normalizedQuery && !haystack.includes(normalizedQuery)) return null;
 
-    if (normalizedQuery && !haystack.includes(normalizedQuery)) continue;
-
-    const matchedMessages = [];
-    if (normalizedQuery) {
-      for (const message of messages) {
-        const messageText = String(message.text || '');
-        if (!normalizeSearchText(messageText).includes(normalizedQuery)) continue;
-        matchedMessages.push({
-          id: message.id,
-          sender: message.sender === 'me' ? 'me' : 'bot',
-          createdAt: message.createdAt || null,
-          snippet: compactSnippet(messageText, normalizedQuery)
-        });
-        if (matchedMessages.length >= 3) break;
-      }
+  const matchedMessages = [];
+  if (normalizedQuery) {
+    for (const message of messages) {
+      const messageText = String(message.text || '');
+      if (!normalizeSearchText(messageText).includes(normalizedQuery)) continue;
+      matchedMessages.push({
+        id: message.id,
+        sender: message.sender === 'me' ? 'me' : 'bot',
+        createdAt: message.createdAt || null,
+        snippet: compactSnippet(messageText, normalizedQuery)
+      });
+      if (matchedMessages.length >= 3) break;
     }
-
-    results.push({
-      ...summary,
-      match: {
-        title: Boolean(normalizedQuery && normalizeSearchText(session.title).includes(normalizedQuery)),
-        aiName: Boolean(normalizedQuery && normalizeSearchText(session.aiName).includes(normalizedQuery)),
-        messageCount: matchedMessages.length,
-        snippets: matchedMessages,
-        preview:
-          matchedMessages[0]?.snippet ||
-          compactSnippet(messages[messages.length - 1]?.text || session.title || '', normalizedQuery)
-      }
-    });
   }
 
-  results.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-  return results.slice(0, limit);
+  return {
+    ...summary,
+    match: {
+      title: Boolean(normalizedQuery && normalizeSearchText(session.title).includes(normalizedQuery)),
+      aiName: Boolean(normalizedQuery && normalizeSearchText(session.aiName).includes(normalizedQuery)),
+      messageCount: matchedMessages.length,
+      snippets: matchedMessages,
+      preview:
+        matchedMessages[0]?.snippet ||
+        compactSnippet(messages[messages.length - 1]?.text || session.title || '', normalizedQuery)
+    }
+  };
+}
+
+async function searchSessionsPage(query, { offset = 0, limit = 100 } = {}) {
+  const normalizedQuery = normalizeSearchText(query);
+  const candidates = await collectSearchCandidates(normalizedQuery);
+  const results = [];
+  let skipped = 0;
+  let hasMore = false;
+
+  for (const candidate of candidates) {
+    const { session, dateDir } = await readSearchCandidate(candidate);
+    const result = buildSearchResult(session, dateDir, normalizedQuery);
+    if (!result) continue;
+
+    if (skipped < offset) {
+      skipped += 1;
+      continue;
+    }
+    if (results.length < limit) {
+      results.push(result);
+      continue;
+    }
+
+    hasMore = true;
+    break;
+  }
+
+  return {
+    results,
+    offset,
+    limit,
+    hasMore,
+    nextOffset: hasMore ? offset + results.length : null
+  };
+}
+
+async function searchSessions(query, limit = 100) {
+  return (await searchSessionsPage(query, { limit })).results;
 }
 
 function normalizeLimit(rawValue, fallback = 100, max = 500) {
-  const rawLimit = Number(rawValue || fallback);
-  return Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), max) : fallback;
+  return normalizePageLimit(rawValue, { fallback, max });
 }
 
-async function searchResponse(rawQuery, rawLimit) {
+async function searchResponse(rawQuery, rawLimit, rawOffset = 0) {
   const query = cleanName(rawQuery || '');
   const limit = normalizeLimit(rawLimit);
-  const results = query
-    ? await searchSessions(query, limit)
-    : (await collectSessionSummaries()).slice(0, limit).map((session) => ({
-        ...session,
-        match: { title: false, aiName: false, messageCount: 0, snippets: [], preview: '' }
-      }));
+  const offset = normalizeOffset(rawOffset);
 
-  return { query, count: results.length, results };
+  let page;
+  if (query) {
+    page = await searchSessionsPage(query, { offset, limit });
+  } else {
+    const summaries = await collectSessionSummaries();
+    const results = summaries.slice(offset, offset + limit).map((session) => ({
+      ...session,
+      match: { title: false, aiName: false, messageCount: 0, snippets: [], preview: '' }
+    }));
+    const hasMore = offset + results.length < summaries.length;
+    page = {
+      results,
+      offset,
+      limit,
+      hasMore,
+      nextOffset: hasMore ? offset + results.length : null,
+      total: summaries.length
+    };
+  }
+
+  return {
+    query,
+    count: page.results.length,
+    results: page.results,
+    offset: page.offset,
+    limit: page.limit,
+    hasMore: page.hasMore,
+    nextOffset: page.nextOffset,
+    ...(page.total === undefined ? {} : { total: page.total })
+  };
 }
 
 module.exports = {
   normalizeSearchText,
   compactSnippet,
+  buildSearchResult,
+  searchSessionsPage,
   searchSessions,
   normalizeLimit,
   searchResponse

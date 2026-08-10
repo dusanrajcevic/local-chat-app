@@ -96,7 +96,7 @@ Important remaining assumptions:
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) for details.
 
-For large archives, the server maintains a private derived session index containing summary metadata, filesystem signatures, and a fixed-size Bloom search projection. Normal in-app writes invalidate only the affected session entry; a periodic full reconciliation catches out-of-band edits. Long search queries use the Bloom projection to discard non-candidate sessions before reading canonical transcripts, while queries shorter than three characters deliberately fall back to exact full-file scanning so search behavior does not change.
+For large archives, the server maintains a private derived session index containing summary metadata, filesystem signatures, and a fixed-size Bloom search projection. Normal in-app writes invalidate only the affected session entry; a periodic full reconciliation catches out-of-band edits. Long search queries use the Bloom projection to discard non-candidate sessions before reading canonical transcripts, while queries shorter than three characters deliberately fall back to exact full-file scanning so search behavior does not change. Session/recent/search APIs also support offset pagination and conditional `ETag` revalidation; the web UI and extension reuse cached GET bodies after `304 Not Modified` responses, and paginated exact search stops once it has filled the requested window plus one look-ahead match.
 
 ## Verification
 

@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
+const nodeCrypto = require('node:crypto');
 const {
   DATA_DIR,
   SESSION_INDEX_FILE,
@@ -22,6 +23,8 @@ const dirtySessionPaths = new Set();
 let loadedIndex = null;
 let fullReconcileRequired = true;
 let lastFullReconcileAt = 0;
+const INDEX_ETAG_EPOCH = nodeCrypto.randomBytes(8).toString('hex');
+let indexRevision = 0;
 let metrics = createMetrics();
 
 function createMetrics() {
@@ -48,7 +51,9 @@ function activeSessionLocation(filePath) {
 
 subscribeStorageChanges(({ filePath }) => {
   const location = activeSessionLocation(filePath);
-  if (location) dirtySessionPaths.add(location.filePath);
+  if (!location) return;
+  dirtySessionPaths.add(location.filePath);
+  indexRevision += 1;
 });
 
 function validTimestamp(value) {
@@ -317,7 +322,10 @@ async function refreshIndexUnlocked({ forceFull = false } = {}) {
     changed = true;
   }
 
-  if (changed) await persistIndex(entries);
+  if (changed) {
+    indexRevision += 1;
+    await persistIndex(entries);
+  }
   return entries;
 }
 
@@ -325,31 +333,57 @@ async function refreshSessionIndex(options = {}) {
   return withLock(SESSION_INDEX_FILE, () => refreshIndexUnlocked(options));
 }
 
+function compareSummaries(a, b) {
+  const updatedDifference = new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+  return updatedDifference || a.id.localeCompare(b.id);
+}
+
+function sortedEntries(entries) {
+  return [...entries.values()].sort((a, b) => compareSummaries(a.summary, b.summary));
+}
+
 function sortSummaries(entries) {
-  return [...entries.values()]
-    .map((entry) => entry.summary)
-    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  return sortedEntries(entries).map((entry) => entry.summary);
 }
 
 async function indexedSessionSummaries() {
   return sortSummaries(await refreshSessionIndex());
 }
 
-async function indexedSearchableSessions(normalizedQuery = '') {
-  const entries = await refreshSessionIndex();
-  const sessions = [];
+async function sessionIndexRevision() {
+  await refreshSessionIndex();
+  return `${INDEX_ETAG_EPOCH}-${indexRevision}`;
+}
 
-  for (const entry of entries.values()) {
+async function indexedSearchCandidates(normalizedQuery = '') {
+  const entries = await refreshSessionIndex();
+  const candidates = [];
+
+  for (const entry of sortedEntries(entries)) {
     if (!bloomMayContain(entry.searchBloom, normalizedQuery)) {
       metrics.searchFiltered += 1;
       continue;
     }
     metrics.searchCandidates += 1;
-    const stable = await readStableSession(entryPath(entry), entry.id);
-    sessions.push({ session: stable.session, dateDir: entry.dateFolder });
+    candidates.push({
+      id: entry.id,
+      dateDir: entry.dateFolder,
+      filePath: entryPath(entry),
+      summary: entry.summary
+    });
   }
 
-  return sessions;
+  return candidates;
+}
+
+async function readIndexedSearchCandidate(candidate) {
+  const stable = await readStableSession(candidate.filePath, candidate.id);
+  return { session: stable.session, dateDir: candidate.dateDir };
+}
+
+async function indexedSearchableSessions(normalizedQuery = '') {
+  const candidates = await indexedSearchCandidates(normalizedQuery);
+  return Promise.all(candidates.map((candidate) => readIndexedSearchCandidate(candidate)));
 }
 
 async function resetSessionIndexForTests({ keepDiskIndex = true } = {}) {
@@ -358,6 +392,7 @@ async function resetSessionIndexForTests({ keepDiskIndex = true } = {}) {
   fullReconcileRequired = true;
   lastFullReconcileAt = 0;
   metrics = createMetrics();
+  indexRevision += 1;
   if (!keepDiskIndex) await fs.rm(SESSION_INDEX_FILE, { force: true });
 }
 
@@ -371,7 +406,10 @@ function sessionIndexMetricsForTests() {
 
 module.exports = {
   indexedSessionSummaries,
+  indexedSearchCandidates,
+  readIndexedSearchCandidate,
   indexedSearchableSessions,
+  sessionIndexRevision,
   refreshSessionIndex,
   resetSessionIndexForTests,
   sessionIndexMetricsForTests,
