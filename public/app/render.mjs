@@ -153,6 +153,64 @@ function createRenderer({
     `;
   }
 
+  function renderMessageFooterActions(message) {
+    const copyIcon = `
+      <svg class="message-action-svg message-action-copy-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+        <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+      </svg>
+      <svg class="message-action-svg message-action-check-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m5 12 4 4L19 6"></path>
+      </svg>
+    `;
+    const editIcon = `
+      <svg class="message-action-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20h4l10.5-10.5a2.12 2.12 0 0 0-3-3L5 17v3Z"></path>
+        <path d="m13.5 8.5 3 3"></path>
+      </svg>
+    `;
+    const deleteIcon = `
+      <svg class="message-action-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 7h16"></path>
+        <path d="M9 7V4h6v3"></path>
+        <path d="m6 7 1 13h10l1-13"></path>
+        <path d="M10 11v5M14 11v5"></path>
+      </svg>
+    `;
+
+    return `
+      <div class="message-footer-actions" role="group" aria-label="Message quick actions">
+        <button
+          type="button"
+          class="message-action-icon"
+          data-copy-message="${message.id}"
+          data-tooltip="Copy markdown"
+          aria-label="Copy markdown"
+        >${copyIcon}</button>
+        ${
+          state.currentSession.trashed
+            ? ''
+            : `
+          <button
+            type="button"
+            class="message-action-icon"
+            data-edit-message="${message.id}"
+            data-tooltip="Edit"
+            aria-label="Edit"
+          >${editIcon}</button>
+          <button
+            type="button"
+            class="message-action-icon message-action-delete"
+            data-delete-message="${message.id}"
+            data-tooltip="Delete"
+            aria-label="Delete"
+          >${deleteIcon}</button>
+        `
+        }
+      </div>
+    `;
+  }
+
   function renderMessages() {
     syncSenderCheckbox();
 
@@ -193,11 +251,14 @@ function createRenderer({
       .map(
         (message) => `
       <article class="message ${message.sender === 'me' ? 'me' : 'bot'}" data-chat-message-id="${htmlEscape(message.id)}">
-        <div class="message-top">
-          <span class="message-label">${message.sender === 'me' ? 'Me' : htmlEscape(botName())}${message.updatedAt ? ' · edited' : ''}</span>
-          ${renderMessageActions(message)}
+        <div class="message-surface">
+          <div class="message-top">
+            <span class="message-label">${message.sender === 'me' ? 'Me' : htmlEscape(botName())}${message.updatedAt ? ' · edited' : ''}</span>
+            ${renderMessageActions(message)}
+          </div>
+          <div class="message-text" data-message-id="${message.id}">${markdown(message.text)}</div>
         </div>
-        <div class="message-text" data-message-id="${message.id}">${markdown(message.text)}</div>
+        ${renderMessageFooterActions(message)}
       </article>
     `
       )
@@ -216,6 +277,7 @@ function createRenderer({
     renderTrash,
     syncSenderCheckbox,
     renderMessageActions,
+    renderMessageFooterActions,
     renderMessages
   };
 }

@@ -35,13 +35,25 @@ function createClipboardController({
     }, 1200);
   }
 
+  function flashMessageActionIcon(button) {
+    if (!button?.classList?.contains('message-action-icon')) return false;
+
+    button.dataset.copied = 'true';
+    const resetTimer = setTimeout(() => {
+      if (!button.isConnected) return;
+      delete button.dataset.copied;
+    }, 1200);
+    resetTimer?.unref?.();
+    return true;
+  }
+
   async function copyMessageMarkdown(messageId, button = null) {
     if (!state.currentSession) return;
     const message = state.currentSession.messages.find((msg) => msg.id === messageId);
     if (!message) return;
 
     await copyTextToClipboard(message.text);
-    flashButtonText(button);
+    if (!flashMessageActionIcon(button)) flashButtonText(button);
     announceStatus('Message copied to clipboard.');
   }
 
@@ -99,6 +111,7 @@ function createClipboardController({
   return {
     copyTextToClipboard,
     flashButtonText,
+    flashMessageActionIcon,
     copyMessageMarkdown,
     copyCodeBlock,
     selectedMessageMarkdown,

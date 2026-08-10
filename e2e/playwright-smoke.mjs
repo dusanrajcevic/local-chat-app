@@ -138,6 +138,40 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     await page.locator('#sendBtn').click();
     await page.locator('.message-text').getByText('Hello from Playwright smoke').waitFor();
 
+    const renderedMessage = page.locator('[data-chat-message-id]').last();
+    const topMessageActions = renderedMessage.locator('.message-top .message-actions');
+    const footerMessageActions = renderedMessage.locator('.message-footer-actions');
+    assert.match(await topMessageActions.textContent(), /Copy Markdown/);
+    assert.match(await topMessageActions.textContent(), /Edit/);
+    assert.match(await topMessageActions.textContent(), /Delete/);
+    assert.equal(await footerMessageActions.locator('.message-action-icon').count(), 3);
+    assert.deepEqual(
+      await footerMessageActions.locator('.message-action-icon').evaluateAll((buttons) =>
+        buttons.map((button) => ({
+          label: button.getAttribute('aria-label'),
+          tooltip: button.dataset.tooltip
+        }))
+      ),
+      [
+        { label: 'Copy markdown', tooltip: 'Copy markdown' },
+        { label: 'Edit', tooltip: 'Edit' },
+        { label: 'Delete', tooltip: 'Delete' }
+      ]
+    );
+    await renderedMessage.hover();
+    assert.equal(
+      await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity),
+      '1'
+    );
+    const footerCopyButton = footerMessageActions.locator('[data-copy-message]');
+    await footerCopyButton.hover();
+    const copyTooltip = await footerCopyButton.evaluate((button) => ({
+      content: getComputedStyle(button, '::after').content,
+      opacity: getComputedStyle(button, '::after').opacity
+    }));
+    assert.equal(copyTooltip.content.replaceAll('"', ''), 'Copy markdown');
+    assert.equal(copyTooltip.opacity, '1');
+
     const messageNavigator = page.locator('#messageNavigator');
     assert.equal(await messageNavigator.isHidden(), false);
     assert.equal(await messageNavigator.locator('[data-message-nav-id]').count(), 1);

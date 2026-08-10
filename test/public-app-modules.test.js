@@ -210,6 +210,46 @@ test('message navigator renders one preview rail item per user message and jumps
   assert.equal(items[0].tabIndex, 0);
 });
 
+test('rendered messages expose hover quick actions with icon tooltips', async () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 's-actions',
+    title: 'Message actions',
+    aiName: 'Assistant',
+    trashed: false,
+    messages: [{ id: 'm-actions', sender: 'bot', text: 'Hello from the assistant.' }]
+  };
+
+  harness.view.renderMessages();
+
+  const message = harness.el.messages.querySelector('[data-chat-message-id="m-actions"]');
+  const topActions = message.querySelector('.message-top .message-actions');
+  const footerActions = message.querySelector('.message-footer-actions');
+  const buttons = footerActions.querySelectorAll('.message-action-icon');
+
+  assert.match(topActions.textContent, /Copy Markdown/);
+  assert.match(topActions.textContent, /Edit/);
+  assert.match(topActions.textContent, /Delete/);
+  assert.equal(buttons.length, 3);
+  assert.deepEqual(
+    Array.from(buttons, (button) => button.dataset.tooltip),
+    ['Copy markdown', 'Edit', 'Delete']
+  );
+  assert.deepEqual(
+    Array.from(buttons, (button) => button.getAttribute('aria-label')),
+    ['Copy markdown', 'Edit', 'Delete']
+  );
+  assert.equal(footerActions.textContent.trim(), '');
+
+  await harness.clipboard.copyMessageMarkdown('m-actions', buttons[0]);
+
+  assert.equal(harness.clipboard.lastText, 'Hello from the assistant.');
+  assert.equal(buttons[0].dataset.copied, 'true');
+  assert.equal(buttons[0].querySelector('.message-action-copy-svg') !== null, true);
+  assert.equal(buttons[0].querySelector('.message-action-check-svg') !== null, true);
+  assert.equal(harness.el.appStatus.textContent, 'Message copied to clipboard.');
+});
+
 test('rendered code blocks expose language labels and copy only code text', async () => {
   const harness = createHarness();
   harness.state.currentSession = {

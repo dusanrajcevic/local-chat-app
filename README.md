@@ -8,6 +8,7 @@ The project is designed for private local use, not as a hosted multi-user servic
 
 - Creates, edits, searches, pins, exports, restores, and deletes local chat sessions.
 - Adds a right-side in-chat navigator with one marker per user message and hover/focus previews for quick jumps through long conversations.
+- Adds per-message copy, edit, and delete quick actions with icon tooltips while keeping the existing text actions in the message header.
 - Stores each chat as a JSON file grouped by date under a local data directory.
 - Provides a browser extension for saving prompts and completed AI responses from AI chat UIs.
 - Supports ChatGPT, Claude, DeepSeek, and Gemini through best-effort DOM adapters.
