@@ -380,8 +380,17 @@ test('renderer filters folder views and escapes rendered titles', () => {
   ];
 
   harness.view.renderFolders();
-  assert.match(harness.el.folderList.innerHTML, /&lt;Work&gt;/);
-  assert.doesNotMatch(harness.el.folderList.innerHTML, /<Work>/);
+
+  const folderButton = harness.el.folderList.querySelector('[data-folder="f1"]');
+  const folderActions = harness.el.folderList.querySelector('.item-actions');
+  const renameFolderButton = harness.el.folderList.querySelector('[data-rename-folder="f1"]');
+  const deleteFolderButton = harness.el.folderList.querySelector('[data-delete-folder="f1"]');
+
+  assert.equal(folderButton?.querySelector('.item-title')?.textContent, '<Work>');
+  assert.equal(harness.el.folderList.querySelector('work'), null);
+  assert.equal(folderActions?.getAttribute('aria-label'), 'Actions for <Work>');
+  assert.equal(renameFolderButton?.getAttribute('aria-label'), 'Rename <Work> folder');
+  assert.equal(deleteFolderButton?.getAttribute('aria-label'), 'Delete <Work> folder');
 
   harness.state.selectedFolderId = 'f1';
   harness.view.renderSessions();
