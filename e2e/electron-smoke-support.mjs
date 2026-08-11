@@ -51,6 +51,9 @@ export function findPackagedElectronExecutable(outputDir, { platform = process.p
         .map((entry) => path.join(directory, entry.name))
         .filter((entry) => {
           if (/^(chrome-sandbox|chrome_crashpad_handler)$/i.test(path.basename(entry))) return false;
+          // Shared libraries in electron-builder's unpacked directory may have
+          // their executable bit set. They are not valid Electron entrypoints.
+          if (/\.so(?:\.\d+)*$/i.test(path.basename(entry))) return false;
           try {
             fs.accessSync(entry, fs.constants.X_OK);
             return true;
@@ -64,6 +67,16 @@ export function findPackagedElectronExecutable(outputDir, { platform = process.p
 
   const diagnostic = firstExisting(outputChildren) || outputDir;
   throw new Error(`Could not find the packaged Electron executable under ${diagnostic}.`);
+}
+
+export function electronLaunchArgs({
+  platform = process.platform,
+  ci = Boolean(process.env.CI),
+  uid = typeof process.getuid === 'function' ? process.getuid() : null
+} = {}) {
+  // GitHub-hosted Linux runners cannot reliably use Electron's Chromium
+  // sandbox. The renderer's sandbox webPreference is still tested below.
+  return platform === 'linux' && (ci || uid === 0) ? ['--no-sandbox'] : [];
 }
 
 export function electronBuilderCommand({ outputDir, platform = process.platform } = {}) {

@@ -9,6 +9,7 @@ import { _electron as electron } from '@playwright/test';
 import { collectAccessibilityIssues } from './accessibility-support.mjs';
 import {
   electronBuilderCommand,
+  electronLaunchArgs,
   findPackagedElectronExecutable,
   getFreePort,
   waitForPortRelease
@@ -77,14 +78,9 @@ test('packaged Electron app launches securely and shuts down cleanly', { timeout
     const executablePath = findPackagedElectronExecutable(buildDir);
     assert.ok(fs.existsSync(executablePath), `Packaged Electron executable is missing: ${executablePath}`);
 
-    const args = [];
-    if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
-      args.push('--no-sandbox');
-    }
-
     electronApp = await electron.launch({
       executablePath,
-      args,
+      args: electronLaunchArgs(),
       env: {
         ...process.env,
         PORT: String(port),

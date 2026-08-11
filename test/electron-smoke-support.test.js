@@ -57,9 +57,21 @@ test('packaged executable discovery resolves Linux unpacked builds', async () =>
   withTempDir((root) => {
     const directory = path.join(root, 'linux-unpacked');
     fs.mkdirSync(directory, { recursive: true });
+    const sharedLibrary = path.join(directory, 'libEGL.so');
+    fs.writeFileSync(sharedLibrary, '');
+    fs.chmodSync(sharedLibrary, 0o755);
     const executable = path.join(directory, 'local-chat-app');
     fs.writeFileSync(executable, '#!/bin/sh\n');
     fs.chmodSync(executable, 0o755);
     assert.equal(findPackagedElectronExecutable(root, { platform: 'linux' }), executable);
   });
+});
+
+test('Electron smoke launch disables the Chromium sandbox only on Linux CI or as root', async () => {
+  const { electronLaunchArgs } = await loadSupport();
+
+  assert.deepEqual(electronLaunchArgs({ platform: 'linux', ci: true, uid: 1000 }), ['--no-sandbox']);
+  assert.deepEqual(electronLaunchArgs({ platform: 'linux', ci: false, uid: 0 }), ['--no-sandbox']);
+  assert.deepEqual(electronLaunchArgs({ platform: 'linux', ci: false, uid: 1000 }), []);
+  assert.deepEqual(electronLaunchArgs({ platform: 'darwin', ci: true, uid: 501 }), []);
 });
