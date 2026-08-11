@@ -9,10 +9,17 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
   el.newChatBtn.addEventListener('click', () => controllers.createSession().catch(reportError));
   el.newFolderBtn.addEventListener('click', () => controllers.createFolder().catch(reportError));
   el.pairExtensionBtn.addEventListener('click', () => controllers.createExtensionPairingCode().catch(reportError));
+  el.searchChatsBtn.addEventListener('click', controllers.openChatSearch);
   el.sendBtn.addEventListener('click', () => controllers.sendMessage().catch(reportError));
   el.renameBotBtn.addEventListener('click', () => controllers.renameBotName().catch(reportError));
   el.renameSessionBtn.addEventListener('click', () => controllers.renameSession().catch(reportError));
   el.copyChatBtn.addEventListener('click', () => clipboard.copyEntireChat().catch(reportError));
+  el.clearChatSearchBtn.addEventListener('click', controllers.clearChatSearch);
+  el.closeChatSearchBtn.addEventListener('click', controllers.closeChatSearch);
+  el.chatSearchInput.addEventListener('input', controllers.scheduleSearch);
+  el.chatSearchModal.addEventListener('click', (event) => {
+    if (event.target === el.chatSearchModal) controllers.closeChatSearch();
+  });
   el.cancelEditMessageBtn.addEventListener('click', modal.closeEditMessageModal);
   el.saveEditMessageBtn.addEventListener('click', () => controllers.saveEditedMessage().catch(reportError));
   el.editMessageModal.addEventListener('click', (event) => {
@@ -46,6 +53,17 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
 
   doc.addEventListener('keydown', (event) => {
     if (modal.trapFocus(event)) return;
+
+    if (!el.chatSearchModal.classList.contains('hidden')) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        controllers.closeChatSearch();
+      } else if (event.key === 'Enter' && doc.activeElement === el.chatSearchInput) {
+        event.preventDefault();
+        controllers.openFirstSearchResult().catch(reportError);
+      }
+      return;
+    }
 
     if (!el.extensionPairingModal.classList.contains('hidden')) {
       if (event.key === 'Escape') {
@@ -87,11 +105,12 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
 
   doc.addEventListener('click', async (event) => {
     const target = event.target.closest(
-      '[data-open-session], [data-rename-session], [data-trash-session], [data-delete-trash], [data-restore-session], [data-folder], [data-rename-folder], [data-delete-folder], [data-copy-message], [data-copy-code], [data-edit-message], [data-delete-message]'
+      '[data-search-session-id], [data-open-session], [data-rename-session], [data-trash-session], [data-delete-trash], [data-restore-session], [data-folder], [data-rename-folder], [data-delete-folder], [data-copy-message], [data-copy-code], [data-edit-message], [data-delete-message]'
     );
     if (!target) return;
 
     try {
+      if (target.dataset.searchSessionId) return controllers.openSearchResult(target.dataset.searchSessionId);
       if (target.dataset.openSession) return controllers.openSession(target.dataset.openSession);
       if (target.dataset.renameSession) return controllers.renameSession(target.dataset.renameSession);
       if (target.dataset.renameFolder) return controllers.renameFolder(target.dataset.renameFolder);

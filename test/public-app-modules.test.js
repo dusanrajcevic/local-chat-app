@@ -172,6 +172,56 @@ test('core controls expose accessible names and valid ARIA references', () => {
   assert.equal(harness.el.appStatus.getAttribute('aria-live'), 'polite');
 });
 
+test('chat search modal renders recent chats and highlights message matches', async () => {
+  const harness = createHarness({
+    routes: {
+      'GET /api/recent-chats?limit=12': {
+        body: [
+          {
+            id: 'chat_recent',
+            title: 'Recent architecture notes',
+            updatedAt: '2026-08-10T12:00:00.000Z'
+          }
+        ]
+      },
+      'GET /api/search-chats?q=atomic&limit=50': {
+        body: {
+          query: 'atomic',
+          count: 1,
+          results: [
+            {
+              id: 'chat_search',
+              title: 'Storage review',
+              updatedAt: '2026-08-09T12:00:00.000Z',
+              match: { preview: 'Use atomic writes and recovery journals.' }
+            }
+          ]
+        }
+      }
+    }
+  });
+
+  harness.controllers.openChatSearch();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.el.chatSearchModal.classList.contains('hidden'), false);
+  assert.equal(harness.el.chatSearchHeading.textContent, 'Recent chats');
+  assert.equal(harness.el.chatSearchResults.querySelectorAll('[data-search-session-id]').length, 1);
+  assert.match(harness.el.chatSearchResults.textContent, /Recent architecture notes/);
+
+  harness.el.chatSearchInput.value = 'atomic';
+  await harness.controllers.runSearch('atomic');
+
+  assert.equal(harness.el.chatSearchHeading.textContent, 'Search results');
+  assert.match(harness.el.chatSearchResults.textContent, /Storage review/);
+  assert.match(harness.el.chatSearchResults.textContent, /Use atomic writes and recovery journals/);
+  assert.equal(harness.el.chatSearchResults.querySelector('strong')?.textContent, 'atomic');
+  assert.equal(harness.el.clearChatSearchBtn.hidden, true);
+
+  harness.controllers.closeChatSearch();
+  assert.equal(harness.el.chatSearchModal.classList.contains('hidden'), true);
+});
+
 test('message navigator renders one preview rail item per user message and jumps to its target', () => {
   const harness = createHarness();
   harness.state.currentSession = {

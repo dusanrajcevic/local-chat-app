@@ -2,6 +2,7 @@ import { createActiveSessionController } from './controllers/active-session.mjs'
 import { createFolderController } from './controllers/folders.mjs';
 import { createMessageController } from './controllers/messages.mjs';
 import { createSessionController } from './controllers/sessions.mjs';
+import { createSearchController } from './controllers/search.mjs';
 
 function createControllers({
   state,
@@ -57,6 +58,15 @@ function createControllers({
     alertUser,
     confirmUser,
     announceStatus
+  });
+
+  const searchController = createSearchController({
+    api,
+    el,
+    modal,
+    openSession: sessionController.openSession,
+    doc,
+    win
   });
 
   const folderController = createFolderController({
@@ -123,6 +133,7 @@ function createControllers({
     closeExtensionPairing,
     ...activeController,
     ...sessionController,
+    ...searchController,
     ...folderController,
     ...messageController,
     boot

@@ -227,6 +227,20 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       `Message preview kept a blank left column: ${JSON.stringify(expandedPreview)}`
     );
 
+    await page.locator('#searchChatsBtn').click();
+    await page.locator('#chatSearchInput').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'chatSearchInput');
+    assert.equal(await page.locator('#chatSearchHeading').textContent(), 'Recent chats');
+    await page.locator('[data-search-session-id]').filter({ hasText: 'Smoke Session' }).waitFor();
+    await page.locator('#chatSearchInput').fill('Playwright smoke');
+    const searchResult = page.locator('[data-search-session-id]').filter({ hasText: 'Smoke Session' });
+    await searchResult.waitFor();
+    assert.match(await searchResult.locator('.chat-search-result-preview').textContent(), /Playwright smoke/i);
+    assert.equal((await searchResult.locator('.chat-search-match').textContent()).toLowerCase(), 'playwright smoke');
+    await searchResult.click();
+    await page.locator('#chatSearchModal.hidden').waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Smoke Session' }).count(), 1);
+
     await page.locator('#renameSessionBtn').click();
     await page.locator('#appPromptInput').fill('Smoke Session Renamed');
     await page.locator('#saveAppPromptBtn').click();

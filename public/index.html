@@ -10,11 +10,19 @@
     <div id="appShell" class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">✦</div>
-          <div>
-            <h1>Local Chat</h1>
-            <p>JSON archive</p>
+          <div class="brand-identity">
+            <div class="brand-mark">✦</div>
+            <div>
+              <h1>Local Chat</h1>
+              <p>JSON archive</p>
+            </div>
           </div>
+          <button id="searchChatsBtn" class="brand-search-btn" type="button" aria-label="Search chats">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5"></circle>
+              <path d="m16 16 4 4"></path>
+            </svg>
+          </button>
         </div>
 
         <button id="newChatBtn" class="primary-btn">+ New session</button>
@@ -101,6 +109,34 @@
           </div>
         </footer>
       </main>
+    </div>
+
+    <div id="chatSearchModal" class="modal-backdrop search-modal-backdrop hidden" aria-hidden="true">
+      <div class="chat-search-card" role="dialog" aria-modal="true" aria-labelledby="chatSearchTitle">
+        <h2 id="chatSearchTitle" class="sr-only">Search chats</h2>
+        <div class="chat-search-toolbar">
+          <label class="sr-only" for="chatSearchInput">Search chats</label>
+          <input
+            id="chatSearchInput"
+            class="chat-search-input"
+            type="search"
+            placeholder="Search..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="clearChatSearchBtn" class="chat-search-clear" type="button" hidden>Clear</button>
+          <span id="chatSearchToolbarDivider" class="chat-search-toolbar-divider" aria-hidden="true" hidden></span>
+          <button id="closeChatSearchBtn" class="chat-search-close" type="button" aria-label="Close search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-search-content">
+          <p id="chatSearchHeading" class="chat-search-heading">Recent chats</p>
+          <div id="chatSearchResults" class="chat-search-results" aria-busy="false"></div>
+        </div>
+      </div>
     </div>
 
     <div id="editMessageModal" class="modal-backdrop hidden" aria-hidden="true">

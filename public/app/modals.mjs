@@ -20,6 +20,7 @@ function createModalController({ state, el, doc = document, raf } = {}) {
 
   function syncModalOpenClass() {
     const modalOpen =
+      isModalVisible(el.chatSearchModal) ||
       isModalVisible(el.editMessageModal) ||
       isModalVisible(el.appPromptModal) ||
       isModalVisible(el.extensionPairingModal);
@@ -62,7 +63,11 @@ function createModalController({ state, el, doc = document, raf } = {}) {
 
   function focusableElements(modal) {
     return Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
-      (node) => !node.hasAttribute('disabled') && node.getAttribute('aria-hidden') !== 'true'
+      (node) =>
+        !node.hasAttribute('disabled') &&
+        !node.hidden &&
+        !node.classList.contains('hidden') &&
+        node.getAttribute('aria-hidden') !== 'true'
     );
   }
 
@@ -95,6 +100,14 @@ function createModalController({ state, el, doc = document, raf } = {}) {
     }
 
     return false;
+  }
+
+  function openSearchModal() {
+    showModal(el.chatSearchModal, el.chatSearchInput);
+  }
+
+  function closeSearchModal() {
+    hideModal(el.chatSearchModal);
   }
 
   function openTextPrompt({
@@ -167,6 +180,8 @@ function createModalController({ state, el, doc = document, raf } = {}) {
     isModalVisible,
     syncModalOpenClass,
     trapFocus,
+    openSearchModal,
+    closeSearchModal,
     openTextPrompt,
     closeTextPrompt,
     submitTextPrompt,

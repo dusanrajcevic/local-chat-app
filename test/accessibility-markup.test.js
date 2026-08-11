@@ -16,6 +16,9 @@ test('local app markup exposes labels, live status, and modal descriptions', () 
   assert.match(html, /id="appStatus"[^>]+role="status"[^>]+aria-live="polite"/);
   assert.match(html, /id="toggleTrashBtn"[\s\S]+aria-expanded="false"[\s\S]+aria-controls="trashList"/);
   assert.match(html, /aria-describedby="extensionPairingDescription"/);
+  assert.match(html, /id="searchChatsBtn"[^>]+aria-label="Search chats"/);
+  assert.match(html, /<label class="sr-only" for="chatSearchInput">Search chats<\/label>/);
+  assert.match(html, /id="closeChatSearchBtn"[^>]+aria-label="Close search"/);
 });
 
 test('extension popup exposes labelled inputs, focus styles, and an announced status region', () => {
