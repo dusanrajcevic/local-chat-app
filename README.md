@@ -34,7 +34,6 @@ A quick look at the local web app and browser-extension capture flow.
   <img src="docs/screenshots/local-set-bot-name.jpg" alt="Set AI bot name dialog" width="49%">
 </p>
 
-
 <p align="center">
   <img src="docs/screenshots/local-search.jpg" alt="Search chats dialog" width="49%">
   <img src="docs/screenshots/local-sidebar-collapse.jpg" alt="Local Chat Conversation with sidebar collapsed" width="49%">
