@@ -45,6 +45,34 @@ async function waitForHealth(baseUrl, timeoutMs = 10_000) {
   throw lastError || new Error('Timed out waiting for local server health check.');
 }
 
+async function waitForOpacity(locator, expected = '1', pseudo = null) {
+  await locator.evaluate(
+    (element, options) =>
+      new Promise((resolve, reject) => {
+        const startedAt = performance.now();
+
+        function check() {
+          const actual = getComputedStyle(element, options.pseudo).opacity;
+
+          if (actual === options.expected) {
+            resolve();
+            return;
+          }
+
+          if (performance.now() - startedAt >= 1_000) {
+            reject(new Error(`Timed out waiting for opacity ${options.expected}; last value was ${actual}.`));
+            return;
+          }
+
+          requestAnimationFrame(check);
+        }
+
+        check();
+      }),
+    { expected, pseudo }
+  );
+}
+
 test('web UI smoke flow works against a live local server', { timeout: 60_000 }, async (t) => {
   const browser = await launchChromium({
     chromium,
@@ -104,8 +132,8 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     await page.getByRole('heading', { name: 'Smoke Session' }).waitFor();
     assert.equal(await page.locator('[data-open-session][aria-current="true"]').count(), 1);
     assert.equal(await page.locator('[data-folder="all"][aria-current="true"]').count(), 0);
-    assert.equal(await page.getByLabel('Message').count(), 1);
-    assert.equal(await page.getByLabel('Pin current session to folder').count(), 1);
+    assert.equal(await page.getByLabel('Message', { exact: true }).count(), 1);
+    assert.equal(await page.getByLabel('Pin current session to folder', { exact: true }).count(), 1);
 
     const sidebarItemLayout = await page
       .locator('#sessionList .item')
@@ -159,11 +187,13 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       ]
     );
     await renderedMessage.hover();
-    assert.equal(await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity), '1');
     const footerCopyButton = footerMessageActions.locator('[data-copy-message]');
     await footerMessageActions.hover();
+    await waitForOpacity(footerMessageActions);
     assert.equal(await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity), '1');
     await footerCopyButton.hover();
+    await waitForOpacity(footerCopyButton, '1', '::after');
+
     const copyTooltip = await footerCopyButton.evaluate((button) => ({
       content: getComputedStyle(button, '::after').content,
       opacity: getComputedStyle(button, '::after').opacity
