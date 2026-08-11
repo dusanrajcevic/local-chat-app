@@ -106,7 +106,9 @@ function mutateProviderFixture(name) {
 }
 
 function validMessageCopyButtons() {
-  return Array.from(document.querySelectorAll('button, [role="button"]')).filter((button) => content.isCopyButton(button));
+  return Array.from(document.querySelectorAll('button, [role="button"]')).filter((button) =>
+    content.isCopyButton(button)
+  );
 }
 
 function extractedMessages() {
@@ -154,10 +156,7 @@ for (const providerCase of providerCases) {
 
     const messages = extractedMessages();
     assert.equal(messages.length, 2);
-    assert.deepEqual(
-      messages.map((message) => message.sender).sort(),
-      ['bot', 'me']
-    );
+    assert.deepEqual(messages.map((message) => message.sender).sort(), ['bot', 'me']);
     assert.ok(messages.every((message) => message.text.length > 20));
 
     const assistant = validMessageCopyButtons()
@@ -199,7 +198,10 @@ test('diagnostics report unsupported pages without including page text', () => {
 test('diagnostics message handler ignores unrelated messages and returns a serializable report', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
-  assert.equal(diagnostics.handleDiagnosticsMessage({ type: 'OTHER' }, {}, () => {}), false);
+  assert.equal(
+    diagnostics.handleDiagnosticsMessage({ type: 'OTHER' }, {}, () => {}),
+    false
+  );
 
   let response;
   const handled = diagnostics.handleDiagnosticsMessage({ type: 'GET_PROVIDER_DIAGNOSTICS' }, {}, (value) => {

@@ -97,7 +97,6 @@ Do not use the optional command in CI or release verification. The smoke test al
 
 Run `npm run format` only when you are ready to accept formatter changes across the repo.
 
-
 ### Accessibility
 
 Keep interactive controls programmatically labelled, preserve visible keyboard focus, expose selected/expanded state with ARIA where appropriate, and route transient copy/save feedback through the live status region. Dialog changes must preserve focus containment while open and return focus to the control that opened the dialog when it closes.

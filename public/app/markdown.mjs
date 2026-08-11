@@ -304,9 +304,11 @@ function renderList(lines, startIndex, baseIndent = null, listType = null) {
   };
 }
 
-
 function normalizeCodeLanguage(language) {
-  const token = String(language || '').trim().split(/\s+/, 1)[0].toLowerCase();
+  const token = String(language || '')
+    .trim()
+    .split(/\s+/, 1)[0]
+    .toLowerCase();
   if (!token) return '';
 
   if (['cpp', 'cxx', 'cc'].includes(token)) return 'c++';

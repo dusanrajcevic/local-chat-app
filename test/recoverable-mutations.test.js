@@ -95,7 +95,10 @@ test('restore recovery removes the trash copy after an interrupted active write'
 
   assert.equal(await journalExists(), false);
   assert.ok(await findSessionFile(session.id));
-  assert.equal((await listTrash()).some((item) => item.id === session.id), false);
+  assert.equal(
+    (await listTrash()).some((item) => item.id === session.id),
+    false
+  );
   assert.equal(Object.prototype.hasOwnProperty.call(await readSession(session.id), 'deletedAt'), false);
 });
 
@@ -109,7 +112,10 @@ test('folder-delete recovery finishes active and trash reference cleanup', async
   await assert.rejects(() => deleteFolderAndUnpinSessions(folder.id), /Injected mutation failure/);
 
   assert.equal(await journalExists(), true);
-  assert.equal((await readFolders()).some((item) => item.id === folder.id), false);
+  assert.equal(
+    (await readFolders()).some((item) => item.id === folder.id),
+    false
+  );
   assert.equal((await readSession(activeSession.id)).pinnedFolderId, folder.id);
   assert.equal((await listTrash()).find((item) => item.id === trashedSession.id).pinnedFolderId, folder.id);
 
@@ -130,7 +136,10 @@ test('permanent-delete recovery finishes active-state cleanup after trash remova
   await assert.rejects(() => permanentlyDeleteTrashedSession(session.id), /Injected mutation failure/);
 
   assert.equal(await journalExists(), true);
-  assert.equal((await listTrash()).some((item) => item.id === session.id), false);
+  assert.equal(
+    (await listTrash()).some((item) => item.id === session.id),
+    false
+  );
   assert.equal((await getAppState()).activeSessionId, session.id);
 
   setMutationFailureInjectorForTests(null);
@@ -152,7 +161,10 @@ test('pinning and folder deletion cannot commit a dangling folder reference', as
 
     const pinResult = results[0];
     if (pinResult.status === 'rejected') assert.equal(pinResult.reason.status, 404);
-    assert.equal((await readFolders()).some((item) => item.id === folder.id), false);
+    assert.equal(
+      (await readFolders()).some((item) => item.id === folder.id),
+      false
+    );
     assert.equal((await readSession(session.id)).pinnedFolderId, null);
   }
 });

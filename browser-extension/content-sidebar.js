@@ -862,7 +862,9 @@
       localSidebarSelectedFolderId = folderId || null;
       renderLocalSidebarReplacement();
       try {
-        await (chromeApi.storage.sync || chromeApi.storage.local).set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
+        await (chromeApi.storage.sync || chromeApi.storage.local).set({
+          [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || ''
+        });
       } catch {}
     }
 
@@ -1091,7 +1093,9 @@
         if (!response?.ok) throw new Error(response?.error || 'Could not create folder.');
         localSidebarSelectedFolderId = response.folder?.id || null;
         try {
-          await (chromeApi.storage.sync || chromeApi.storage.local).set({ [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || '' });
+          await (chromeApi.storage.sync || chromeApi.storage.local).set({
+            [LOCAL_SIDEBAR_STORAGE_KEY]: localSidebarSelectedFolderId || ''
+          });
         } catch {}
         showToast(`New local folder created → ${response.folder?.name || trimmedTitle}`);
         scheduleLocalSidebarRefresh(true);

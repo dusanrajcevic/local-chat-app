@@ -16,7 +16,10 @@ function findAccessibilityIssues(root = globalThis.document) {
       .trim()
       .split(/\s+/)
       .filter(Boolean);
-    return ids.map((id) => root.getElementById(id)?.textContent?.trim() || '').join(' ').trim();
+    return ids
+      .map((id) => root.getElementById(id)?.textContent?.trim() || '')
+      .join(' ')
+      .trim();
   }
 
   function accessibleName(element) {

@@ -1,11 +1,7 @@
 const { appError } = require('../errors');
 const { isSameRequestOrigin } = require('../middleware/security');
 const { requireJsonObjectBody } = require('../middleware/request-body');
-const {
-  createPairingCode,
-  pairExtension,
-  extensionIdFromOrigin
-} = require('../services/extension-auth-service');
+const { createPairingCode, pairExtension, extensionIdFromOrigin } = require('../services/extension-auth-service');
 
 function registerExtensionAuthRoutes(app) {
   app.post('/api/extension/pairing-code', requireJsonObjectBody, (req, res, next) => {

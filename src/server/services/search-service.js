@@ -1,10 +1,6 @@
 const { cleanName } = require('../validation');
 const { summarizeSession } = require('./session-format');
-const {
-  collectSearchCandidates,
-  readSearchCandidate,
-  collectSessionSummaries
-} = require('../storage/session-store');
+const { collectSearchCandidates, readSearchCandidate, collectSessionSummaries } = require('../storage/session-store');
 const { normalizeSearchText } = require('./search-text');
 const { normalizeOffset, normalizePageLimit } = require('../http/collection-response');
 

@@ -1,11 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  isLocalAppNavigationUrl,
-  externalUrlToOpen,
-  installNavigationGuards
-} = require('../electron/security');
+const { isLocalAppNavigationUrl, externalUrlToOpen, installNavigationGuards } = require('../electron/security');
 const { closeHttpServer } = require('../electron/server-lifecycle');
 const {
   CONTENT_SECURITY_POLICY,
@@ -69,25 +65,16 @@ test('Electron window and navigation guards deny child windows and unsafe naviga
   assert.deepEqual(opened, ['https://example.com/']);
 
   let prevented = false;
-  listeners.get('will-navigate')(
-    { preventDefault: () => (prevented = true) },
-    `${LOCAL_URL}/#session`
-  );
+  listeners.get('will-navigate')({ preventDefault: () => (prevented = true) }, `${LOCAL_URL}/#session`);
   assert.equal(prevented, false);
 
   prevented = false;
-  listeners.get('will-navigate')(
-    { preventDefault: () => (prevented = true) },
-    `${LOCAL_URL}/api/sessions`
-  );
+  listeners.get('will-navigate')({ preventDefault: () => (prevented = true) }, `${LOCAL_URL}/api/sessions`);
   assert.equal(prevented, true);
   assert.equal(deferred.length, 0);
 
   prevented = false;
-  listeners.get('will-redirect')(
-    { preventDefault: () => (prevented = true) },
-    'mailto:user@example.com'
-  );
+  listeners.get('will-redirect')({ preventDefault: () => (prevented = true) }, 'mailto:user@example.com');
   assert.equal(prevented, true);
   assert.equal(deferred.length, 1);
   deferred.shift()();

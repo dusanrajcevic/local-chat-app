@@ -54,10 +54,7 @@ test('message navigator keeps tightly packed collapsed markers and removes the m
     /\.message-nav-item\s*\{[^}]*height:\s*6px;[^}]*min-height:\s*6px;[^}]*flex:\s*0 0 6px;[^}]*padding:\s*0;/s
   );
   assert.match(styles, /\.message-nav-preview\s*\{[^}]*display:\s*none;/s);
-  assert.match(
-    styles,
-    /\.message-nav-line\s*\{[^}]*width:\s*17px;[^}]*height:\s*1\.5px;[^}]*flex:\s*0 0 17px;/s
-  );
+  assert.match(styles, /\.message-nav-line\s*\{[^}]*width:\s*17px;[^}]*height:\s*1\.5px;[^}]*flex:\s*0 0 17px;/s);
   assert.match(
     styles,
     /\.message-navigator:hover \.message-nav-line,[\s\S]*?\.message-navigator:focus-within \.message-nav-line\s*\{[^}]*display:\s*none;/

@@ -4,15 +4,8 @@
   "version": "0.2.0",
   "description": "Adds Save/New session/Load past conversation buttons and auto-syncs prompts plus completed AI responses to your local chat app.",
   "author": "Dusan Rajcevic",
-  "permissions": [
-    "storage",
-    "clipboardRead",
-    "clipboardWrite"
-  ],
-  "host_permissions": [
-    "http://localhost/*",
-    "http://127.0.0.1/*"
-  ],
+  "permissions": ["storage", "clipboardRead", "clipboardWrite"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -40,9 +33,7 @@
         "content-runtime.js",
         "content.js"
       ],
-      "css": [
-        "content.css"
-      ],
+      "css": ["content.css"],
       "run_at": "document_idle"
     }
   ],

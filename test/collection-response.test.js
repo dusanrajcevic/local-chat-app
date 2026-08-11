@@ -26,14 +26,14 @@ test('pagination normalization preserves legacy unlimited session listings', () 
   assert.equal(normalizeOffset('-1'), 0);
   assert.equal(normalizePageLimit('9999', { max: 500 }), 500);
 
-  assert.deepEqual(
-    paginationFromQuery({}, { fallback: 100, max: 1000, unlimitedWhenOmitted: true }),
-    { offset: 0, limit: null }
-  );
-  assert.deepEqual(
-    paginationFromQuery({ offset: '20' }, { fallback: 100, max: 1000, unlimitedWhenOmitted: true }),
-    { offset: 20, limit: 100 }
-  );
+  assert.deepEqual(paginationFromQuery({}, { fallback: 100, max: 1000, unlimitedWhenOmitted: true }), {
+    offset: 0,
+    limit: null
+  });
+  assert.deepEqual(paginationFromQuery({ offset: '20' }, { fallback: 100, max: 1000, unlimitedWhenOmitted: true }), {
+    offset: 20,
+    limit: 100
+  });
 });
 
 test('pagination slices collections and emits navigation headers without changing the body shape', () => {

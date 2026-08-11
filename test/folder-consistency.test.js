@@ -9,11 +9,7 @@ process.env.LOCAL_CHAT_DATA_DIR = tempDataDir;
 
 const { FOLDERS_FILE } = require('../src/server/config');
 const { ensureBaseFiles, writeJson } = require('../src/server/storage/file-store');
-const {
-  createFolder,
-  deleteFolderAndUnpinSessions,
-  readFolders
-} = require('../src/server/storage/folder-store');
+const { createFolder, deleteFolderAndUnpinSessions, readFolders } = require('../src/server/storage/folder-store');
 const { readFoldersDocument } = require('../src/server/storage/record-validation');
 const {
   createSession,
@@ -48,7 +44,10 @@ test('deleting a folder clears matching references from trashed sessions', async
   await moveSessionToTrash(session.id);
   await deleteFolderAndUnpinSessions(folder.id);
 
-  assert.equal((await readFolders()).some((item) => item.id === folder.id), false);
+  assert.equal(
+    (await readFolders()).some((item) => item.id === folder.id),
+    false
+  );
   const trashed = (await listTrash()).find((item) => item.id === session.id);
   assert.ok(trashed);
   assert.equal(trashed.pinnedFolderId, null);
@@ -88,7 +87,10 @@ test('concurrent folder deletion and restore cannot leave a dangling folder refe
 
     await Promise.all([deleteFolderAndUnpinSessions(folder.id), restoreSessionFromTrash(session.id)]);
 
-    assert.equal((await readFolders()).some((item) => item.id === folder.id), false);
+    assert.equal(
+      (await readFolders()).some((item) => item.id === folder.id),
+      false
+    );
     assert.equal((await readSession(session.id)).pinnedFolderId, null);
   }
 });

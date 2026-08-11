@@ -23,10 +23,7 @@ function externalUrlToOpen(value) {
   const parsed = parseUrl(value);
   if (!parsed || !ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) return null;
 
-  if (
-    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-    (parsed.username || parsed.password)
-  ) {
+  if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && (parsed.username || parsed.password)) {
     return null;
   }
 

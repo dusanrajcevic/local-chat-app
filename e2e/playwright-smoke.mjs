@@ -159,16 +159,10 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
       ]
     );
     await renderedMessage.hover();
-    assert.equal(
-      await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity),
-      '1'
-    );
+    assert.equal(await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity), '1');
     const footerCopyButton = footerMessageActions.locator('[data-copy-message]');
     await footerMessageActions.hover();
-    assert.equal(
-      await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity),
-      '1'
-    );
+    assert.equal(await footerMessageActions.evaluate((element) => getComputedStyle(element).opacity), '1');
     await footerCopyButton.hover();
     const copyTooltip = await footerCopyButton.evaluate((button) => ({
       content: getComputedStyle(button, '::after').content,
@@ -192,35 +186,24 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     assert.equal(collapsedMarker.width, 17);
     assert.equal(collapsedMarker.height, 1.5);
     assert.equal(collapsedMarker.opacity, '1');
-    assert.equal(
-      await messageNavigator.locator('.message-nav-preview').textContent(),
-      'Hello from Playwright smoke'
-    );
+    assert.equal(await messageNavigator.locator('.message-nav-preview').textContent(), 'Hello from Playwright smoke');
     await messageNavigator.hover();
     await page.waitForTimeout(200);
-    const expandedNavigatorWidth = await messageNavigator.evaluate(
-      (element) => element.getBoundingClientRect().width
-    );
-    assert.ok(
-      expandedNavigatorWidth > 200,
-      `Message navigator did not expand: ${expandedNavigatorWidth}px`
-    );
+    const expandedNavigatorWidth = await messageNavigator.evaluate((element) => element.getBoundingClientRect().width);
+    assert.ok(expandedNavigatorWidth > 200, `Message navigator did not expand: ${expandedNavigatorWidth}px`);
     const expandedMarkerDisplay = await messageNavigator
       .locator('.message-nav-line')
       .evaluate((line) => getComputedStyle(line).display);
     assert.equal(expandedMarkerDisplay, 'none');
-    const expandedPreview = await messageNavigator
-      .locator('.message-nav-preview')
-      .evaluate((preview) => {
-        const style = getComputedStyle(preview);
-        const item = preview.closest('.message-nav-item');
-        return {
-          display: style.display,
-          previewLeft: preview.getBoundingClientRect().left,
-          itemLeft:
-            item.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(item).paddingLeft)
-        };
-      });
+    const expandedPreview = await messageNavigator.locator('.message-nav-preview').evaluate((preview) => {
+      const style = getComputedStyle(preview);
+      const item = preview.closest('.message-nav-item');
+      return {
+        display: style.display,
+        previewLeft: preview.getBoundingClientRect().left,
+        itemLeft: item.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(item).paddingLeft)
+      };
+    });
     assert.equal(expandedPreview.display, 'block');
     assert.ok(
       Math.abs(expandedPreview.previewLeft - expandedPreview.itemLeft) < 1,

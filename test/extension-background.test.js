@@ -114,8 +114,6 @@ test('fetchJson uses stored settings and surfaces API errors', async () => {
   await assert.rejects(() => background.fetchJson('http://localhost:3000/api/fail'), /Nope/);
 });
 
-
-
 test('fetchJson revalidates cached GETs and clears them after mutations', async () => {
   installChromeStorage({ localAppUrl: 'http://localhost:3000', localChatToken: 'token-cache' });
   const seen = [];
@@ -426,10 +424,7 @@ test('pairLocalChatApp exchanges a short-lived code and stores the returned toke
   assert.equal(calls.length, 1);
   assert.equal(new URL(calls[0].url).pathname, '/api/extension/pair');
   assert.equal(calls[0].options.headers['X-Local-Chat-Token'], undefined);
-  assert.equal(
-    calls[0].options.headers['X-Local-Chat-Extension-Id'],
-    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-  );
+  assert.equal(calls[0].options.headers['X-Local-Chat-Extension-Id'], 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
 });
 
 test('storage initialization migrates non-sensitive preferences and restricts local storage access', async () => {
@@ -463,10 +458,7 @@ test('authenticated fetches refuse remote destinations before credentials can be
     return jsonResponse({ ok: true });
   };
 
-  await assert.rejects(
-    () => background.fetchJson('https://attacker.example/api/health'),
-    /refusing|loopback/i
-  );
+  await assert.rejects(() => background.fetchJson('https://attacker.example/api/health'), /refusing|loopback/i);
   assert.equal(fetchCalls, 0);
 });
 
@@ -481,10 +473,7 @@ test('paired credentials are bound to the local API origin used during pairing',
     return jsonResponse({ ok: true });
   };
 
-  await assert.rejects(
-    () => background.fetchJson('http://127.0.0.1:4321/api/health'),
-    /url changed|pair/i
-  );
+  await assert.rejects(() => background.fetchJson('http://127.0.0.1:4321/api/health'), /url changed|pair/i);
   assert.equal(fetchCalls, 0);
 });
 
@@ -495,10 +484,7 @@ test('authenticated fetches require pairing and enforce a request timeout', asyn
     fetchCalls += 1;
     return jsonResponse({ ok: true });
   };
-  await assert.rejects(
-    () => background.fetchJson('http://localhost:3000/api/health'),
-    /not paired/i
-  );
+  await assert.rejects(() => background.fetchJson('http://localhost:3000/api/health'), /not paired/i);
   assert.equal(fetchCalls, 0);
 
   background.resetStorageSecurityForTests();

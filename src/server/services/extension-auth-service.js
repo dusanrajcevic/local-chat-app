@@ -23,7 +23,9 @@ function extensionIdFromOrigin(origin) {
 }
 
 function normalizeExtensionId(value) {
-  const extensionId = String(value || '').trim().toLowerCase();
+  const extensionId = String(value || '')
+    .trim()
+    .toLowerCase();
   return EXTENSION_ID_PATTERN.test(extensionId) ? extensionId : null;
 }
 
@@ -41,7 +43,10 @@ function timingSafeStringEqual(left, right) {
 }
 
 function hashExtensionToken(token) {
-  const digest = nodeCrypto.createHash('sha256').update(String(token || ''), 'utf8').digest('hex');
+  const digest = nodeCrypto
+    .createHash('sha256')
+    .update(String(token || ''), 'utf8')
+    .digest('hex');
   return `sha256:${digest}`;
 }
 
@@ -105,7 +110,9 @@ function createPairingCode(now = Date.now()) {
 }
 
 function assertPairingCode(code, now = Date.now()) {
-  const normalizedCode = String(code || '').trim().toUpperCase();
+  const normalizedCode = String(code || '')
+    .trim()
+    .toUpperCase();
   if (!PAIRING_CODE_PATTERN.test(normalizedCode)) {
     throw appError(400, 'Pairing code is invalid.');
   }

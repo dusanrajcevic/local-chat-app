@@ -6,7 +6,9 @@ const { pathToFileURL } = require('node:url');
 let searchModule;
 
 before(async () => {
-  searchModule = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'app', 'controllers', 'search.mjs')).href);
+  searchModule = await import(
+    pathToFileURL(path.join(__dirname, '..', 'public', 'app', 'controllers', 'search.mjs')).href
+  );
 });
 
 test('search highlighting preserves text while marking case-insensitive matches', () => {

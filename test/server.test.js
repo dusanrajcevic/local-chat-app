@@ -577,8 +577,6 @@ test('search, recent, and export endpoints expose useful summaries without trash
   assert.match(renderedByHelper, /Helper message/);
 });
 
-
-
 test('session collections support pagination and conditional ETag revalidation', async () => {
   for (let index = 0; index < 3; index += 1) {
     const session = await createSession({ title: `Pagination target ${index}` });

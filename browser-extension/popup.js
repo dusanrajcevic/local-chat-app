@@ -21,13 +21,11 @@ function setStatus(message, isError = false) {
   statusEl.setAttribute('aria-live', isError ? 'assertive' : 'polite');
 }
 
-
 async function sendRuntimeMessage(message) {
   const response = await chrome.runtime.sendMessage(message);
   if (!response?.ok) throw new Error(response?.error || 'Extension request failed.');
   return response;
 }
-
 
 function appendTextElement(parent, tagName, text, className = '') {
   const element = document.createElement(tagName);
@@ -46,9 +44,7 @@ function diagnosticStatusLabel(status) {
 
 function selectorHitSummary(groups = {}) {
   return Object.entries(groups).flatMap(([group, entries]) =>
-    (entries || [])
-      .filter((entry) => entry.count > 0)
-      .map((entry) => `${group}: ${entry.selector} (${entry.count})`)
+    (entries || []).filter((entry) => entry.count > 0).map((entry) => `${group}: ${entry.selector} (${entry.count})`)
   );
 }
 
@@ -120,7 +116,9 @@ async function save() {
 async function pair() {
   try {
     const localAppUrl = await save();
-    const code = String(pairingCodeInput.value || '').trim().toUpperCase();
+    const code = String(pairingCodeInput.value || '')
+      .trim()
+      .toUpperCase();
     const response = await sendRuntimeMessage({
       type: 'PAIR_LOCAL_CHAT_APP',
       payload: { localAppUrl, code }

@@ -60,7 +60,6 @@ Collection pagination is offset-based. `limit` is clamped to 500 for recent/sear
 
 Session/recent/search responses include an `ETag` and `Cache-Control: private, no-cache, must-revalidate`. Clients may send `If-None-Match`; when the derived session index revision and request window are unchanged, the server returns `304 Not Modified` before doing transcript-level search work. Browser-extension CORS explicitly allows `If-None-Match` and exposes the pagination/ETag response headers.
 
-
 ## Trash
 
 - `GET /api/trash`

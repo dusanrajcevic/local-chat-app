@@ -24,9 +24,7 @@ export function findPackagedElectronExecutable(outputDir, { platform = process.p
       const macOsDir = path.join(appBundle, 'Contents', 'MacOS');
       if (!fs.existsSync(macOsDir)) continue;
 
-      const executable = fs
-        .readdirSync(macOsDir, { withFileTypes: true })
-        .find((entry) => entry.isFile());
+      const executable = fs.readdirSync(macOsDir, { withFileTypes: true }).find((entry) => entry.isFile());
       if (executable) return path.join(macOsDir, executable.name);
     }
   }
@@ -37,7 +35,9 @@ export function findPackagedElectronExecutable(outputDir, { platform = process.p
         .readdirSync(directory, { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.exe'))
         .map((entry) => path.join(directory, entry.name));
-      const preferred = executables.find((entry) => !/^(chrome|elevate|notification_helper)/i.test(path.basename(entry)));
+      const preferred = executables.find(
+        (entry) => !/^(chrome|elevate|notification_helper)/i.test(path.basename(entry))
+      );
       if (preferred) return preferred;
     }
   }
@@ -71,12 +71,7 @@ export function electronBuilderCommand({ outputDir, platform = process.platform 
 
   return {
     command: platform === 'win32' ? 'npm.cmd' : 'npm',
-    args: [
-      'run',
-      'build:desktop:dir',
-      '--',
-      `--config.directories.output=${outputDir}`
-    ]
+    args: ['run', 'build:desktop:dir', '--', `--config.directories.output=${outputDir}`]
   };
 }
 

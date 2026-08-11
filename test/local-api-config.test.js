@@ -32,16 +32,7 @@ test('local API requests cannot escape the configured origin or API prefix', () 
     normalizeApiUrl('http://localhost:3000/api/health', 'http://localhost:3000'),
     'http://localhost:3000/api/health'
   );
-  assert.throws(
-    () => normalizeApiUrl('http://127.0.0.1:3000/api/health', 'http://localhost:3000'),
-    /refusing/i
-  );
-  assert.throws(
-    () => normalizeApiUrl('http://localhost:3000/index.html', 'http://localhost:3000'),
-    /refusing/i
-  );
-  assert.throws(
-    () => normalizeApiUrl('https://attacker.example/api/health', 'http://localhost:3000'),
-    /refusing/i
-  );
+  assert.throws(() => normalizeApiUrl('http://127.0.0.1:3000/api/health', 'http://localhost:3000'), /refusing/i);
+  assert.throws(() => normalizeApiUrl('http://localhost:3000/index.html', 'http://localhost:3000'), /refusing/i);
+  assert.throws(() => normalizeApiUrl('https://attacker.example/api/health', 'http://localhost:3000'), /refusing/i);
 });

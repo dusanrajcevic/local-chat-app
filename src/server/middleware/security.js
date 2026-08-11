@@ -143,14 +143,7 @@ function corsOptionsDelegate(req, callback) {
       'Idempotency-Key',
       'If-None-Match'
     ],
-    exposedHeaders: [
-      'ETag',
-      'X-Total-Count',
-      'X-Page-Offset',
-      'X-Page-Limit',
-      'X-Has-More',
-      'Link'
-    ],
+    exposedHeaders: ['ETag', 'X-Total-Count', 'X-Page-Offset', 'X-Page-Limit', 'X-Has-More', 'Link'],
     maxAge: 600
   });
 }

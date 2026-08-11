@@ -138,8 +138,6 @@ test('short substring searches preserve exact semantics by falling back to canon
   assert.equal(after.sessionReads - before.sessionReads, archiveSize);
 });
 
-
-
 test('session index revision changes when canonical session data changes', async () => {
   const before = await sessionIndexRevision();
   await writeSession(31, ' revision change');

@@ -45,7 +45,9 @@ test('configured extension token is reported by health endpoint', async () => {
 });
 
 test('Chrome-extension API requests require a valid pairing or configured local token', async () => {
-  const missing = await json('/api/health', { headers: { Origin: extensionOrigin, 'X-Local-Chat-Extension-Id': extensionId } });
+  const missing = await json('/api/health', {
+    headers: { Origin: extensionOrigin, 'X-Local-Chat-Extension-Id': extensionId }
+  });
   assert.equal(missing.res.status, 401);
   assert.match(missing.data.error, /pair/i);
 

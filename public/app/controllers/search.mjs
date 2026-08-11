@@ -41,14 +41,7 @@ function highlightSegments(value, query) {
   return segments;
 }
 
-function createSearchController({
-  api,
-  el,
-  modal,
-  openSession,
-  doc = document,
-  win = window
-}) {
+function createSearchController({ api, el, modal, openSession, doc = document, win = window }) {
   let searchTimer = null;
   let requestVersion = 0;
 
