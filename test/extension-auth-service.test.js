@@ -20,7 +20,7 @@ const {
 } = require('../src/server/services/extension-auth-service');
 
 const extensionId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-const origin = `chrome-extension://${extensionId}`;
+const extensionOrigin = `chrome-extension://${extensionId}`;
 
 test.before(async () => {
   await ensureBaseFiles();
@@ -34,7 +34,7 @@ test.after(async () => {
 test('pairing stores only a token hash and authorizes the matching extension', async () => {
   const pairingCode = createPairingCode();
   const paired = await pairExtension({
-    origin,
+    origin: extensionOrigin,
     extensionIdHeader: extensionId,
     code: pairingCode.code
   });
@@ -42,11 +42,11 @@ test('pairing stores only a token hash and authorizes the matching extension', a
   assert.equal(paired.extensionId, extensionId);
   assert.ok(paired.token.length >= 40);
   assert.equal(
-    await authorizeExtension({ origin, extensionIdHeader: extensionId, token: paired.token }),
+    await authorizeExtension({ origin: extensionOrigin, extensionIdHeader: extensionId, token: paired.token }),
     true
   );
   assert.equal(
-    await authorizeExtension({ origin, extensionIdHeader: extensionId, token: 'wrong-token' }),
+    await authorizeExtension({ origin: extensionOrigin, extensionIdHeader: extensionId, token: 'wrong-token' }),
     false
   );
 
@@ -61,7 +61,7 @@ test('pairing rejects extension identity mismatches without consuming the code',
   await assert.rejects(
     () =>
       pairExtension({
-        origin,
+        origin: extensionOrigin,
         extensionIdHeader: 'cccccccccccccccccccccccccccccccc',
         code: pairingCode.code
       }),
@@ -69,7 +69,7 @@ test('pairing rejects extension identity mismatches without consuming the code',
   );
 
   const paired = await pairExtension({
-    origin,
+    origin: extensionOrigin,
     extensionIdHeader: extensionId,
     code: pairingCode.code
   });
@@ -78,9 +78,9 @@ test('pairing rejects extension identity mismatches without consuming the code',
 
 test('pairing codes are single-use and stored auth records are schema checked', async () => {
   const pairingCode = createPairingCode();
-  await pairExtension({ origin, extensionIdHeader: extensionId, code: pairingCode.code });
+  await pairExtension({ origin: extensionOrigin, extensionIdHeader: extensionId, code: pairingCode.code });
   await assert.rejects(
-    () => pairExtension({ origin, extensionIdHeader: extensionId, code: pairingCode.code }),
+    () => pairExtension({ origin: extensionOrigin, extensionIdHeader: extensionId, code: pairingCode.code }),
     /expired/i
   );
 

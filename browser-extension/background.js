@@ -2,7 +2,7 @@ let localApiConfig;
 if (typeof module !== 'undefined' && module.exports) {
   localApiConfig = require('./local-api');
 } else {
-  importScripts('local-api.js');
+  globalThis.importScripts('local-api.js');
   localApiConfig = globalThis.LocalChatApiConfig;
 }
 
@@ -145,7 +145,9 @@ async function fetchJsonResult(url, options = {}, fetchOptions = {}) {
     }
     return { data, metadata, status: res.status };
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('Local Chat App request timed out.');
+    if (error?.name === 'AbortError') {
+      throw new Error('Local Chat App request timed out.', { cause: error });
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -158,7 +160,9 @@ async function fetchJson(url, options = {}, fetchOptions = {}) {
 
 async function pairLocalChatApp(payload = {}) {
   await initializeStorageSecurity();
-  const code = String(payload.code || '').trim().toUpperCase();
+  const code = String(payload.code || '')
+    .trim()
+    .toUpperCase();
   if (!/^[A-F0-9]{12}$/.test(code)) throw new Error('Enter the 12-character pairing code from Local Chat App.');
 
   const currentPreferences = await preferenceStorage().get({ localAppUrl: DEFAULT_LOCAL_APP_URL });

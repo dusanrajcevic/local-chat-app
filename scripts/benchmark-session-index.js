@@ -1,7 +1,7 @@
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const { performance } = require('perf_hooks');
+const { performance: nodePerformance } = require('node:perf_hooks');
 
 const sessionCount = Math.max(10, Number(process.argv[2]) || 1000);
 const tempRoot = path.join(os.tmpdir(), `local-chat-index-benchmark-${process.pid}-${Date.now()}`);
@@ -18,9 +18,13 @@ function id(prefix, index) {
 }
 
 async function timed(label, task) {
-  const start = performance.now();
+  const start = nodePerformance.now();
   const result = await task();
-  return { label, durationMs: Number((performance.now() - start).toFixed(2)), result };
+  return {
+    label,
+    durationMs: Number((nodePerformance.now() - start).toFixed(2)),
+    result
+  };
 }
 
 async function main() {
