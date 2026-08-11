@@ -8,7 +8,7 @@ Local Chat App is intended for a single user on their own machine.
 - The API rejects requests with untrusted browser `Origin` headers.
 - CORS only reflects same-origin requests, allowed Chrome extension origins, or explicit `LOCAL_CHAT_ALLOWED_ORIGINS` values.
 - Route IDs are validated before any file lookup.
-- JSON writes use temp-file-and-rename atomic writes, private file modes on POSIX systems, and symlink-resistant reads.
+- JSON writes use temp-file-and-rename atomic writes, private file modes on POSIX systems, and symlink-resistant reads; symlinked metadata/session files and a symlinked data directory are rejected rather than followed.
 - Read-modify-write operations use in-process locks; multi-file trash/restore/folder-delete workflows use a recovery journal.
 - Browser-extension API access requires pairing or the explicit server-side compatibility token, and pairing tokens are bound to the extension ID.
 - Extension auto-save can send idempotency keys to avoid duplicate message writes.

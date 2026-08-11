@@ -8,10 +8,12 @@
 
 - `app.js`: Express app factory and middleware/route registration;
 - `config.js`: process-env derived configuration, paths, and ID patterns;
-- `middleware/security.js`: security headers, origin checks, CORS policy, and paired-extension authorization;
+- `middleware/security.js`: Host/origin checks, CORS policy, and paired-extension authorization;
+- `middleware/security-headers.js`: Content Security Policy, Permissions Policy, frame/referrer, and MIME-sniffing headers;
+- `http/collection-response.js`: offset pagination metadata, `Link` headers, and ETag/conditional-response helpers;
 - `routes/`: route-level HTTP wiring for health, extension pairing, active-session, folders, sessions/messages/search, and trash;
 - `services/`: session orchestration, extension pairing/authentication, search, export formatting, and summary formatting;
-- `storage/`: JSON-file reads/writes, atomic writes, file locks, recovery journaling, and folder/state/session queries;
+- `storage/`: symlink-resistant JSON reads/writes, atomic writes, file locks, mutation recovery, folder/state/session queries, storage-change events, and the derived session index;
 - `validation.js`, `ids.js`, and `errors.js`: shared validation, ID/date helpers, and error handling.
 
 The API exposes endpoints for folders, sessions, messages, trash, search, export, and active-session state.
@@ -39,15 +41,16 @@ Current hardening includes:
 - `render.mjs`: folder/session/trash/message rendering and sidebar state;
 - `message-navigator.mjs`: right-side user-message markers, hover/focus previews, active-turn tracking, and jump navigation;
 - `export.mjs`: chat export text and continuation-context wrapping;
-- `modals.mjs`: edit-message and text-prompt modal state;
-- `clipboard.mjs`: copy helpers, selected-message Markdown extraction, and full-chat copy;
+- `modals.mjs`: shared edit/prompt/search dialog state, focus containment, and focus restoration;
+- `clipboard.mjs`: chat/message Markdown copy helpers and fenced-code copying;
 - `controllers.mjs`: small controller composition root;
 - `controllers/sessions.mjs`: session open/create/rename/pin/trash/restore workflows;
 - `controllers/folders.mjs`: folder create/rename/delete/select and trash-section toggle behavior;
 - `controllers/messages.mjs`: message create/edit/delete and edit-modal coordination;
 - `controllers/active-session.mjs`: local/extension active-session persistence and external sync;
+- `controllers/search.mjs`: recent-chat loading, debounced indexed search, highlighted snippets, and result opening;
 - `events.mjs`: event delegation and keyboard wiring;
-- `markdown.mjs`: escaping, URL sanitization, tables, lists, code blocks, and inline formatting.
+- `markdown.mjs`: escaping, URL sanitization, tables, lists, language-aware fenced-code headers/copy controls, and inline formatting.
 
 `public/index.html` loads only `<script type="module" src="./app/main.mjs"></script>`, so browser execution no longer depends on global `window.LocalChat*` script ordering.
 
@@ -79,6 +82,7 @@ The content-script runtime remains the largest maintenance risk because provider
 
 ```text
 data/
+  .session-index.json     # derived summary/Bloom search index; safe to delete and rebuild
   .mutation-journal.json  # present only while a recoverable multi-file mutation is in progress
   extension-auth.json     # paired extension IDs and SHA-256 token hashes
   app-state.json
@@ -93,13 +97,13 @@ The format is intentionally inspectable and portable. Every chat file contains m
 
 Multi-file mutations are serialized through a process-wide coordinator. Before changing more than one storage record, the server writes a small intent journal and flushes atomic file/directory metadata where supported. If the process stops after only part of a trash, restore, folder-delete, or permanent-delete workflow, startup replays the idempotent operation and removes the journal only after the intended state is complete. Corrupted journal data is rejected rather than discarded.
 
-## Recommended next refactor
+## Scaling and future directions
 
 The largest structural blockers have now been reduced: the server has focused route/service/storage modules, the browser content script is split by responsibility, and the web UI uses native ES modules without global script ordering. The controller layer has also been split by domain under `public/app/controllers/`, while `controllers.mjs` remains a small composition root.
 
 Large-archive listing and search use the derived session index, including dirty-entry invalidation, Bloom-filter candidate pruning, offset pagination, and revision-based conditional responses. `/api/sessions` preserves its legacy unpaginated body when no page parameters are supplied; newer callers can request bounded windows without changing the array response type. Search walks sorted Bloom candidates and stops after the requested exact-match page plus one look-ahead result. Session-index revisions back process-local ETags, so unchanged extension/web refreshes can return `304` without repeating transcript-level search work. If archive sizes eventually justify a larger migration, SQLite/FTS can still be evaluated as an optional storage backend while retaining JSON import/export.
 
-The current test suite covers large-archive index invalidation/search pruning, pagination/ETag revalidation and client cache invalidation, server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures plus mutation-resistance and diagnostics for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, runtime behavior for auto-send toggles, local-app availability, Save local delegation, dependency-free Electron navigation/security/shutdown helpers, a packaged-Electron launch smoke test, web UI accessibility contracts, modal focus behavior, and browser-level accessibility assertions.
+The current test suite covers large-archive index invalidation/search pruning, pagination/ETag revalidation and client cache invalidation, server API/storage behavior, crash-recovery injection for multi-file mutations, security boundaries, concurrent writes, idempotency, markdown rendering and code-block copying, the chat-search modal, message navigation and per-message hover actions, web UI API/render/controller/event seams, a browser-level jsdom flow through the real web UI runtime, native ES module entrypoint loading, extension background API calls, provider-adapter resolution, content-script DOM fixtures plus mutation-resistance and diagnostics for provider extraction/injection, manual clipboard/message extraction, autosave idempotency/dedupe behavior, sidebar fixture behavior, composer/load-past modal behavior, runtime behavior for auto-send toggles, local-app availability, Save local delegation, dependency-free Electron navigation/security/shutdown helpers, a packaged-Electron launch smoke test, web UI accessibility contracts, modal focus behavior, and browser-level accessibility assertions.
 
 ## Quality gates
 
@@ -111,4 +115,4 @@ The repo now has public-portfolio quality gates:
 - `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium, including accessible-name/ARIA checks and modal focus containment/restoration.
 - The required smoke test fails when Chromium is unavailable and also rejects uncaught page errors, browser `console.error` messages, and failed network requests.
 - `npm run test:smoke:optional` is available only for lightweight local development where a missing browser may be skipped.
-- CI installs Chromium with Playwright before running `npm run verify` and never uses the optional command.
+- CI installs Chromium with Playwright and runs `xvfb-run -a npm run verify` on Linux so the packaged Electron smoke test has a display; it never uses the optional smoke command.

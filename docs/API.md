@@ -32,6 +32,7 @@ The browser extension uses this to determine where manual saves should go when n
 - `POST /api/sessions`
 - `GET /api/sessions/:sessionId`
 - `PATCH /api/sessions/:sessionId`
+- `PATCH /api/sessions/:sessionId/bot-name` with `{ "aiName": "..." }`
 - `DELETE /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/export`
 - `PATCH /api/sessions/:sessionId/pin`

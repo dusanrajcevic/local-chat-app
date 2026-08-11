@@ -52,7 +52,8 @@ That command runs:
 - Prettier format checks
 - recursive JavaScript syntax checks
 - Node/jsdom tests
-- the Playwright smoke test against a live local server
+- the required Playwright smoke test against a live local server
+- the packaged-Electron launch smoke test built with `electron-builder --dir`
 
 Useful targeted commands:
 
@@ -127,10 +128,14 @@ Keep domain logic split by responsibility:
 
 - `api.mjs` for HTTP calls
 - `state.mjs` for runtime state
-- `render.mjs` for DOM rendering
-- `events.mjs` for delegated event wiring
-- `controllers/` for folder, session, message, and active-session workflows
-- `markdown.mjs` for markdown rendering and sanitization
+- `render.mjs` for folder/session/trash/message rendering
+- `message-navigator.mjs` for the right-side user-message navigator
+- `modals.mjs` for shared dialog visibility, focus containment, and focus restoration
+- `clipboard.mjs` for message/chat/code copying
+- `events.mjs` for delegated event and keyboard wiring
+- `controllers/` for folder, session, message, active-session, and chat-search workflows
+- `controllers/search.mjs` for recent-chat loading, debounced search, highlighted snippets, and result opening
+- `markdown.mjs` for markdown rendering, sanitization, fenced-code language labels, and code-copy markup
 
 When changing behavior, add or update jsdom tests. For full-flow UI behavior, prefer integration coverage in `test/public-web-flow.test.js`.
 

@@ -24,7 +24,9 @@ npm run build:mac
 npm run build:win
 ```
 
-Artifacts are written to `dist/` and should not be committed.
+Artifacts are written to `dist/` and should not be committed. With the current Electron Builder targets, release builds produce a macOS DMG/ZIP and Windows NSIS/portable executables. Typical filenames are `Local Chat App-<version>-<arch>.dmg`, `Local Chat App Setup <version>.exe`, and `Local Chat App <version>.exe`; unpacked `mac-*`, `win-unpacked/`, and test-only directory builds are intermediate output rather than release assets.
+
+The repository does not configure macOS signing/notarization credentials. Local unsigned builds may trigger a Gatekeeper warning; configure signing/notarization in the release environment before treating that warning as resolved.
 
 ## Security-relevant behavior
 
