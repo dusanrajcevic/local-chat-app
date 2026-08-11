@@ -611,7 +611,7 @@ test('clipboard falls back when Clipboard API write permission is denied', async
   const copiedValues = [];
   harness.dom.window.document.execCommand = (command) => {
     assert.equal(command, 'copy');
-    copiedValues.push(harness.dom.window.document.querySelector('textarea')?.value);
+    copiedValues.push(harness.dom.window.document.querySelector('textarea[readonly]')?.value);
     return true;
   };
 
