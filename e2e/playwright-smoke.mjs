@@ -242,6 +242,7 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
 
     await page.locator('#searchChatsBtn').click();
     await page.locator('#chatSearchInput').waitFor();
+    await page.waitForFunction(() => document.activeElement?.id === 'chatSearchInput');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'chatSearchInput');
     assert.equal(await page.locator('#chatSearchHeading').textContent(), 'Recent chats');
     await page.locator('[data-search-session-id]').filter({ hasText: 'Smoke Session' }).waitFor();
