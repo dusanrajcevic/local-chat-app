@@ -251,7 +251,9 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
     assert.match(await searchResult.locator('.chat-search-result-preview').textContent(), /Playwright smoke/i);
     assert.equal((await searchResult.locator('.chat-search-match').textContent()).toLowerCase(), 'playwright smoke');
     await searchResult.click();
-    await page.locator('#chatSearchModal.hidden').waitFor();
+    const searchModal = page.locator('#chatSearchModal');
+    await searchModal.waitFor({ state: 'hidden' });
+    assert.equal(await searchModal.getAttribute('aria-hidden'), 'true');
     assert.equal(await page.getByRole('heading', { name: 'Smoke Session' }).count(), 1);
 
     await page.locator('#renameSessionBtn').click();
