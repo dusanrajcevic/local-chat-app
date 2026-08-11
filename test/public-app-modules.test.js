@@ -146,7 +146,8 @@ function createHarness({ routes = {} } = {}) {
     storage,
     win: dom.window,
     doc: dom.window.document,
-    announceStatus
+    announceStatus,
+    copyTextToClipboard: clipboard.copyTextToClipboard
   });
 
   return { dom, storage, calls, state, el, api, view, modal, clipboard, controllers, messageNavigator };
@@ -605,6 +606,35 @@ test('message controller honors a manual sender selection before continuing alte
   assert.equal(harness.el.isMeCheckbox.checked, false);
 });
 
+test('clipboard falls back when Clipboard API write permission is denied', async () => {
+  const harness = createHarness();
+  const copiedValues = [];
+  harness.dom.window.document.execCommand = (command) => {
+    assert.equal(command, 'copy');
+    copiedValues.push(harness.dom.window.document.querySelector('textarea')?.value);
+    return true;
+  };
+
+  const deniedClipboard = clipboardModule.createClipboardController({
+    state: harness.state,
+    el: harness.el,
+    doc: harness.dom.window.document,
+    win: harness.dom.window,
+    navigatorRef: {
+      clipboard: {
+        writeText: async () => {
+          throw new harness.dom.window.DOMException('Write permission denied.', 'NotAllowedError');
+        }
+      }
+    },
+    exportService: exportModule,
+    getBotName: stateModule.getBotName
+  });
+
+  await deniedClipboard.copyTextToClipboard('ABCDEF123456');
+  assert.deepEqual(copiedValues, ['ABCDEF123456']);
+});
+
 test('extension pairing code controller renders a short-lived code in the local app', async () => {
   const harness = createHarness({
     routes: {
@@ -619,6 +649,10 @@ test('extension pairing code controller renders a short-lived code in the local 
   assert.equal(harness.el.extensionPairingCode.textContent, 'ABCDEF123456');
   assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'false');
   assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), true);
+
+  assert.equal(await harness.controllers.copyExtensionPairingCode(), true);
+  assert.equal(harness.clipboard.lastText, 'ABCDEF123456');
+  assert.equal(harness.el.appStatus.textContent, 'Pairing code copied to clipboard.');
 
   harness.controllers.closeExtensionPairing();
   assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'true');

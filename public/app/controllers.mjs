@@ -14,7 +14,8 @@ function createControllers({
   storage,
   win = window,
   doc = document,
-  announceStatus = () => {}
+  announceStatus = () => {},
+  copyTextToClipboard
 }) {
   const alertUser = win.alert?.bind(win) || (typeof alert !== 'undefined' ? alert : () => {});
   const confirmUser = win.confirm?.bind(win) || (typeof confirm !== 'undefined' ? confirm : () => true);
@@ -114,8 +115,10 @@ function createControllers({
   async function copyExtensionPairingCode() {
     const code = String(el.extensionPairingCode.textContent || '').trim();
     if (!code) return false;
-    if (!win.navigator?.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
-    await win.navigator.clipboard.writeText(code);
+    if (typeof copyTextToClipboard !== 'function') {
+      throw new Error('Clipboard access is unavailable.');
+    }
+    await copyTextToClipboard(code);
     announceStatus('Pairing code copied to clipboard.');
     return true;
   }

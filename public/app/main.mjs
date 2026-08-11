@@ -72,7 +72,8 @@ export function createRuntime({
     storage,
     win,
     doc,
-    announceStatus
+    announceStatus,
+    copyTextToClipboard: clipboard.copyTextToClipboard
   });
 
   wireEvents({ state, el, view, modal, controllers, clipboard, doc });
