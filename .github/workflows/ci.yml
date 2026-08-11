@@ -17,4 +17,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run verify
+      - name: Verify
+        run: xvfb-run -a npm run verify
