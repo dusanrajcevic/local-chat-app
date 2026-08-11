@@ -73,6 +73,11 @@ async function waitForOpacity(locator, expected = '1', pseudo = null) {
   );
 }
 
+async function waitForActiveElement(page, expectedId) {
+  await page.waitForFunction((id) => document.activeElement?.id === id, expectedId);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), expectedId);
+}
+
 test('web UI smoke flow works against a live local server', { timeout: 60_000 }, async (t) => {
   const browser = await launchChromium({
     chromium,
@@ -113,16 +118,16 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
 
     await page.locator('#newFolderBtn').click();
     await page.locator('#appPromptInput').waitFor();
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'appPromptInput');
+    await waitForActiveElement(page, 'appPromptInput');
     assert.equal(await page.locator('#appShell').getAttribute('inert'), '');
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'saveAppPromptBtn');
+    await waitForActiveElement(page, 'saveAppPromptBtn');
     await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'appPromptInput');
+    await waitForActiveElement(page, 'appPromptInput');
     await page.locator('#appPromptInput').fill('Smoke Folder');
     await page.locator('#saveAppPromptBtn').click();
     await page.locator('#folderList').getByText('Smoke Folder').waitFor();
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'newFolderBtn');
+    await waitForActiveElement(page, 'newFolderBtn');
     assert.equal(await page.locator('#appShell').getAttribute('inert'), null);
 
     await page.locator('#folderList').getByText('Smoke Folder').click();
@@ -242,8 +247,7 @@ test('web UI smoke flow works against a live local server', { timeout: 60_000 },
 
     await page.locator('#searchChatsBtn').click();
     await page.locator('#chatSearchInput').waitFor();
-    await page.waitForFunction(() => document.activeElement?.id === 'chatSearchInput');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'chatSearchInput');
+    await waitForActiveElement(page, 'chatSearchInput');
     assert.equal(await page.locator('#chatSearchHeading').textContent(), 'Recent chats');
     await page.locator('[data-search-session-id]').filter({ hasText: 'Smoke Session' }).waitFor();
     await page.locator('#chatSearchInput').fill('Playwright smoke');
