@@ -25,8 +25,24 @@ A quick look at the local web app and browser-extension capture flow.
 ![Local Chat App conversation view](docs/screenshots/local.jpg)
 
 <p align="center">
-  <img src="docs/screenshots/create-new-chat.jpg" alt="Create new local chat dialog" width="49%">
-  <img src="docs/screenshots/create-new-folder.jpg" alt="Create new folder dialog" width="49%">
+  <img src="docs/screenshots/local-create-new-chat.jpg" alt="Create new local chat dialog" width="49%">
+  <img src="docs/screenshots/local-create-new-folder.jpg" alt="Create new folder dialog" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/local-rename-chat.jpg" alt="Rename local chat dialog" width="49%">
+  <img src="docs/screenshots/local-set-bot-name.jpg" alt="Set AI bot name dialog" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/local-rename-chat.jpg" alt="Rename local chat dialog" width="49%">
+  <img src="docs/screenshots/local-set-bot-name.jpg" alt="Set AI bot name dialog" width="49%">
+</p>
+
+
+<p align="center">
+  <img src="docs/screenshots/local-search.jpg" alt="Search chats dialog" width="49%">
+  <img src="docs/screenshots/local-sidebar-collapse.jpg" alt="Local Chat Conversation with sidebar collapsed" width="49%">
 </p>
 
 ### Browser extension on supported providers
