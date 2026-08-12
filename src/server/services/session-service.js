@@ -25,7 +25,8 @@ const {
   moveSessionToTrashRecoverably,
   restoreSessionRecoverably,
   permanentlyDeleteTrashRecoverably,
-  upsertCompactedSessionRecoverably
+  upsertCompactedSessionRecoverably,
+  addCompactedSessionMessageRecoverably
 } = require('../storage/mutation-coordinator');
 const { CURRENT_SESSION_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
@@ -165,12 +166,11 @@ function nextMessageSender(messages) {
   return 'me';
 }
 
-async function addMessage(sessionId, body, rawIdempotencyKey) {
-  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+function normalizeMessageRequest(body, rawIdempotencyKey) {
   const text = cleanText(body.text, 'Message text');
   if (!text) throw appError(400, 'Message text is required.');
 
-  const requestedSender = optionalMessageSender(body.sender);
+  const sender = optionalMessageSender(body.sender);
   const source = Object.prototype.hasOwnProperty.call(body, 'source')
     ? cleanName(body.source, 80, 'Message source')
     : '';
@@ -178,43 +178,60 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     ? cleanName(body.providerKey, 80, 'Provider key')
     : '';
   const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey || body.idempotencyKey);
-  const idempotencyPayload = createMessageRequestPayload({
-    text,
-    sender: requestedSender,
-    source,
-    providerKey
-  });
+  const idempotencyPayload = createMessageRequestPayload({ text, sender, source, providerKey });
   const idempotencyFingerprint = idempotencyKey ? fingerprintMessageRequest(idempotencyPayload) : '';
 
+  return {
+    text,
+    sender,
+    source,
+    providerKey,
+    idempotencyKey,
+    idempotencyPayload,
+    idempotencyFingerprint
+  };
+}
+
+async function addMessage(sessionId, body, rawIdempotencyKey) {
+  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+  const request = normalizeMessageRequest(body, rawIdempotencyKey);
   const found = await findSessionFile(safeSessionId);
   if (!found) throw appError(404, 'Session not found.');
 
+  const target = await readFoundSession(found, safeSessionId);
+  if (target.kind === 'compacted') {
+    return addCompactedSessionMessageRecoverably(safeSessionId, request);
+  }
+
   return withLock(found.filePath, async () => {
     const session = await readFoundSession(found, safeSessionId);
-    if (idempotencyKey) {
-      const existing = session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey);
+    if (request.idempotencyKey) {
+      const existing = session.messages.find((item) => item.clientIdempotencyKey === request.idempotencyKey);
       if (existing) {
-        const fingerprintAdded = bindExistingMessageToPayload(existing, idempotencyPayload, idempotencyFingerprint);
+        const fingerprintAdded = bindExistingMessageToPayload(
+          existing,
+          request.idempotencyPayload,
+          request.idempotencyFingerprint
+        );
         if (fingerprintAdded) await writeJson(found.filePath, session);
         return { message: existing, created: false };
       }
     }
 
-    const sender = requestedSender || nextMessageSender(session.messages);
     const now = new Date().toISOString();
     const nextMessage = {
       id: id('msg'),
-      sender,
-      text,
+      sender: request.sender || nextMessageSender(session.messages),
+      text: request.text,
       createdAt: now
     };
 
-    if (idempotencyKey) {
-      nextMessage.clientIdempotencyKey = idempotencyKey;
-      nextMessage.clientIdempotencyFingerprint = idempotencyFingerprint;
+    if (request.idempotencyKey) {
+      nextMessage.clientIdempotencyKey = request.idempotencyKey;
+      nextMessage.clientIdempotencyFingerprint = request.idempotencyFingerprint;
     }
-    if (source) nextMessage.source = source;
-    if (providerKey) nextMessage.providerKey = providerKey;
+    if (request.source) nextMessage.source = request.source;
+    if (request.providerKey) nextMessage.providerKey = request.providerKey;
 
     session.messages.push(nextMessage);
     session.updatedAt = now;

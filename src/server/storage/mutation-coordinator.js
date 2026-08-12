@@ -10,12 +10,15 @@ const {
   FOLDER_ID_PATTERN,
   DATE_DIR_PATTERN,
   COMPACTION_REQUEST_ID_PATTERN,
+  IDEMPOTENCY_KEY_PATTERN,
+  IDEMPOTENCY_FINGERPRINT_PATTERN,
   CURRENT_SCHEMA_VERSION,
   CURRENT_SESSION_SCHEMA_VERSION
 } = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
 const { compactedTitleFor } = require('../services/session-format');
+const { bindExistingMessageToPayload } = require('../services/message-idempotency');
 const {
   withLock,
   writeJson,
@@ -35,7 +38,8 @@ const MUTATION_TYPES = new Set([
   'restore-session',
   'delete-folder',
   'permanent-delete-trash',
-  'upsert-compaction'
+  'upsert-compaction',
+  'mirror-compacted-message'
 ]);
 
 let failureInjectorForTests = null;
@@ -63,6 +67,59 @@ function assertJournalString(value, label, maxLength, { optional = false } = {})
       `${label} must be a non-empty string no longer than ${maxLength} characters`
     );
   }
+}
+
+function assertJournalTimestamp(value, label, { optional = false } = {}) {
+  if (optional && value === undefined) return;
+  if (typeof value !== 'string' || !value.trim() || Number.isNaN(Date.parse(value))) {
+    throw storedDataError('mutation journal', `${label} must be a valid timestamp`);
+  }
+}
+
+function validateMirroredMessageMutationPayload(payload) {
+  assertJournalId(payload.parentSessionId, SESSION_ID_PATTERN, 'payload.parentSessionId');
+  assertJournalId(payload.childSessionId, SESSION_ID_PATTERN, 'payload.childSessionId');
+  if (payload.parentSessionId === payload.childSessionId) {
+    throw storedDataError('mutation journal', 'mirrored message parent and child IDs must be different');
+  }
+  assertJournalId(payload.parentDateDir, DATE_DIR_PATTERN, 'payload.parentDateDir');
+  assertJournalId(payload.childDateDir, DATE_DIR_PATTERN, 'payload.childDateDir');
+  if (typeof payload.mirrorToChild !== 'boolean') {
+    throw storedDataError('mutation journal', 'payload.mirrorToChild must be a boolean');
+  }
+  if (typeof payload.created !== 'boolean') {
+    throw storedDataError('mutation journal', 'payload.created must be a boolean');
+  }
+
+  const message = payload.message;
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    throw storedDataError('mutation journal', 'payload.message must be an object');
+  }
+  assertJournalId(message.id, MESSAGE_ID_PATTERN, 'payload.message.id');
+  if (message.sender !== 'me' && message.sender !== 'bot') {
+    throw storedDataError('mutation journal', 'payload.message.sender must be "me" or "bot"');
+  }
+  assertJournalString(message.text, 'payload.message.text', 2_000_000);
+  assertJournalTimestamp(message.createdAt, 'payload.message.createdAt');
+  assertJournalTimestamp(message.updatedAt, 'payload.message.updatedAt', { optional: true });
+  if (message.clientIdempotencyKey !== undefined) {
+    assertJournalId(message.clientIdempotencyKey, IDEMPOTENCY_KEY_PATTERN, 'payload.message.clientIdempotencyKey');
+  }
+  if (message.clientIdempotencyFingerprint !== undefined) {
+    assertJournalId(
+      message.clientIdempotencyFingerprint,
+      IDEMPOTENCY_FINGERPRINT_PATTERN,
+      'payload.message.clientIdempotencyFingerprint'
+    );
+    if (!message.clientIdempotencyKey) {
+      throw storedDataError(
+        'mutation journal',
+        'payload.message.clientIdempotencyFingerprint requires a clientIdempotencyKey'
+      );
+    }
+  }
+  assertJournalString(message.source, 'payload.message.source', 80, { optional: true });
+  assertJournalString(message.providerKey, 'payload.message.providerKey', 80, { optional: true });
 }
 
 function validateCompactionMutationPayload(payload) {
@@ -118,6 +175,8 @@ function validateMutationJournal(mutation) {
     assertJournalId(mutation.payload.sessionId, SESSION_ID_PATTERN, 'payload.sessionId');
   } else if (mutation.type === 'upsert-compaction') {
     validateCompactionMutationPayload(mutation.payload);
+  } else if (mutation.type === 'mirror-compacted-message') {
+    validateMirroredMessageMutationPayload(mutation.payload);
   }
 
   return mutation;
@@ -307,6 +366,234 @@ async function withOrderedLocks(filePaths, task) {
   return run(0);
 }
 
+function nextMessageSender(messages) {
+  const lastSender = messages.at(-1)?.sender;
+  if (lastSender === 'me') return 'bot';
+  if (lastSender === 'bot') return 'me';
+  return 'me';
+}
+
+function cloneMessage(message) {
+  return { ...message };
+}
+
+function ensureMirroredMessage(session, message) {
+  const idempotencyKey = message.clientIdempotencyKey;
+  const existing = idempotencyKey
+    ? session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey)
+    : session.messages.find((item) => item.id === message.id);
+
+  if (existing) {
+    if (existing.id !== message.id) {
+      throw storedDataError('mutation journal', `message ${message.id} conflicts with an existing mirrored message`);
+    }
+    if (message.clientIdempotencyFingerprint) {
+      if (
+        existing.clientIdempotencyFingerprint &&
+        existing.clientIdempotencyFingerprint !== message.clientIdempotencyFingerprint
+      ) {
+        throw storedDataError('mutation journal', `message ${message.id} has a conflicting idempotency fingerprint`);
+      }
+      if (!existing.clientIdempotencyFingerprint) {
+        existing.clientIdempotencyFingerprint = message.clientIdempotencyFingerprint;
+        return { message: existing, changed: true };
+      }
+    } else if (
+      existing.sender !== message.sender ||
+      existing.text !== message.text ||
+      existing.createdAt !== message.createdAt ||
+      (existing.source || '') !== (message.source || '') ||
+      (existing.providerKey || '') !== (message.providerKey || '')
+    ) {
+      throw storedDataError('mutation journal', `message ${message.id} conflicts with stored message data`);
+    }
+    return { message: existing, changed: false };
+  }
+
+  if (session.messages.some((item) => item.id === message.id)) {
+    throw storedDataError('mutation journal', `message id ${message.id} is already used by another message`);
+  }
+
+  const appended = cloneMessage(message);
+  session.messages.push(appended);
+  return { message: appended, changed: true };
+}
+
+async function applyMirrorCompactedMessage(mutation) {
+  const { parentSessionId, childSessionId, parentDateDir, childDateDir, message, mirrorToChild, created } =
+    mutation.payload;
+  const parentFile = path.join(DATA_DIR, parentDateDir, `${parentSessionId}.json`);
+  const childFile = path.join(DATA_DIR, childDateDir, `${childSessionId}.json`);
+
+  return withOrderedLocks([parentFile, childFile], async () => {
+    const parent = await readSessionIfExists(parentFile, { expectedId: parentSessionId, trashed: false });
+    const child = await readSessionIfExists(childFile, { expectedId: childSessionId, trashed: false });
+    if (!parent || parent.kind !== 'normal' || parent.compactedSessionId !== childSessionId) {
+      throw storedDataError('mutation journal', 'mirrored message parent relationship is inconsistent');
+    }
+    if (!child || child.kind !== 'compacted' || child.parentSessionId !== parentSessionId) {
+      throw storedDataError('mutation journal', 'mirrored message child relationship is inconsistent');
+    }
+
+    const parentResult = ensureMirroredMessage(parent, message);
+    if (parentResult.changed) {
+      parent.updatedAt = mutation.startedAt;
+      await writeJson(parentFile, parent);
+      await checkpoint('mirror-compacted-message:after-parent-write', mutation);
+    }
+
+    let responseMessage = parentResult.message;
+    if (mirrorToChild) {
+      const childResult = ensureMirroredMessage(child, message);
+      responseMessage = childResult.message;
+      if (childResult.changed) {
+        child.updatedAt = mutation.startedAt;
+        await writeJson(childFile, child);
+        await checkpoint('mirror-compacted-message:after-child-write', mutation);
+      }
+    }
+
+    return { message: responseMessage, created };
+  });
+}
+
+function findIdempotentMessage(session, idempotencyKey) {
+  if (!idempotencyKey) return null;
+  return session.messages.find((message) => message.clientIdempotencyKey === idempotencyKey) || null;
+}
+
+function isMessageAtOrBeforeCompactionBoundary(parent, child, messageId) {
+  const boundaryIndex = parent.messages.findIndex((message) => message.id === child.compaction.throughMessageId);
+  if (boundaryIndex < 0) {
+    throw storedDataError('session', 'compacted session boundary message is missing from its parent');
+  }
+  const messageIndex = parent.messages.findIndex((message) => message.id === messageId);
+  if (messageIndex < 0) return false;
+  return messageIndex <= boundaryIndex;
+}
+
+async function prepareMirroredMessage(sessionId, request) {
+  const childFound = await findSessionFile(sessionId);
+  if (!childFound) throw appError(404, 'Session not found.');
+  const child = await readSessionRecord(childFound.filePath, { expectedId: sessionId });
+  if (child.kind !== 'compacted') {
+    throw appError(409, 'Message mirroring requires a compacted session.');
+  }
+
+  const parentFound = await findSessionFile(child.parentSessionId);
+  if (!parentFound) throw storedDataError('session', 'compacted session parent is missing');
+  const parent = await readSessionRecord(parentFound.filePath, { expectedId: child.parentSessionId });
+  if (parent.kind !== 'normal' || parent.compactedSessionId !== child.id) {
+    throw storedDataError('session', 'compacted session relationship is inconsistent');
+  }
+
+  const childExisting = findIdempotentMessage(child, request.idempotencyKey);
+  const parentExisting = findIdempotentMessage(parent, request.idempotencyKey);
+  let childFingerprintAdded = false;
+  let parentFingerprintAdded = false;
+
+  if (request.idempotencyKey) {
+    if (childExisting) {
+      childFingerprintAdded = bindExistingMessageToPayload(
+        childExisting,
+        request.idempotencyPayload,
+        request.idempotencyFingerprint
+      );
+    }
+    if (parentExisting) {
+      parentFingerprintAdded = bindExistingMessageToPayload(
+        parentExisting,
+        request.idempotencyPayload,
+        request.idempotencyFingerprint
+      );
+    }
+    if (childExisting && parentExisting && childExisting.id !== parentExisting.id) {
+      throw storedDataError('session', 'mirrored idempotency key points to different parent and child messages');
+    }
+  }
+
+  if (parentExisting && !childExisting && isMessageAtOrBeforeCompactionBoundary(parent, child, parentExisting.id)) {
+    if (!parentFingerprintAdded) return { result: { message: parentExisting, created: false } };
+    return {
+      payload: {
+        parentSessionId: parent.id,
+        childSessionId: child.id,
+        parentDateDir: parentFound.dateDir,
+        childDateDir: childFound.dateDir,
+        message: cloneMessage(parentExisting),
+        mirrorToChild: false,
+        created: false
+      }
+    };
+  }
+
+  if (childExisting || parentExisting) {
+    const existing = childExisting || parentExisting;
+    if (childExisting && parentExisting && !childFingerprintAdded && !parentFingerprintAdded) {
+      return { result: { message: existing, created: false } };
+    }
+    return {
+      payload: {
+        parentSessionId: parent.id,
+        childSessionId: child.id,
+        parentDateDir: parentFound.dateDir,
+        childDateDir: childFound.dateDir,
+        message: cloneMessage(existing),
+        mirrorToChild: true,
+        created: false
+      }
+    };
+  }
+
+  const now = new Date().toISOString();
+  const message = {
+    id: id('msg'),
+    sender: request.sender || nextMessageSender(child.messages),
+    text: request.text,
+    createdAt: now
+  };
+  if (request.idempotencyKey) {
+    message.clientIdempotencyKey = request.idempotencyKey;
+    message.clientIdempotencyFingerprint = request.idempotencyFingerprint;
+  }
+  if (request.source) message.source = request.source;
+  if (request.providerKey) message.providerKey = request.providerKey;
+
+  return {
+    payload: {
+      parentSessionId: parent.id,
+      childSessionId: child.id,
+      parentDateDir: parentFound.dateDir,
+      childDateDir: childFound.dateDir,
+      message,
+      mirrorToChild: true,
+      created: true
+    }
+  };
+}
+
+async function addCompactedSessionMessageRecoverably(sessionId, request) {
+  await ensureBaseFiles();
+  return withLock(GLOBAL_MUTATION_LOCK, async () => {
+    await recoverPendingMutationUnlocked();
+    const prepared = await prepareMirroredMessage(sessionId, request);
+    if (prepared.result) return prepared.result;
+
+    const mutation = validateMutationJournal({
+      journalVersion: JOURNAL_VERSION,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      type: 'mirror-compacted-message',
+      startedAt: new Date().toISOString(),
+      payload: prepared.payload
+    });
+    await writeJson(MUTATION_JOURNAL_FILE, mutation);
+    await checkpoint('mirror-compacted-message:after-journal-write', mutation);
+    const result = await applyMirrorCompactedMessage(mutation);
+    await removeJournal();
+    return result;
+  });
+}
+
 async function applyUpsertCompaction(mutation) {
   const { parentSessionId, childSessionId, parentDateDir, childDateDir, compaction } = mutation.payload;
   const parentFile = path.join(DATA_DIR, parentDateDir, `${parentSessionId}.json`);
@@ -393,6 +680,7 @@ async function applyMutation(mutation) {
   if (mutation.type === 'delete-folder') return applyDeleteFolder(mutation);
   if (mutation.type === 'permanent-delete-trash') return applyPermanentDeleteTrash(mutation);
   if (mutation.type === 'upsert-compaction') return applyUpsertCompaction(mutation);
+  if (mutation.type === 'mirror-compacted-message') return applyMirrorCompactedMessage(mutation);
   throw storedDataError('mutation journal', `unsupported operation ${mutation.type}`);
 }
 
@@ -584,5 +872,6 @@ module.exports = {
   deleteFolderRecoverably,
   permanentlyDeleteTrashRecoverably,
   upsertCompactedSessionRecoverably,
+  addCompactedSessionMessageRecoverably,
   setMutationFailureInjectorForTests
 };
