@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local AI Chat Saver",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Adds Save/New session/Load past conversation buttons and auto-syncs prompts plus completed AI responses to your local chat app.",
   "author": "Dusan Rajcevic",
   "permissions": ["storage", "clipboardRead", "clipboardWrite"],
