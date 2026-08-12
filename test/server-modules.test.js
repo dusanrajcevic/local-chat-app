@@ -10,7 +10,12 @@ const {
   optionalMessageSender,
   validateId
 } = require('../src/server/validation');
-const { compactSnippet, normalizeLimit, normalizeSearchText } = require('../src/server/services/search-service');
+const {
+  buildSearchResult,
+  compactSnippet,
+  normalizeLimit,
+  normalizeSearchText
+} = require('../src/server/services/search-service');
 const { summarizeSession, botNameForSession } = require('../src/server/services/session-format');
 
 test('server validation utilities normalize public API inputs consistently', () => {
@@ -60,7 +65,39 @@ test('server session formatting hides missing/empty metadata behind stable defau
     updatedAt: '2026-01-01T00:01:00.000Z',
     dateFolder: '2026-01-01',
     pinnedFolderId: null,
+    kind: 'normal',
+    compactedSessionId: null,
+    parentSessionId: null,
     messageCount: 1,
     trashed: false
   });
+});
+
+test('compacted session summaries expose relationships and compacted context is searchable', () => {
+  const session = {
+    schemaVersion: 2,
+    id: 'chat_1700000000001_cafebabe',
+    title: 'Architecture discussion (compacted)',
+    aiName: 'ChatGPT',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    pinnedFolderId: null,
+    kind: 'compacted',
+    parentSessionId: 'chat_1700000000000_deadbeef',
+    compaction: {
+      text: 'The storage layer uses a recovery journal for atomic mutations.',
+      requestId: 'compact:request-0001',
+      createdAt: '2026-01-01T00:01:00.000Z',
+      sourceMessageCount: 12,
+      throughMessageId: 'msg_1700000000000_deadbeef'
+    },
+    messages: []
+  };
+
+  const result = buildSearchResult(session, '2026-01-01', 'recovery journal');
+  assert.equal(result.kind, 'compacted');
+  assert.equal(result.parentSessionId, 'chat_1700000000000_deadbeef');
+  assert.equal(result.compactedSessionId, null);
+  assert.equal(result.match.compaction, true);
+  assert.match(result.match.preview, /recovery journal/i);
 });

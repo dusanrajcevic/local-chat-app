@@ -5,7 +5,9 @@ const {
   FOLDER_ID_PATTERN,
   IDEMPOTENCY_KEY_PATTERN,
   IDEMPOTENCY_FINGERPRINT_PATTERN,
-  CURRENT_SCHEMA_VERSION
+  COMPACTION_REQUEST_ID_PATTERN,
+  CURRENT_SCHEMA_VERSION,
+  CURRENT_SESSION_SCHEMA_VERSION
 } = require('../config');
 const { appError } = require('../errors');
 const { readJson } = require('./file-store');
@@ -92,11 +94,72 @@ function validateMessageRecord(message, index, seenIds) {
   assertOptionalString(message.providerKey, kind, `${label}.providerKey`, 80);
 }
 
+function migrateLegacySessionRecord(session) {
+  const legacyVersion = session.schemaVersion;
+  if (legacyVersion !== undefined && legacyVersion !== 1) return false;
+
+  for (const field of ['kind', 'compactedSessionId', 'parentSessionId', 'compaction']) {
+    if (session[field] !== undefined) {
+      throw storedDataError('session', `legacy records must not contain ${field}`);
+    }
+  }
+
+  session.schemaVersion = CURRENT_SESSION_SCHEMA_VERSION;
+  session.kind = 'normal';
+  session.compactedSessionId = null;
+  return true;
+}
+
+function validateCompactionRecord(compaction) {
+  const kind = 'session';
+  assertPlainObject(compaction, kind, 'compaction');
+  assertRequiredString(compaction.text, kind, 'compaction.text', 2_000_000);
+  assertPattern(compaction.requestId, COMPACTION_REQUEST_ID_PATTERN, kind, 'compaction.requestId');
+  assertTimestamp(compaction.createdAt, kind, 'compaction.createdAt');
+  assertOptionalString(compaction.providerKey, kind, 'compaction.providerKey', 80);
+  if (!Number.isInteger(compaction.sourceMessageCount) || compaction.sourceMessageCount < 1) {
+    throw storedDataError(kind, 'compaction.sourceMessageCount must be a positive integer');
+  }
+  assertPattern(compaction.throughMessageId, MESSAGE_ID_PATTERN, kind, 'compaction.throughMessageId');
+}
+
+function validateSessionRelationship(session) {
+  const kind = 'session';
+
+  if (session.kind !== 'normal' && session.kind !== 'compacted') {
+    throw storedDataError(kind, 'kind must be "normal" or "compacted"');
+  }
+
+  if (session.kind === 'normal') {
+    assertPattern(session.compactedSessionId, SESSION_ID_PATTERN, kind, 'compactedSessionId', { nullable: true });
+    if (session.compactedSessionId === session.id) {
+      throw storedDataError(kind, 'compactedSessionId must reference a different session');
+    }
+    if (session.parentSessionId !== undefined) {
+      throw storedDataError(kind, 'normal sessions must not contain parentSessionId');
+    }
+    if (session.compaction !== undefined) {
+      throw storedDataError(kind, 'normal sessions must not contain compaction');
+    }
+    return;
+  }
+
+  assertPattern(session.parentSessionId, SESSION_ID_PATTERN, kind, 'parentSessionId');
+  if (session.parentSessionId === session.id) {
+    throw storedDataError(kind, 'parentSessionId must reference a different session');
+  }
+  if (session.compactedSessionId !== undefined) {
+    throw storedDataError(kind, 'compacted sessions must not contain compactedSessionId');
+  }
+  validateCompactionRecord(session.compaction);
+}
+
 function validateSessionRecord(session, expectedId, { trashed = false } = {}) {
   const kind = 'session';
   assertPlainObject(session, kind);
-  assertSchemaVersion(session.schemaVersion, kind);
-  session.schemaVersion = CURRENT_SCHEMA_VERSION;
+  if (!migrateLegacySessionRecord(session) && session.schemaVersion !== CURRENT_SESSION_SCHEMA_VERSION) {
+    throw storedDataError(kind, `unsupported schemaVersion ${String(session.schemaVersion)}`);
+  }
   assertPattern(session.id, SESSION_ID_PATTERN, kind, 'id');
 
   if (expectedId && session.id !== expectedId) {
@@ -111,6 +174,7 @@ function validateSessionRecord(session, expectedId, { trashed = false } = {}) {
     nullable: true,
     optional: true
   });
+  validateSessionRelationship(session);
 
   if (!Array.isArray(session.messages)) throw storedDataError(kind, 'messages must be an array');
   const messageIds = new Set();
@@ -194,6 +258,7 @@ async function readStateDocument(filePath) {
 
 module.exports = {
   CURRENT_SCHEMA_VERSION,
+  CURRENT_SESSION_SCHEMA_VERSION,
   storedDataError,
   isPlainObject,
   validateSessionRecord,

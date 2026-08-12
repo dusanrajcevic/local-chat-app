@@ -20,7 +20,7 @@ const {
   restoreSessionRecoverably,
   permanentlyDeleteTrashRecoverably
 } = require('../storage/mutation-coordinator');
-const { CURRENT_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
+const { CURRENT_SESSION_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
 const { buildSessionExportResponse } = require('./export-service');
 const {
@@ -49,13 +49,15 @@ async function createSession(body) {
     const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
     const now = new Date().toISOString();
     const session = {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: CURRENT_SESSION_SCHEMA_VERSION,
       id: id('chat'),
       title,
       aiName: cleanName(body.aiName, 80, 'AI bot name') || 'AI Bot',
       createdAt: now,
       updatedAt: now,
       pinnedFolderId,
+      kind: 'normal',
+      compactedSessionId: null,
       messages: []
     };
 
