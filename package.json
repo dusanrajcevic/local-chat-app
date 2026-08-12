@@ -85,6 +85,16 @@
         "portable"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Local Chat App",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
     "linux": {
       "icon": "build/icon.png"
     }
