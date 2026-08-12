@@ -13,6 +13,7 @@ const {
 const {
   listSessions,
   createSession,
+  upsertCompactedSession,
   updateSessionMetadata,
   updateBotName,
   getSessionExport,
@@ -94,6 +95,15 @@ function registerSessionRoutes(app) {
     requireJsonObjectBody,
     asyncRoute(async (req, res) => {
       res.status(201).json(await createSession(req.body));
+    })
+  );
+
+  app.put(
+    '/api/sessions/:sessionId/compaction',
+    requireJsonObjectBody,
+    asyncRoute(async (req, res) => {
+      const result = await upsertCompactedSession(req.params.sessionId, req.body);
+      res.status(result.created ? 201 : 200).json(result.session);
     })
   );
 

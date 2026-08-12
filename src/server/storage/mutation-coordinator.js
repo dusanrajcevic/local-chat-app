@@ -6,12 +6,16 @@ const {
   FOLDERS_FILE,
   MUTATION_JOURNAL_FILE,
   SESSION_ID_PATTERN,
+  MESSAGE_ID_PATTERN,
   FOLDER_ID_PATTERN,
   DATE_DIR_PATTERN,
-  CURRENT_SCHEMA_VERSION
+  COMPACTION_REQUEST_ID_PATTERN,
+  CURRENT_SCHEMA_VERSION,
+  CURRENT_SESSION_SCHEMA_VERSION
 } = require('../config');
 const { appError } = require('../errors');
-const { dateFolderName } = require('../ids');
+const { id, dateFolderName } = require('../ids');
+const { compactedTitleFor } = require('../services/session-format');
 const {
   withLock,
   writeJson,
@@ -26,7 +30,13 @@ const { clearActiveSessionIf } = require('./state-store');
 
 const GLOBAL_MUTATION_LOCK = Symbol('local-chat-global-mutation-lock');
 const JOURNAL_VERSION = 1;
-const MUTATION_TYPES = new Set(['trash-session', 'restore-session', 'delete-folder', 'permanent-delete-trash']);
+const MUTATION_TYPES = new Set([
+  'trash-session',
+  'restore-session',
+  'delete-folder',
+  'permanent-delete-trash',
+  'upsert-compaction'
+]);
 
 let failureInjectorForTests = null;
 
@@ -43,6 +53,37 @@ function assertJournalId(value, pattern, label) {
   if (typeof value !== 'string' || !pattern.test(value)) {
     throw storedDataError('mutation journal', `${label} has an invalid format`);
   }
+}
+
+function assertJournalString(value, label, maxLength, { optional = false } = {}) {
+  if (optional && value === undefined) return;
+  if (typeof value !== 'string' || !value.trim() || value.length > maxLength) {
+    throw storedDataError(
+      'mutation journal',
+      `${label} must be a non-empty string no longer than ${maxLength} characters`
+    );
+  }
+}
+
+function validateCompactionMutationPayload(payload) {
+  assertJournalId(payload.parentSessionId, SESSION_ID_PATTERN, 'payload.parentSessionId');
+  assertJournalId(payload.childSessionId, SESSION_ID_PATTERN, 'payload.childSessionId');
+  if (payload.parentSessionId === payload.childSessionId) {
+    throw storedDataError('mutation journal', 'compaction parent and child IDs must be different');
+  }
+  assertJournalId(payload.parentDateDir, DATE_DIR_PATTERN, 'payload.parentDateDir');
+  assertJournalId(payload.childDateDir, DATE_DIR_PATTERN, 'payload.childDateDir');
+
+  if (!payload.compaction || typeof payload.compaction !== 'object' || Array.isArray(payload.compaction)) {
+    throw storedDataError('mutation journal', 'payload.compaction must be an object');
+  }
+  assertJournalString(payload.compaction.text, 'payload.compaction.text', 2_000_000);
+  assertJournalId(payload.compaction.requestId, COMPACTION_REQUEST_ID_PATTERN, 'payload.compaction.requestId');
+  assertJournalString(payload.compaction.providerKey, 'payload.compaction.providerKey', 80, { optional: true });
+  if (!Number.isInteger(payload.compaction.sourceMessageCount) || payload.compaction.sourceMessageCount < 1) {
+    throw storedDataError('mutation journal', 'payload.compaction.sourceMessageCount must be a positive integer');
+  }
+  assertJournalId(payload.compaction.throughMessageId, MESSAGE_ID_PATTERN, 'payload.compaction.throughMessageId');
 }
 
 function validateMutationJournal(mutation) {
@@ -75,6 +116,8 @@ function validateMutationJournal(mutation) {
     assertJournalId(mutation.payload.folderId, FOLDER_ID_PATTERN, 'payload.folderId');
   } else if (mutation.type === 'permanent-delete-trash') {
     assertJournalId(mutation.payload.sessionId, SESSION_ID_PATTERN, 'payload.sessionId');
+  } else if (mutation.type === 'upsert-compaction') {
+    validateCompactionMutationPayload(mutation.payload);
   }
 
   return mutation;
@@ -245,11 +288,111 @@ async function applyPermanentDeleteTrash(mutation) {
   });
 }
 
+function sameCompactionPayload(left, right) {
+  return (
+    left?.requestId === right?.requestId &&
+    left?.text === right?.text &&
+    (left?.providerKey || '') === (right?.providerKey || '') &&
+    left?.sourceMessageCount === right?.sourceMessageCount &&
+    left?.throughMessageId === right?.throughMessageId
+  );
+}
+
+async function withOrderedLocks(filePaths, task) {
+  const ordered = [...new Set(filePaths.map((filePath) => path.resolve(filePath)))].sort();
+  const run = async (index) => {
+    if (index >= ordered.length) return task();
+    return withLock(ordered[index], () => run(index + 1));
+  };
+  return run(0);
+}
+
+async function applyUpsertCompaction(mutation) {
+  const { parentSessionId, childSessionId, parentDateDir, childDateDir, compaction } = mutation.payload;
+  const parentFile = path.join(DATA_DIR, parentDateDir, `${parentSessionId}.json`);
+  const childFile = path.join(DATA_DIR, childDateDir, `${childSessionId}.json`);
+
+  return withOrderedLocks([parentFile, childFile], async () => {
+    const parent = await readSessionIfExists(parentFile, { expectedId: parentSessionId, trashed: false });
+    if (!parent) throw storedDataError('mutation journal', `parent session ${parentSessionId} is missing`);
+    if (parent.kind !== 'normal') {
+      throw storedDataError('mutation journal', `parent session ${parentSessionId} is not a normal session`);
+    }
+    if (parent.compactedSessionId && parent.compactedSessionId !== childSessionId) {
+      throw storedDataError(
+        'mutation journal',
+        `parent session ${parentSessionId} references a different compacted session`
+      );
+    }
+
+    let child = await readSessionIfExists(childFile, { expectedId: childSessionId, trashed: false });
+    const created = !child;
+    let replaced = false;
+
+    if (child) {
+      if (child.kind !== 'compacted' || child.parentSessionId !== parentSessionId) {
+        throw storedDataError(
+          'mutation journal',
+          `compacted session ${childSessionId} has an inconsistent parent relationship`
+        );
+      }
+
+      if (child.compaction?.requestId === compaction.requestId) {
+        if (!sameCompactionPayload(child.compaction, compaction)) {
+          throw storedDataError(
+            'mutation journal',
+            `compaction request ${compaction.requestId} conflicts with stored data`
+          );
+        }
+      } else {
+        child = {
+          ...child,
+          title: compactedTitleFor(parent.title),
+          aiName: parent.aiName,
+          pinnedFolderId: parent.pinnedFolderId || null,
+          updatedAt: mutation.startedAt,
+          compaction: { ...compaction, createdAt: mutation.startedAt },
+          messages: []
+        };
+        await writeJson(childFile, child);
+        replaced = true;
+        await checkpoint('upsert-compaction:after-child-write', mutation);
+      }
+    } else {
+      child = {
+        schemaVersion: CURRENT_SESSION_SCHEMA_VERSION,
+        id: childSessionId,
+        title: compactedTitleFor(parent.title),
+        aiName: parent.aiName,
+        createdAt: mutation.startedAt,
+        updatedAt: mutation.startedAt,
+        pinnedFolderId: parent.pinnedFolderId || null,
+        kind: 'compacted',
+        parentSessionId,
+        compaction: { ...compaction, createdAt: mutation.startedAt },
+        messages: []
+      };
+      await writeJson(childFile, child);
+      await checkpoint('upsert-compaction:after-child-write', mutation);
+    }
+
+    if (parent.compactedSessionId !== childSessionId) {
+      parent.compactedSessionId = childSessionId;
+      parent.updatedAt = mutation.startedAt;
+      await writeJson(parentFile, parent);
+      await checkpoint('upsert-compaction:after-parent-write', mutation);
+    }
+
+    return { session: child, dateDir: childDateDir, created, replaced };
+  });
+}
+
 async function applyMutation(mutation) {
   if (mutation.type === 'trash-session') return applyTrashSession(mutation);
   if (mutation.type === 'restore-session') return applyRestoreSession(mutation);
   if (mutation.type === 'delete-folder') return applyDeleteFolder(mutation);
   if (mutation.type === 'permanent-delete-trash') return applyPermanentDeleteTrash(mutation);
+  if (mutation.type === 'upsert-compaction') return applyUpsertCompaction(mutation);
   throw storedDataError('mutation journal', `unsupported operation ${mutation.type}`);
 }
 
@@ -326,6 +469,100 @@ async function permanentlyDeleteTrashRecoverably(sessionId) {
   });
 }
 
+async function resolveCompactionRelationship(sessionId) {
+  const targetFound = await findSessionFile(sessionId);
+  if (!targetFound) throw appError(404, 'Session not found.');
+  const target = await readSessionRecord(targetFound.filePath, { expectedId: sessionId });
+
+  if (target.kind === 'normal') {
+    let childFound = null;
+    let child = null;
+    let childSessionId = target.compactedSessionId;
+
+    if (childSessionId) {
+      childFound = await findSessionFile(childSessionId, true);
+      if (childFound?.trashed) throw appError(409, 'Compacted session is currently in trash.');
+      if (childFound) {
+        child = await readSessionRecord(childFound.filePath, { expectedId: childSessionId });
+        if (child.kind !== 'compacted' || child.parentSessionId !== target.id) {
+          throw storedDataError('session', 'compacted session relationship is inconsistent');
+        }
+      }
+    } else {
+      childSessionId = id('chat');
+    }
+
+    return {
+      parent: target,
+      parentFound: targetFound,
+      child,
+      childFound,
+      childSessionId
+    };
+  }
+
+  const parentFound = await findSessionFile(target.parentSessionId);
+  if (!parentFound) throw storedDataError('session', 'compacted session parent is missing');
+  const parent = await readSessionRecord(parentFound.filePath, { expectedId: target.parentSessionId });
+  if (parent.kind !== 'normal' || parent.compactedSessionId !== target.id) {
+    throw storedDataError('session', 'compacted session relationship is inconsistent');
+  }
+
+  return {
+    parent,
+    parentFound,
+    child: target,
+    childFound: targetFound,
+    childSessionId: target.id
+  };
+}
+
+async function upsertCompactedSessionRecoverably(sessionId, request) {
+  return runRecoverableMutation('upsert-compaction', async () => {
+    const relationship = await resolveCompactionRelationship(sessionId);
+    const { parent, parentFound, child, childFound, childSessionId } = relationship;
+
+    if (child?.compaction?.requestId === request.requestId) {
+      const sameRequest =
+        child.compaction.text === request.text && (child.compaction.providerKey || '') === (request.providerKey || '');
+      if (!sameRequest) throw appError(409, 'Compaction request ID was already used with different content.');
+
+      return {
+        parentSessionId: parent.id,
+        childSessionId,
+        parentDateDir: parentFound.dateDir,
+        childDateDir: childFound.dateDir,
+        compaction: {
+          text: child.compaction.text,
+          requestId: child.compaction.requestId,
+          ...(child.compaction.providerKey ? { providerKey: child.compaction.providerKey } : {}),
+          sourceMessageCount: child.compaction.sourceMessageCount,
+          throughMessageId: child.compaction.throughMessageId
+        }
+      };
+    }
+
+    if (!Array.isArray(parent.messages) || parent.messages.length === 0) {
+      throw appError(409, 'Cannot compact a session with no messages.');
+    }
+
+    const throughMessage = parent.messages.at(-1);
+    return {
+      parentSessionId: parent.id,
+      childSessionId,
+      parentDateDir: parentFound.dateDir,
+      childDateDir: childFound?.dateDir || parentFound.dateDir,
+      compaction: {
+        text: request.text,
+        requestId: request.requestId,
+        ...(request.providerKey ? { providerKey: request.providerKey } : {}),
+        sourceMessageCount: parent.messages.length,
+        throughMessageId: throughMessage.id
+      }
+    };
+  });
+}
+
 async function prepareRestoreDate(sessionId) {
   const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
   const session = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
@@ -346,5 +583,6 @@ module.exports = {
   restoreSessionRecoverably,
   deleteFolderRecoverably,
   permanentlyDeleteTrashRecoverably,
+  upsertCompactedSessionRecoverably,
   setMutationFailureInjectorForTests
 };

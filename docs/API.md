@@ -30,12 +30,15 @@ The browser extension uses this to determine where manual saves should go when n
 - `GET /api/sessions`
 - `GET /api/sessions?offset=0&limit=100` for optional pagination
 - `POST /api/sessions`
+- `PUT /api/sessions/:sessionId/compaction`
 - `GET /api/sessions/:sessionId`
 - `PATCH /api/sessions/:sessionId`
 - `PATCH /api/sessions/:sessionId/bot-name` with `{ "aiName": "..." }`
 - `DELETE /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/export`
 - `PATCH /api/sessions/:sessionId/pin`
+
+`PUT /api/sessions/:sessionId/compaction` accepts a JSON object with `requestId`, `compactedMessage`, and an optional `providerKey`. The server derives the compaction boundary from the parent session's current stored messages, creates `Title (compacted)` on the first request, and reuses that same compacted child for later requests. The endpoint may be called with either the normal parent ID or its compacted child ID. Repeating the same `requestId` with the same content is idempotent; reusing it with different content returns `409 Conflict`. A new compaction replaces the child's previous compacted context and clears its ordinary messages because those messages are considered absorbed by the new context. The original parent transcript is not modified.
 
 ## Messages
 

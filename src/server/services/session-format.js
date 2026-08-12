@@ -8,6 +8,12 @@ function sessionKind(session) {
   return session?.kind === 'compacted' ? 'compacted' : 'normal';
 }
 
+function compactedTitleFor(title) {
+  const suffix = ' (compacted)';
+  const base = cleanName(title, 160) || 'Untitled chat';
+  return `${base.slice(0, 160 - suffix.length).trimEnd()}${suffix}`;
+}
+
 function summarizeSession(session, fileDate, trashed = false) {
   const kind = sessionKind(session);
   return {
@@ -26,4 +32,4 @@ function summarizeSession(session, fileDate, trashed = false) {
   };
 }
 
-module.exports = { botNameForSession, sessionKind, summarizeSession };
+module.exports = { botNameForSession, sessionKind, compactedTitleFor, summarizeSession };

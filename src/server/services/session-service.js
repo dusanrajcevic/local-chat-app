@@ -1,6 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { DATA_DIR, TRASH_DIR, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
+const {
+  DATA_DIR,
+  TRASH_DIR,
+  SESSION_ID_PATTERN,
+  MESSAGE_ID_PATTERN,
+  COMPACTION_REQUEST_ID_PATTERN
+} = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
 const {
@@ -18,7 +24,8 @@ const {
   withMutationConsistency,
   moveSessionToTrashRecoverably,
   restoreSessionRecoverably,
-  permanentlyDeleteTrashRecoverably
+  permanentlyDeleteTrashRecoverably,
+  upsertCompactedSessionRecoverably
 } = require('../storage/mutation-coordinator');
 const { CURRENT_SESSION_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
@@ -39,6 +46,30 @@ async function recentChats(limit) {
 
 function readFoundSession(found, expectedId) {
   return readSessionRecord(found.filePath, { expectedId, trashed: found.trashed });
+}
+
+function normalizeCompactionRequest(body) {
+  const text = cleanText(body.compactedMessage, 'Compacted message');
+  if (!text) throw appError(400, 'Compacted message is required.');
+  if (text.length > 2_000_000) throw appError(400, 'Compacted message is too long.');
+
+  const requestId = validateId(body.requestId, COMPACTION_REQUEST_ID_PATTERN, 'Compaction request ID');
+  const providerKey = Object.prototype.hasOwnProperty.call(body, 'providerKey')
+    ? cleanName(body.providerKey, 80, 'Provider key')
+    : '';
+
+  return { text, requestId, providerKey };
+}
+
+async function upsertCompactedSession(sessionId, body) {
+  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+  const request = normalizeCompactionRequest(body);
+  const result = await upsertCompactedSessionRecoverably(safeSessionId, request);
+  return {
+    session: summarizeSession(result.session, result.dateDir),
+    created: result.created,
+    replaced: result.replaced
+  };
 }
 
 async function createSession(body) {
@@ -289,6 +320,7 @@ module.exports = {
   listSessions,
   recentChats,
   createSession,
+  upsertCompactedSession,
   updateSessionMetadata,
   updateBotName,
   getSessionExport,
