@@ -39,7 +39,9 @@ const MUTATION_TYPES = new Set([
   'delete-folder',
   'permanent-delete-trash',
   'upsert-compaction',
-  'mirror-compacted-message'
+  'mirror-compacted-message',
+  'sync-session-metadata',
+  'compacted-session-lifecycle'
 ]);
 
 let failureInjectorForTests = null;
@@ -143,6 +145,108 @@ function validateCompactionMutationPayload(payload) {
   assertJournalId(payload.compaction.throughMessageId, MESSAGE_ID_PATTERN, 'payload.compaction.throughMessageId');
 }
 
+
+const COMPACTED_LIFECYCLE_ACTIONS = new Set([
+  'trash-pair',
+  'trash-child',
+  'restore-pair',
+  'restore-child',
+  'delete-pair',
+  'delete-child'
+]);
+
+function validateSessionLocation(payload, prefix, { required = true } = {}) {
+  const location = payload[`${prefix}Location`];
+  if (!required && location === undefined) return;
+  if (location !== 'active' && location !== 'trash') {
+    throw storedDataError('mutation journal', `payload.${prefix}Location must be "active" or "trash"`);
+  }
+  const dateDir = payload[`${prefix}DateDir`];
+  if (location === 'active') {
+    assertJournalId(dateDir, DATE_DIR_PATTERN, `payload.${prefix}DateDir`);
+  } else if (dateDir !== null && dateDir !== undefined) {
+    throw storedDataError('mutation journal', `payload.${prefix}DateDir must be null for trash storage`);
+  }
+}
+
+function validateSessionMetadataMutationPayload(payload) {
+  assertJournalId(payload.targetSessionId, SESSION_ID_PATTERN, 'payload.targetSessionId');
+  assertJournalId(payload.parentSessionId, SESSION_ID_PATTERN, 'payload.parentSessionId');
+  validateSessionLocation(payload, 'parent');
+
+  if (payload.childSessionId !== null && payload.childSessionId !== undefined) {
+    assertJournalId(payload.childSessionId, SESSION_ID_PATTERN, 'payload.childSessionId');
+    if (payload.childSessionId === payload.parentSessionId) {
+      throw storedDataError('mutation journal', 'metadata parent and child IDs must be different');
+    }
+    validateSessionLocation(payload, 'child');
+  } else {
+    if (payload.childLocation !== undefined || payload.childDateDir !== undefined) {
+      throw storedDataError('mutation journal', 'child location requires payload.childSessionId');
+    }
+  }
+
+  const updates = payload.updates;
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    throw storedDataError('mutation journal', 'payload.updates must be an object');
+  }
+  const keys = Object.keys(updates);
+  if (keys.length === 0 || keys.some((key) => !['title', 'aiName', 'pinnedFolderId'].includes(key))) {
+    throw storedDataError('mutation journal', 'payload.updates contains unsupported metadata fields');
+  }
+  assertJournalString(updates.title, 'payload.updates.title', 160, { optional: true });
+  assertJournalString(updates.aiName, 'payload.updates.aiName', 80, { optional: true });
+  if (updates.pinnedFolderId !== undefined && updates.pinnedFolderId !== null) {
+    assertJournalId(updates.pinnedFolderId, FOLDER_ID_PATTERN, 'payload.updates.pinnedFolderId');
+  }
+}
+
+function validateCompactedLifecycleMutationPayload(payload) {
+  if (!COMPACTED_LIFECYCLE_ACTIONS.has(payload.action)) {
+    throw storedDataError('mutation journal', 'payload.action is not a supported compacted lifecycle action');
+  }
+  assertJournalId(payload.parentSessionId, SESSION_ID_PATTERN, 'payload.parentSessionId');
+  assertJournalId(payload.childSessionId, SESSION_ID_PATTERN, 'payload.childSessionId');
+  if (payload.parentSessionId === payload.childSessionId) {
+    throw storedDataError('mutation journal', 'lifecycle parent and child IDs must be different');
+  }
+
+  if (payload.action === 'restore-pair' || payload.action === 'restore-child') {
+    assertJournalId(payload.requestedSessionId, SESSION_ID_PATTERN, 'payload.requestedSessionId');
+    if (
+      payload.requestedSessionId !== payload.parentSessionId &&
+      payload.requestedSessionId !== payload.childSessionId
+    ) {
+      throw storedDataError('mutation journal', 'payload.requestedSessionId must reference the lifecycle pair');
+    }
+  }
+
+  if (payload.action === 'trash-pair') {
+    validateSessionLocation(payload, 'parent');
+    validateSessionLocation(payload, 'child');
+    if (payload.parentLocation !== 'active') {
+      throw storedDataError('mutation journal', 'trash-pair parent must be active');
+    }
+  } else if (payload.action === 'trash-child') {
+    validateSessionLocation(payload, 'parent');
+    validateSessionLocation(payload, 'child');
+    if (payload.childLocation !== 'active') {
+      throw storedDataError('mutation journal', 'trash-child target must be active');
+    }
+  } else if (payload.action === 'restore-pair') {
+    assertJournalId(payload.parentRestoreDate, DATE_DIR_PATTERN, 'payload.parentRestoreDate');
+    assertJournalId(payload.childRestoreDate, DATE_DIR_PATTERN, 'payload.childRestoreDate');
+  } else if (payload.action === 'restore-child') {
+    validateSessionLocation(payload, 'parent');
+    if (payload.parentLocation !== 'active') {
+      throw storedDataError('mutation journal', 'restore-child parent must be active');
+    }
+    assertJournalId(payload.childRestoreDate, DATE_DIR_PATTERN, 'payload.childRestoreDate');
+  } else if (payload.action === 'delete-child') {
+    validateSessionLocation(payload, 'parent', { required: false });
+  }
+}
+
 function validateMutationJournal(mutation) {
   if (!mutation || typeof mutation !== 'object' || Array.isArray(mutation)) {
     throw storedDataError('mutation journal', 'document must be an object');
@@ -177,6 +281,10 @@ function validateMutationJournal(mutation) {
     validateCompactionMutationPayload(mutation.payload);
   } else if (mutation.type === 'mirror-compacted-message') {
     validateMirroredMessageMutationPayload(mutation.payload);
+  } else if (mutation.type === 'sync-session-metadata') {
+    validateSessionMetadataMutationPayload(mutation.payload);
+  } else if (mutation.type === 'compacted-session-lifecycle') {
+    validateCompactedLifecycleMutationPayload(mutation.payload);
   }
 
   return mutation;
@@ -364,6 +472,447 @@ async function withOrderedLocks(filePaths, task) {
     return withLock(ordered[index], () => run(index + 1));
   };
   return run(0);
+}
+
+function sessionLocation(found) {
+  return found.trashed ? 'trash' : 'active';
+}
+
+function sessionFileForLocation(sessionId, location, dateDir) {
+  return location === 'trash'
+    ? path.join(TRASH_DIR, `${sessionId}.json`)
+    : path.join(DATA_DIR, dateDir, `${sessionId}.json`);
+}
+
+async function readFoundSessionForLifecycle(found, sessionId) {
+  return readSessionRecord(found.filePath, { expectedId: sessionId, trashed: found.trashed });
+}
+
+function addLocationPayload(payload, prefix, found) {
+  payload[`${prefix}Location`] = sessionLocation(found);
+  payload[`${prefix}DateDir`] = found.trashed ? null : found.dateDir;
+}
+
+async function prepareSessionMetadataPayload(sessionId, updates) {
+  const targetFound = await findSessionFile(sessionId, true);
+  if (!targetFound) throw appError(404, 'Session not found.');
+  const target = await readFoundSessionForLifecycle(targetFound, sessionId);
+
+  let parent = target;
+  let parentFound = targetFound;
+  let child = null;
+  let childFound = null;
+
+  if (target.kind === 'compacted') {
+    if (updates.title !== undefined) {
+      throw appError(409, 'Compacted session titles are derived from their parent session.');
+    }
+    parentFound = await findSessionFile(target.parentSessionId, true);
+    if (!parentFound) throw storedDataError('session', 'compacted session parent is missing');
+    parent = await readFoundSessionForLifecycle(parentFound, target.parentSessionId);
+    if (parent.kind !== 'normal' || parent.compactedSessionId !== target.id) {
+      throw storedDataError('session', 'compacted session relationship is inconsistent');
+    }
+    child = target;
+    childFound = targetFound;
+  } else if (target.compactedSessionId) {
+    childFound = await findSessionFile(target.compactedSessionId, true);
+    if (!childFound) throw storedDataError('session', 'compacted session child is missing');
+    child = await readFoundSessionForLifecycle(childFound, target.compactedSessionId);
+    if (child.kind !== 'compacted' || child.parentSessionId !== target.id) {
+      throw storedDataError('session', 'compacted session relationship is inconsistent');
+    }
+  }
+
+  if (updates.pinnedFolderId) {
+    await withLock(FOLDERS_FILE, async () => {
+      if (!(await folderExistsUnlocked(updates.pinnedFolderId))) throw appError(404, 'Folder not found.');
+    });
+  }
+
+  const payload = {
+    targetSessionId: target.id,
+    parentSessionId: parent.id,
+    childSessionId: child?.id || null,
+    updates: { ...updates }
+  };
+  addLocationPayload(payload, 'parent', parentFound);
+  if (childFound) addLocationPayload(payload, 'child', childFound);
+  return payload;
+}
+
+async function applySyncSessionMetadata(mutation) {
+  const {
+    targetSessionId,
+    parentSessionId,
+    childSessionId,
+    parentLocation,
+    parentDateDir,
+    childLocation,
+    childDateDir,
+    updates
+  } = mutation.payload;
+  const parentFile = sessionFileForLocation(parentSessionId, parentLocation, parentDateDir);
+  const childFile = childSessionId ? sessionFileForLocation(childSessionId, childLocation, childDateDir) : null;
+
+  return withOrderedLocks(childFile ? [parentFile, childFile] : [parentFile], async () => {
+    const parent = await readSessionIfExists(parentFile, {
+      expectedId: parentSessionId,
+      trashed: parentLocation === 'trash'
+    });
+    if (!parent || parent.kind !== 'normal') {
+      throw storedDataError('mutation journal', 'metadata parent session is missing or invalid');
+    }
+
+    let child = null;
+    if (childSessionId) {
+      child = await readSessionIfExists(childFile, {
+        expectedId: childSessionId,
+        trashed: childLocation === 'trash'
+      });
+      if (!child || child.kind !== 'compacted' || child.parentSessionId !== parent.id) {
+        throw storedDataError('mutation journal', 'metadata compacted session relationship is inconsistent');
+      }
+      if (parent.compactedSessionId !== child.id) {
+        throw storedDataError('mutation journal', 'metadata parent does not reference its compacted session');
+      }
+    }
+
+    if (updates.title !== undefined) parent.title = updates.title;
+    if (updates.aiName !== undefined) parent.aiName = updates.aiName;
+    if (updates.pinnedFolderId !== undefined) parent.pinnedFolderId = updates.pinnedFolderId;
+    parent.updatedAt = mutation.startedAt;
+    await writeJson(parentFile, parent);
+    await checkpoint('sync-session-metadata:after-parent-write', mutation);
+
+    if (child) {
+      child.title = compactedTitleFor(parent.title);
+      child.aiName = parent.aiName;
+      child.pinnedFolderId = parent.pinnedFolderId || null;
+      child.updatedAt = mutation.startedAt;
+      await writeJson(childFile, child);
+      await checkpoint('sync-session-metadata:after-child-write', mutation);
+    }
+
+    return {
+      session: targetSessionId === childSessionId ? child : parent,
+      dateDir: targetSessionId === childSessionId ? childDateDir : parentDateDir,
+      trashed: targetSessionId === childSessionId ? childLocation === 'trash' : parentLocation === 'trash'
+    };
+  });
+}
+
+async function prepareTrashMutationPlan(sessionId, sourceDateDir) {
+  const sourceFile = path.join(DATA_DIR, sourceDateDir, `${sessionId}.json`);
+  const target = await readSessionIfExists(sourceFile, { expectedId: sessionId, trashed: false });
+  if (!target) throw appError(404, 'Session not found.');
+  const existingTrash = await readSessionIfExists(path.join(TRASH_DIR, `${sessionId}.json`), {
+    expectedId: sessionId,
+    trashed: true
+  });
+  if (existingTrash) throw appError(409, 'Session already exists in trash.');
+
+  if (target.kind === 'normal' && !target.compactedSessionId) {
+    return { type: 'trash-session', payload: { sessionId, sourceDateDir } };
+  }
+
+  if (target.kind === 'normal') {
+    const childFound = await findSessionFile(target.compactedSessionId, true);
+    if (!childFound) throw storedDataError('session', 'compacted session child is missing');
+    const child = await readFoundSessionForLifecycle(childFound, target.compactedSessionId);
+    if (child.kind !== 'compacted' || child.parentSessionId !== target.id) {
+      throw storedDataError('session', 'compacted session relationship is inconsistent');
+    }
+    if (!childFound.trashed) {
+      const childTrash = await readSessionIfExists(path.join(TRASH_DIR, `${child.id}.json`), {
+        expectedId: child.id,
+        trashed: true
+      });
+      if (childTrash) throw appError(409, 'Compacted session already exists in trash.');
+    }
+    const payload = {
+      action: 'trash-pair',
+      parentSessionId: target.id,
+      childSessionId: child.id
+    };
+    addLocationPayload(payload, 'parent', { trashed: false, dateDir: sourceDateDir });
+    addLocationPayload(payload, 'child', childFound);
+    return { type: 'compacted-session-lifecycle', payload };
+  }
+
+  const parentFound = await findSessionFile(target.parentSessionId, true);
+  if (!parentFound) throw storedDataError('session', 'compacted session parent is missing');
+  const parent = await readFoundSessionForLifecycle(parentFound, target.parentSessionId);
+  if (parent.kind !== 'normal' || parent.compactedSessionId !== target.id) {
+    throw storedDataError('session', 'compacted session relationship is inconsistent');
+  }
+  const payload = {
+    action: 'trash-child',
+    parentSessionId: parent.id,
+    childSessionId: target.id
+  };
+  addLocationPayload(payload, 'parent', parentFound);
+  addLocationPayload(payload, 'child', { trashed: false, dateDir: sourceDateDir });
+  return { type: 'compacted-session-lifecycle', payload };
+}
+
+function restoreDateForSession(session) {
+  return dateFolderName(new Date(session.createdAt));
+}
+
+async function prepareRestoreMutationPlan(sessionId) {
+  const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
+  const target = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
+  if (!target) throw appError(404, 'Trashed session not found.');
+  if (await findSessionFile(sessionId)) throw appError(409, 'Session already exists outside trash.');
+
+  if (target.kind === 'normal' && !target.compactedSessionId) {
+    return {
+      type: 'restore-session',
+      payload: { sessionId, restoreDate: restoreDateForSession(target) }
+    };
+  }
+
+  if (target.kind === 'normal') {
+    const childFound = await findSessionFile(target.compactedSessionId, true);
+    if (!childFound) throw storedDataError('session', 'compacted session child is missing');
+    const child = await readFoundSessionForLifecycle(childFound, target.compactedSessionId);
+    if (child.kind !== 'compacted' || child.parentSessionId !== target.id) {
+      throw storedDataError('session', 'compacted session relationship is inconsistent');
+    }
+    if (!childFound.trashed) {
+      return {
+        type: 'restore-session',
+        payload: { sessionId, restoreDate: restoreDateForSession(target) }
+      };
+    }
+    return {
+      type: 'compacted-session-lifecycle',
+      payload: {
+        action: 'restore-pair',
+        requestedSessionId: target.id,
+        parentSessionId: target.id,
+        childSessionId: child.id,
+        parentRestoreDate: restoreDateForSession(target),
+        childRestoreDate: restoreDateForSession(child)
+      }
+    };
+  }
+
+  const parentFound = await findSessionFile(target.parentSessionId, true);
+  if (!parentFound) throw appError(409, 'Cannot restore compacted session because its parent is missing.');
+  const parent = await readFoundSessionForLifecycle(parentFound, target.parentSessionId);
+  if (parent.kind !== 'normal') throw storedDataError('session', 'compacted session parent is invalid');
+
+  if (parentFound.trashed) {
+    if (parent.compactedSessionId !== target.id) {
+      throw appError(409, 'Cannot restore compacted session because its parent no longer references it.');
+    }
+    return {
+      type: 'compacted-session-lifecycle',
+      payload: {
+        action: 'restore-pair',
+        requestedSessionId: target.id,
+        parentSessionId: parent.id,
+        childSessionId: target.id,
+        parentRestoreDate: restoreDateForSession(parent),
+        childRestoreDate: restoreDateForSession(target)
+      }
+    };
+  }
+
+  if (parent.compactedSessionId && parent.compactedSessionId !== target.id) {
+    throw appError(409, 'Parent session already has a different compacted session.');
+  }
+  const payload = {
+    action: 'restore-child',
+    requestedSessionId: target.id,
+    parentSessionId: parent.id,
+    childSessionId: target.id,
+    childRestoreDate: restoreDateForSession(target)
+  };
+  addLocationPayload(payload, 'parent', parentFound);
+  return { type: 'compacted-session-lifecycle', payload };
+}
+
+async function preparePermanentDeleteMutationPlan(sessionId) {
+  const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
+  const target = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
+  if (!target) throw appError(404, 'Trashed session not found.');
+
+  if (target.kind === 'normal' && !target.compactedSessionId) {
+    return { type: 'permanent-delete-trash', payload: { sessionId } };
+  }
+
+  if (target.kind === 'normal') {
+    const childFound = await findSessionFile(target.compactedSessionId, true);
+    if (!childFound) return { type: 'permanent-delete-trash', payload: { sessionId } };
+    if (!childFound.trashed) {
+      throw appError(409, 'Cannot permanently delete a parent while its compacted session is active.');
+    }
+    const child = await readFoundSessionForLifecycle(childFound, target.compactedSessionId);
+    if (child.kind !== 'compacted' || child.parentSessionId !== target.id) {
+      throw storedDataError('session', 'compacted session relationship is inconsistent');
+    }
+    return {
+      type: 'compacted-session-lifecycle',
+      payload: {
+        action: 'delete-pair',
+        parentSessionId: target.id,
+        childSessionId: child.id
+      }
+    };
+  }
+
+  const parentFound = await findSessionFile(target.parentSessionId, true);
+  const payload = {
+    action: 'delete-child',
+    parentSessionId: target.parentSessionId,
+    childSessionId: target.id
+  };
+  if (parentFound) {
+    const parent = await readFoundSessionForLifecycle(parentFound, target.parentSessionId);
+    if (parent.kind !== 'normal') throw storedDataError('session', 'compacted session parent is invalid');
+    if (parent.compactedSessionId === target.id) addLocationPayload(payload, 'parent', parentFound);
+  }
+  return { type: 'compacted-session-lifecycle', payload };
+}
+
+async function syncCompactedChildMetadata(parent, child, childFile, mutation) {
+  child.title = compactedTitleFor(parent.title);
+  child.aiName = parent.aiName;
+  child.pinnedFolderId = parent.pinnedFolderId || null;
+  child.updatedAt = mutation.startedAt;
+  await writeJson(childFile, child);
+}
+
+async function applyCompactedSessionLifecycle(mutation) {
+  const payload = mutation.payload;
+  const { action, parentSessionId, childSessionId } = payload;
+
+  if (action === 'trash-pair') {
+    await applyTrashSession({
+      ...mutation,
+      payload: { sessionId: parentSessionId, sourceDateDir: payload.parentDateDir }
+    });
+    await checkpoint('compacted-lifecycle:after-parent-trash', mutation);
+    if (payload.childLocation === 'active') {
+      await applyTrashSession({
+        ...mutation,
+        payload: { sessionId: childSessionId, sourceDateDir: payload.childDateDir }
+      });
+    }
+    await checkpoint('compacted-lifecycle:after-child-trash', mutation);
+    return;
+  }
+
+  if (action === 'trash-child') {
+    await applyTrashSession({
+      ...mutation,
+      payload: { sessionId: childSessionId, sourceDateDir: payload.childDateDir }
+    });
+    await checkpoint('compacted-lifecycle:after-child-trash', mutation);
+    const parentFile = sessionFileForLocation(parentSessionId, payload.parentLocation, payload.parentDateDir);
+    await withLock(parentFile, async () => {
+      const parent = await readSessionIfExists(parentFile, {
+        expectedId: parentSessionId,
+        trashed: payload.parentLocation === 'trash'
+      });
+      if (!parent) throw storedDataError('mutation journal', 'compacted session parent is missing');
+      if (parent.compactedSessionId === childSessionId) {
+        parent.compactedSessionId = null;
+        parent.updatedAt = mutation.startedAt;
+        await writeJson(parentFile, parent);
+      }
+    });
+    await checkpoint('compacted-lifecycle:after-parent-detach', mutation);
+    return;
+  }
+
+  if (action === 'restore-pair') {
+    const parent = await applyRestoreSession({
+      ...mutation,
+      payload: { sessionId: parentSessionId, restoreDate: payload.parentRestoreDate }
+    });
+    await checkpoint('compacted-lifecycle:after-parent-restore', mutation);
+    const child = await applyRestoreSession({
+      ...mutation,
+      payload: { sessionId: childSessionId, restoreDate: payload.childRestoreDate }
+    });
+    await checkpoint('compacted-lifecycle:after-child-restore', mutation);
+
+    const parentFile = path.join(DATA_DIR, payload.parentRestoreDate, `${parentSessionId}.json`);
+    const childFile = path.join(DATA_DIR, payload.childRestoreDate, `${childSessionId}.json`);
+    const restoredTarget = await withOrderedLocks([parentFile, childFile], async () => {
+      const storedParent = await readSessionIfExists(parentFile, { expectedId: parentSessionId, trashed: false });
+      const storedChild = await readSessionIfExists(childFile, { expectedId: childSessionId, trashed: false });
+      if (!storedParent || !storedChild) {
+        throw storedDataError('mutation journal', 'restored compacted pair is incomplete');
+      }
+      storedParent.compactedSessionId = childSessionId;
+      storedParent.updatedAt = mutation.startedAt;
+      await writeJson(parentFile, storedParent);
+      await syncCompactedChildMetadata(storedParent, storedChild, childFile, mutation);
+      return payload.requestedSessionId === childSessionId ? storedChild : storedParent;
+    });
+    await checkpoint('compacted-lifecycle:after-pair-sync', mutation);
+    return restoredTarget;
+  }
+
+  if (action === 'restore-child') {
+    await applyRestoreSession({
+      ...mutation,
+      payload: { sessionId: childSessionId, restoreDate: payload.childRestoreDate }
+    });
+    await checkpoint('compacted-lifecycle:after-child-restore', mutation);
+    const parentFile = sessionFileForLocation(parentSessionId, payload.parentLocation, payload.parentDateDir);
+    const childFile = path.join(DATA_DIR, payload.childRestoreDate, `${childSessionId}.json`);
+    return withOrderedLocks([parentFile, childFile], async () => {
+      const parent = await readSessionIfExists(parentFile, { expectedId: parentSessionId, trashed: false });
+      const child = await readSessionIfExists(childFile, { expectedId: childSessionId, trashed: false });
+      if (!parent || !child) throw storedDataError('mutation journal', 'restored compacted relationship is incomplete');
+      if (parent.compactedSessionId && parent.compactedSessionId !== childSessionId) {
+        throw storedDataError('mutation journal', 'parent references a different compacted session');
+      }
+      parent.compactedSessionId = childSessionId;
+      parent.updatedAt = mutation.startedAt;
+      await writeJson(parentFile, parent);
+      await syncCompactedChildMetadata(parent, child, childFile, mutation);
+      await checkpoint('compacted-lifecycle:after-parent-reattach', mutation);
+      return child;
+    });
+  }
+
+  if (action === 'delete-pair') {
+    await applyPermanentDeleteTrash({ ...mutation, payload: { sessionId: childSessionId } });
+    await checkpoint('compacted-lifecycle:after-child-delete', mutation);
+    await applyPermanentDeleteTrash({ ...mutation, payload: { sessionId: parentSessionId } });
+    await checkpoint('compacted-lifecycle:after-parent-delete', mutation);
+    return;
+  }
+
+  if (action === 'delete-child') {
+    await applyPermanentDeleteTrash({ ...mutation, payload: { sessionId: childSessionId } });
+    await checkpoint('compacted-lifecycle:after-child-delete', mutation);
+    if (payload.parentLocation) {
+      const parentFile = sessionFileForLocation(parentSessionId, payload.parentLocation, payload.parentDateDir);
+      await withLock(parentFile, async () => {
+        const parent = await readSessionIfExists(parentFile, {
+          expectedId: parentSessionId,
+          trashed: payload.parentLocation === 'trash'
+        });
+        if (parent?.compactedSessionId === childSessionId) {
+          parent.compactedSessionId = null;
+          parent.updatedAt = mutation.startedAt;
+          await writeJson(parentFile, parent);
+        }
+      });
+    }
+    await checkpoint('compacted-lifecycle:after-parent-detach', mutation);
+    return;
+  }
+
+  throw storedDataError('mutation journal', `unsupported compacted lifecycle action ${action}`);
 }
 
 function nextMessageSender(messages) {
@@ -681,6 +1230,8 @@ async function applyMutation(mutation) {
   if (mutation.type === 'permanent-delete-trash') return applyPermanentDeleteTrash(mutation);
   if (mutation.type === 'upsert-compaction') return applyUpsertCompaction(mutation);
   if (mutation.type === 'mirror-compacted-message') return applyMirrorCompactedMessage(mutation);
+  if (mutation.type === 'sync-session-metadata') return applySyncSessionMetadata(mutation);
+  if (mutation.type === 'compacted-session-lifecycle') return applyCompactedSessionLifecycle(mutation);
   throw storedDataError('mutation journal', `unsupported operation ${mutation.type}`);
 }
 
@@ -705,43 +1256,43 @@ async function withMutationConsistency(task) {
   });
 }
 
-async function runRecoverableMutation(type, payloadOrFactory, apply = applyMutation) {
+async function runRecoverableMutationPlan(planFactory, apply = applyMutation) {
   await ensureBaseFiles();
   return withLock(GLOBAL_MUTATION_LOCK, async () => {
     await recoverPendingMutationUnlocked();
-    const payload = typeof payloadOrFactory === 'function' ? await payloadOrFactory() : payloadOrFactory;
+    const plan = await planFactory();
     const mutation = validateMutationJournal({
       journalVersion: JOURNAL_VERSION,
       schemaVersion: CURRENT_SCHEMA_VERSION,
-      type,
+      type: plan.type,
       startedAt: new Date().toISOString(),
-      payload
+      payload: plan.payload
     });
     await writeJson(MUTATION_JOURNAL_FILE, mutation);
-    await checkpoint(`${type}:after-journal-write`, mutation);
+    await checkpoint(`${plan.type}:after-journal-write`, mutation);
     const result = await apply(mutation);
     await removeJournal();
     return result;
   });
 }
 
+async function runRecoverableMutation(type, payloadOrFactory, apply = applyMutation) {
+  return runRecoverableMutationPlan(async () => ({
+    type,
+    payload: typeof payloadOrFactory === 'function' ? await payloadOrFactory() : payloadOrFactory
+  }), apply);
+}
+
+async function syncSessionMetadataRecoverably(sessionId, updates) {
+  return runRecoverableMutation('sync-session-metadata', () => prepareSessionMetadataPayload(sessionId, updates));
+}
+
 async function moveSessionToTrashRecoverably(sessionId, sourceDateDir) {
-  return runRecoverableMutation('trash-session', async () => {
-    const sourceFile = path.join(DATA_DIR, sourceDateDir, `${sessionId}.json`);
-    const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
-    const sourceSession = await readSessionIfExists(sourceFile, { expectedId: sessionId, trashed: false });
-    if (!sourceSession) throw appError(404, 'Session not found.');
-    const trashSession = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
-    if (trashSession) throw appError(409, 'Session already exists in trash.');
-    return { sessionId, sourceDateDir };
-  });
+  return runRecoverableMutationPlan(() => prepareTrashMutationPlan(sessionId, sourceDateDir));
 }
 
 async function restoreSessionRecoverably(sessionId) {
-  return runRecoverableMutation('restore-session', async () => ({
-    sessionId,
-    restoreDate: await prepareRestoreDate(sessionId)
-  }));
+  return runRecoverableMutationPlan(() => prepareRestoreMutationPlan(sessionId));
 }
 
 async function deleteFolderRecoverably(folderId) {
@@ -749,12 +1300,7 @@ async function deleteFolderRecoverably(folderId) {
 }
 
 async function permanentlyDeleteTrashRecoverably(sessionId) {
-  return runRecoverableMutation('permanent-delete-trash', async () => {
-    const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
-    const session = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
-    if (!session) throw appError(404, 'Trashed session not found.');
-    return { sessionId };
-  });
+  return runRecoverableMutationPlan(() => preparePermanentDeleteMutationPlan(sessionId));
 }
 
 async function resolveCompactionRelationship(sessionId) {
@@ -851,15 +1397,6 @@ async function upsertCompactedSessionRecoverably(sessionId, request) {
   });
 }
 
-async function prepareRestoreDate(sessionId) {
-  const trashFile = path.join(TRASH_DIR, `${sessionId}.json`);
-  const session = await readSessionIfExists(trashFile, { expectedId: sessionId, trashed: true });
-  if (!session) throw appError(404, 'Trashed session not found.');
-  const active = await findSessionFile(sessionId);
-  if (active) throw appError(409, 'Session already exists outside trash.');
-  return dateFolderName(new Date(session.createdAt));
-}
-
 function setMutationFailureInjectorForTests(injector) {
   failureInjectorForTests = typeof injector === 'function' ? injector : null;
 }
@@ -871,6 +1408,7 @@ module.exports = {
   restoreSessionRecoverably,
   deleteFolderRecoverably,
   permanentlyDeleteTrashRecoverably,
+  syncSessionMetadataRecoverably,
   upsertCompactedSessionRecoverably,
   addCompactedSessionMessageRecoverably,
   setMutationFailureInjectorForTests

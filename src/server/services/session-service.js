@@ -25,6 +25,7 @@ const {
   moveSessionToTrashRecoverably,
   restoreSessionRecoverably,
   permanentlyDeleteTrashRecoverably,
+  syncSessionMetadataRecoverably,
   upsertCompactedSessionRecoverably,
   addCompactedSessionMessageRecoverably
 } = require('../storage/mutation-coordinator');
@@ -112,17 +113,15 @@ async function updateSessionMetadata(sessionId, body) {
   if (hasTitle && !title) throw appError(400, 'Session title is required.');
   if (hasAiName && !aiName) throw appError(400, 'AI bot name is required.');
 
-  const found = await findSessionFile(safeSessionId, true);
-  if (!found) throw appError(404, 'Session not found.');
+  const updates = {};
+  if (hasTitle) updates.title = title;
+  if (hasAiName) updates.aiName = aiName;
 
-  return withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    if (hasTitle) session.title = title;
-    if (hasAiName) session.aiName = aiName;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(found.filePath, session);
-    return { ...summarizeSession(session, found.dateDir, found.trashed), aiName: botNameForSession(session) };
-  });
+  const result = await syncSessionMetadataRecoverably(safeSessionId, updates);
+  return {
+    ...summarizeSession(result.session, result.dateDir, result.trashed),
+    aiName: botNameForSession(result.session)
+  };
 }
 
 async function updateBotName(sessionId, body) {
@@ -130,16 +129,11 @@ async function updateBotName(sessionId, body) {
   const aiName = cleanName(body.aiName, 80, 'AI bot name');
   if (!aiName) throw appError(400, 'AI bot name is required.');
 
-  const found = await findSessionFile(safeSessionId, true);
-  if (!found) throw appError(404, 'Session not found.');
-
-  return withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    session.aiName = aiName;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(found.filePath, session);
-    return { ...summarizeSession(session, found.dateDir, found.trashed), aiName: session.aiName };
-  });
+  const result = await syncSessionMetadataRecoverably(safeSessionId, { aiName });
+  return {
+    ...summarizeSession(result.session, result.dateDir, result.trashed),
+    aiName: result.session.aiName
+  };
 }
 
 async function getSessionExport(sessionId) {
@@ -285,21 +279,9 @@ async function deleteMessage(sessionId, messageId) {
 
 async function pinSession(sessionId, body) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const requestedFolderId = optionalFolderId(body.pinnedFolderId);
-
-  return withMutationConsistency(async () => {
-    const pinnedFolderId = await requireExistingFolderId(requestedFolderId);
-    const found = await findSessionFile(safeSessionId);
-    if (!found) throw appError(404, 'Session not found.');
-
-    return withLock(found.filePath, async () => {
-      const session = await readFoundSession(found, safeSessionId);
-      session.pinnedFolderId = pinnedFolderId;
-      session.updatedAt = new Date().toISOString();
-      await writeJson(found.filePath, session);
-      return summarizeSession(session, found.dateDir);
-    });
-  });
+  const pinnedFolderId = optionalFolderId(body.pinnedFolderId);
+  const result = await syncSessionMetadataRecoverably(safeSessionId, { pinnedFolderId });
+  return summarizeSession(result.session, result.dateDir, result.trashed);
 }
 
 async function moveSessionToTrash(sessionId) {
