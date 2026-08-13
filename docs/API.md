@@ -42,6 +42,8 @@ The browser extension uses this to determine where manual saves should go when n
 
 Compacted sessions share lifecycle metadata with their normal parent. Renaming the parent automatically derives the child's `Title (compacted)` name; the child cannot be renamed independently. AI-name and folder-pin changes made through either member are synchronized to both records. Trashing the parent moves the pair together and restoring either member of that paired trash state restores both. Trashing only the compacted child detaches it by clearing the parent's `compactedSessionId`, allowing a later compaction to create a replacement; restoring the detached child reattaches it only when the parent has not already acquired another compacted child. Permanently deleting a trashed parent deletes its paired compacted child, while deleting a detached child clears any remaining parent reference. These multi-file lifecycle updates use the recovery journal so an interrupted operation is replayed on startup.
 
+`GET /api/sessions/:sessionId/export` keeps normal-session exports as the complete archival transcript. For a compacted session, continuation export uses the stored `compaction.text` as the historical context and then appends only that compacted session's post-compaction messages. This is the text used by the browser extension's Load past conversation flow, so continuing from a compacted child carries forward the condensed history without repasting messages already represented by the compaction.
+
 ## Messages
 
 - `POST /api/sessions/:sessionId/messages`

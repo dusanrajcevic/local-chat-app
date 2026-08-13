@@ -13,23 +13,20 @@ function wrapChatExportForContinuation(text) {
   return `${CONTINUATION_CONTEXT_PROMPT}${cleanExport}`.trim();
 }
 
-function buildChatExportText(session) {
-  if (!session) return '';
-
-  const messages = Array.isArray(session.messages) ? session.messages : [];
-  const lines = [
+function exportHeaderLines(session) {
+  return [
     `Chat title: ${session.title || 'Untitled chat'}`,
     `AI name: ${botNameForSession(session)}`,
     `Created: ${session.createdAt ? new Date(session.createdAt).toLocaleString() : 'Unknown time'}`,
     `Last updated: ${session.updatedAt ? new Date(session.updatedAt).toLocaleString() : 'Unknown time'}`,
-    '',
-    'Messages:',
     ''
   ];
+}
 
+function appendMessages(lines, session, messages, emptyLabel = '[No messages yet]') {
   if (!messages.length) {
-    lines.push('[No messages yet]');
-    return wrapChatExportForContinuation(lines.join('\n'));
+    lines.push(emptyLabel);
+    return;
   }
 
   messages.forEach((message, index) => {
@@ -41,7 +38,37 @@ function buildChatExportText(session) {
     lines.push(String(message.text || ''));
     lines.push('');
   });
+}
 
+function buildCompactedChatExportText(session) {
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const compaction = session.compaction || {};
+  const sourceCount = Number.isInteger(compaction.sourceMessageCount) ? compaction.sourceMessageCount : null;
+  const contextHeading = sourceCount
+    ? `Compacted context (${sourceCount} source message${sourceCount === 1 ? '' : 's'}):`
+    : 'Compacted context:';
+  const lines = [
+    ...exportHeaderLines(session),
+    contextHeading,
+    String(compaction.text || ''),
+    '',
+    'Messages after compaction:',
+    ''
+  ];
+
+  appendMessages(lines, session, messages, '[No messages after compaction]');
+  return wrapChatExportForContinuation(lines.join('\n').trim());
+}
+
+function buildChatExportText(session) {
+  if (!session) return '';
+  if (session.kind === 'compacted' && session.compaction?.text) {
+    return buildCompactedChatExportText(session);
+  }
+
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const lines = [...exportHeaderLines(session), 'Messages:', ''];
+  appendMessages(lines, session, messages);
   return wrapChatExportForContinuation(lines.join('\n').trim());
 }
 
@@ -57,6 +84,7 @@ function buildSessionExportResponse(session, fileDate, trashed) {
 module.exports = {
   CONTINUATION_CONTEXT_PROMPT,
   wrapChatExportForContinuation,
+  buildCompactedChatExportText,
   buildChatExportText,
   buildSessionExportResponse
 };

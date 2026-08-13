@@ -40,7 +40,7 @@ Current hardening includes:
 - `state.mjs`: initial state, DOM element lookup, formatting helpers, and sender-name helpers;
 - `render.mjs`: folder/session/trash/message rendering and sidebar state;
 - `message-navigator.mjs`: right-side user-message markers, hover/focus previews, active-turn tracking, and jump navigation;
-- `export.mjs`: chat export text and continuation-context wrapping;
+- `export.mjs`: chat export text and continuation-context wrapping, including compacted context plus post-compaction messages for compacted sessions;
 - `modals.mjs`: shared edit/prompt/search dialog state, focus containment, and focus restoration;
 - `clipboard.mjs`: chat/message Markdown copy helpers and fenced-code copying;
 - `controllers.mjs`: small controller composition root;

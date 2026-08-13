@@ -11,26 +11,23 @@ function wrapChatExportForContinuation(text) {
   return `${CONTINUATION_CONTEXT_PROMPT}${cleanText}`.trim();
 }
 
-function buildChatExportText(session, { getBotName } = {}) {
-  if (!session) return '';
-  const botName = typeof getBotName === 'function' ? getBotName : (item) => item?.aiName || 'AI Bot';
-
-  const lines = [
+function exportHeaderLines(session, botName) {
+  return [
     `Chat title: ${session.title}`,
     `AI name: ${botName(session)}`,
     `Created: ${new Date(session.createdAt).toLocaleString()}`,
     `Last updated: ${new Date(session.updatedAt).toLocaleString()}`,
-    '',
-    'Messages:',
     ''
   ];
+}
 
-  if (!session.messages.length) {
-    lines.push('[No messages yet]');
-    return wrapChatExportForContinuation(lines.join('\n'));
+function appendMessages(lines, session, messages, botName, emptyLabel = '[No messages yet]') {
+  if (!messages.length) {
+    lines.push(emptyLabel);
+    return;
   }
 
-  session.messages.forEach((message, index) => {
+  messages.forEach((message, index) => {
     const sender = message.sender === 'me' ? 'Me' : botName(session);
     const createdAt = message.createdAt ? new Date(message.createdAt).toLocaleString() : 'Unknown time';
     const edited = message.updatedAt ? ' · edited' : '';
@@ -39,8 +36,45 @@ function buildChatExportText(session, { getBotName } = {}) {
     lines.push(message.text);
     lines.push('');
   });
+}
 
+function buildCompactedChatExportText(session, botName) {
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const compaction = session.compaction || {};
+  const sourceCount = Number.isInteger(compaction.sourceMessageCount) ? compaction.sourceMessageCount : null;
+  const contextHeading = sourceCount
+    ? `Compacted context (${sourceCount} source message${sourceCount === 1 ? '' : 's'}):`
+    : 'Compacted context:';
+  const lines = [
+    ...exportHeaderLines(session, botName),
+    contextHeading,
+    String(compaction.text || ''),
+    '',
+    'Messages after compaction:',
+    ''
+  ];
+
+  appendMessages(lines, session, messages, botName, '[No messages after compaction]');
   return wrapChatExportForContinuation(lines.join('\n').trim());
 }
 
-export { CONTINUATION_CONTEXT_PROMPT, wrapChatExportForContinuation, buildChatExportText };
+function buildChatExportText(session, { getBotName } = {}) {
+  if (!session) return '';
+  const botName = typeof getBotName === 'function' ? getBotName : (item) => item?.aiName || 'AI Bot';
+
+  if (session.kind === 'compacted' && session.compaction?.text) {
+    return buildCompactedChatExportText(session, botName);
+  }
+
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const lines = [...exportHeaderLines(session, botName), 'Messages:', ''];
+  appendMessages(lines, session, messages, botName);
+  return wrapChatExportForContinuation(lines.join('\n').trim());
+}
+
+export {
+  CONTINUATION_CONTEXT_PROMPT,
+  wrapChatExportForContinuation,
+  buildCompactedChatExportText,
+  buildChatExportText
+};
