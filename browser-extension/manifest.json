@@ -26,6 +26,7 @@
         "content-providers.js",
         "content-dom.js",
         "content-diagnostics.js",
+        "content-compaction.js",
         "content-message-save.js",
         "content-autosave.js",
         "content-sidebar.js",

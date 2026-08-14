@@ -470,6 +470,33 @@ async function setActiveLocalChatSession(payload = {}) {
   };
 }
 
+async function upsertLocalChatCompaction(payload = {}) {
+  const sessionId = String(payload.sessionId || '').trim();
+  if (!sessionId) throw new Error('Session ID is required.');
+
+  const requestId = String(payload.requestId || '').trim();
+  if (!requestId) throw new Error('Compaction request ID is required.');
+
+  const compactedMessage = String(payload.compactedMessage || '').trim();
+  if (!compactedMessage) throw new Error('Compacted message is required.');
+
+  const providerKey = String(payload.providerKey || '').trim();
+  const { localAppUrl } = await getSettings();
+  await fetchJson(`${localAppUrl}/api/health`);
+
+  const session = await fetchJson(`${localAppUrl}/api/sessions/${encodeURIComponent(sessionId)}/compaction`, {
+    method: 'PUT',
+    body: JSON.stringify({ requestId, compactedMessage, providerKey })
+  });
+
+  return {
+    ok: true,
+    sessionId: session.id || sessionId,
+    sessionTitle: session.title || 'compacted session',
+    session
+  };
+}
+
 async function loadLocalChatExport(payload = {}) {
   const sessionId = String(payload.sessionId || '').trim();
   if (!sessionId) throw new Error('Session ID is required.');
@@ -597,6 +624,13 @@ function handleRuntimeMessage(message, sender, sendResponse) {
     return true;
   }
 
+  if (message.type === 'UPSERT_LOCAL_CHAT_COMPACTION') {
+    upsertLocalChatCompaction(message.payload || {})
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message.type === 'LOAD_LOCAL_CHAT_EXPORT') {
     loadLocalChatExport(message.payload || {})
       .then((result) => sendResponse(result))
@@ -640,6 +674,7 @@ if (typeof module !== 'undefined' && module.exports) {
     searchLocalChats,
     listLocalSidebarData,
     setActiveLocalChatSession,
+    upsertLocalChatCompaction,
     loadLocalChatExport,
     handleRuntimeMessage
   };

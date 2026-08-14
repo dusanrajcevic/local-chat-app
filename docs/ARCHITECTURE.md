@@ -59,11 +59,12 @@ Current hardening includes:
 The extension is split into:
 
 - `local-api.js`: shared loopback-only local API URL validation;
-- `background.js`: paired local API calls, protected extension storage, request timeouts, and message routing;
+- `background.js`: paired local API calls, protected extension storage, request timeouts, message routing, and the structured-compaction persistence bridge;
 - `providers/*.js`: provider-specific host matching, turn selectors, content selectors, and sender/container preferences;
 - `content-providers.js`: provider adapter registry used by Node tests and the browser runtime;
 - `content-dom.js`: shared DOM/extraction orchestration used by tests and the runtime;
 - `content-diagnostics.js`: privacy-preserving provider health reporting for selector hits, message discovery, sender inference, and extraction coverage;
+- `content-compaction.js`: versioned provider compaction prompt/response contract, request-ID generation, strict response parsing, and local API payload conversion;
 - `content-message-save.js`: selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message-container filtering for manual/autosave extraction;
 - `content-autosave.js`: autosave state, assistant-readiness tracking, idempotency-key generation, prompt-capture scheduling, and outgoing/assistant save dedupe;
 - `content-sidebar.js`: local sidebar replacement, provider-sidebar hiding/restoration, folder/session rendering, refresh, and session-selection behavior;

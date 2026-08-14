@@ -398,6 +398,15 @@ test('background helpers reject missing required payload fields before fetching'
   await assert.rejects(() => background.updateLocalChatFolderName({ folderId: '', name: 'x' }), /folder id/i);
   await assert.rejects(() => background.deleteLocalChatFolder({}), /folder id/i);
   await assert.rejects(() => background.setActiveLocalChatSession({}), /session id/i);
+  await assert.rejects(() => background.upsertLocalChatCompaction({}), /session id/i);
+  await assert.rejects(
+    () => background.upsertLocalChatCompaction({ sessionId: 'chat_1' }),
+    /compaction request id/i
+  );
+  await assert.rejects(
+    () => background.upsertLocalChatCompaction({ sessionId: 'chat_1', requestId: 'compact:req:test-001' }),
+    /compacted message/i
+  );
   await assert.rejects(() => background.loadLocalChatExport({}), /session id/i);
 });
 
@@ -498,4 +507,82 @@ test('authenticated fetches require pairing and enforce a request timeout', asyn
     () => background.fetchJson('http://localhost:3000/api/health', {}, { timeoutMs: 5 }),
     /timed out/i
   );
+});
+
+test('upsertLocalChatCompaction persists a structured compaction through the local API', async () => {
+  installChromeStorage({ localAppUrl: 'http://localhost:3000' });
+  const sessionId = 'chat_1700000000000_55555555';
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    const parsed = new URL(String(url));
+    calls.push({ pathname: parsed.pathname, options });
+
+    if (parsed.pathname === '/api/health') return jsonResponse({ ok: true });
+    if (parsed.pathname === `/api/sessions/${sessionId}/compaction`) {
+      assert.equal(options.method, 'PUT');
+      assert.deepEqual(JSON.parse(options.body), {
+        requestId: 'compact:req:extension-001',
+        compactedMessage: 'Structured continuation context.',
+        providerKey: 'chatgpt'
+      });
+      return jsonResponse({
+        id: 'chat_1700000000000_66666666',
+        title: 'Extension compaction (compacted)',
+        kind: 'compacted',
+        parentSessionId: sessionId
+      });
+    }
+    return jsonResponse({ error: `Unexpected URL ${url}` }, 500);
+  };
+
+  const result = await background.upsertLocalChatCompaction({
+    sessionId,
+    requestId: 'compact:req:extension-001',
+    compactedMessage: ' Structured continuation context. ',
+    providerKey: 'chatgpt'
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.sessionId, 'chat_1700000000000_66666666');
+  assert.equal(result.sessionTitle, 'Extension compaction (compacted)');
+  assert.equal(result.session.parentSessionId, sessionId);
+  assert.deepEqual(
+    calls.map((call) => call.pathname),
+    ['/api/health', `/api/sessions/${sessionId}/compaction`]
+  );
+});
+
+test('runtime routing exposes the compaction bridge to content scripts', async () => {
+  installChromeStorage({ localAppUrl: 'http://localhost:3000' });
+  const sessionId = 'chat_1700000000000_77777777';
+
+  global.fetch = async (url, options = {}) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === '/api/health') return jsonResponse({ ok: true });
+    if (parsed.pathname === `/api/sessions/${sessionId}/compaction` && options.method === 'PUT') {
+      return jsonResponse({ id: 'chat_1700000000000_88888888', title: 'Runtime compaction (compacted)' });
+    }
+    return jsonResponse({ error: `Unexpected URL ${url}` }, 500);
+  };
+
+  const response = await new Promise((resolve) => {
+    const isAsync = background.handleRuntimeMessage(
+      {
+        type: 'UPSERT_LOCAL_CHAT_COMPACTION',
+        payload: {
+          sessionId,
+          requestId: 'compact:req:runtime-001',
+          compactedMessage: 'Runtime structured context.',
+          providerKey: 'claude'
+        }
+      },
+      {},
+      resolve
+    );
+    assert.equal(isAsync, true);
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(response.sessionId, 'chat_1700000000000_88888888');
 });
