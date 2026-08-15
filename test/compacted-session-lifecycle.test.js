@@ -92,10 +92,7 @@ test('trashing and restoring the parent keeps the compacted pair together', asyn
   assert.equal((await readSession(parent.id)).trashed, true);
   assert.equal((await readSession(child.id)).trashed, true);
   assert.equal((await getAppState()).activeSessionId, null);
-  assert.deepEqual(
-    new Set((await listTrash()).map((session) => session.id)),
-    new Set([parent.id, child.id])
-  );
+  assert.deepEqual(new Set((await listTrash()).map((session) => session.id)), new Set([parent.id, child.id]));
 
   const restored = await restoreSessionFromTrash(parent.id);
   assert.equal(restored.id, parent.id);
@@ -149,7 +146,10 @@ test('permanently deleting a trashed parent deletes its compacted child too', as
   await permanentlyDeleteTrashedSession(parent.id);
   await assertMissingSession(parent.id);
   await assertMissingSession(child.id);
-  assert.equal((await listTrash()).some((session) => session.id === parent.id || session.id === child.id), false);
+  assert.equal(
+    (await listTrash()).some((session) => session.id === parent.id || session.id === child.id),
+    false
+  );
 });
 
 test('an interrupted pair trash operation recovers the compacted child move', async () => {

@@ -83,10 +83,7 @@ test('rejects mismatched, malformed, ambiguous, or conversational compaction res
     () => protocol.parseCompactionResponse(responseText({ ...valid, version: 2 })),
     /unsupported protocol version/i
   );
-  assert.throws(
-    () => protocol.parseCompactionResponse(responseText({ ...valid, compactedMessage: '   ' })),
-    /empty/i
-  );
+  assert.throws(() => protocol.parseCompactionResponse(responseText({ ...valid, compactedMessage: '   ' })), /empty/i);
 });
 
 test('converts a validated structured response into the server compaction payload', () => {

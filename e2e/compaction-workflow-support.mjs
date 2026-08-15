@@ -68,11 +68,7 @@ export async function launchExtensionContext({ chromium, userDataDir, extensionP
     return await chromium.launchPersistentContext(userDataDir, {
       channel: 'chromium',
       headless: true,
-      args: [
-        '--no-sandbox',
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`
-      ]
+      args: ['--no-sandbox', `--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
     });
   } catch (error) {
     if (playwrightBrowserIsMissingError(error)) {

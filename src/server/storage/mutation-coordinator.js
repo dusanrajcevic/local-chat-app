@@ -145,7 +145,6 @@ function validateCompactionMutationPayload(payload) {
   assertJournalId(payload.compaction.throughMessageId, MESSAGE_ID_PATTERN, 'payload.compaction.throughMessageId');
 }
 
-
 const COMPACTED_LIFECYCLE_ACTIONS = new Set([
   'trash-pair',
   'trash-child',
@@ -1278,10 +1277,13 @@ async function runRecoverableMutationPlan(planFactory, apply = applyMutation) {
 }
 
 async function runRecoverableMutation(type, payloadOrFactory, apply = applyMutation) {
-  return runRecoverableMutationPlan(async () => ({
-    type,
-    payload: typeof payloadOrFactory === 'function' ? await payloadOrFactory() : payloadOrFactory
-  }), apply);
+  return runRecoverableMutationPlan(
+    async () => ({
+      type,
+      payload: typeof payloadOrFactory === 'function' ? await payloadOrFactory() : payloadOrFactory
+    }),
+    apply
+  );
 }
 
 async function syncSessionMetadataRecoverably(sessionId, updates) {

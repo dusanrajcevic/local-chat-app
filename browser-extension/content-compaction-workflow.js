@@ -5,13 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createLocalChatContentCompactionWorkflow() {
   'use strict';
 
-  const RUNNING_PHASES = new Set([
-    'sending-request',
-    'waiting-response',
-    'cancelling',
-    'persisting',
-    'activating'
-  ]);
+  const RUNNING_PHASES = new Set(['sending-request', 'waiting-response', 'cancelling', 'persisting', 'activating']);
 
   const CANCELLABLE_PHASES = new Set(['sending-request', 'waiting-response']);
 
@@ -210,7 +204,8 @@
     async function runCompaction(run) {
       const target = currentLocalChatTarget();
       if (!target?.sessionId) throw new Error('Open a local chat session before compacting this conversation.');
-      if (hasGeneratingAssistant()) throw new Error('Wait for the current assistant response to finish before compacting.');
+      if (hasGeneratingAssistant())
+        throw new Error('Wait for the current assistant response to finish before compacting.');
 
       const provider = providerInfo();
       const requestId = protocol.createCompactionRequestId();

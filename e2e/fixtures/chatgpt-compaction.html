@@ -5,9 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChatGPT compaction E2E fixture</title>
     <style>
-      * { box-sizing: border-box; }
-      html, body { width: 100%; min-height: 100%; margin: 0; }
-      body { font: 14px/1.45 system-ui, sans-serif; color: #e8e8e8; background: #212121; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+      }
+      body {
+        font:
+          14px/1.45 system-ui,
+          sans-serif;
+        color: #e8e8e8;
+        background: #212121;
+      }
       #providerSidebar {
         position: fixed;
         inset: 0 auto 0 0;
@@ -17,9 +30,20 @@
         overflow: auto;
         background: #171717;
       }
-      #providerSidebar button { display: block; width: 100%; min-height: 36px; margin: 6px 0; }
-      #conversationShell { margin-left: 280px; padding: 24px 24px 150px; }
-      #conversation { width: min(820px, 100%); margin: 0 auto; }
+      #providerSidebar button {
+        display: block;
+        width: 100%;
+        min-height: 36px;
+        margin: 6px 0;
+      }
+      #conversationShell {
+        margin-left: 280px;
+        padding: 24px 24px 150px;
+      }
+      #conversation {
+        width: min(820px, 100%);
+        margin: 0 auto;
+      }
       [data-testid^='conversation-turn'] {
         width: 100%;
         min-height: 72px;
@@ -28,9 +52,16 @@
         border-radius: 12px;
         background: #2f2f2f;
       }
-      [data-message-author-role='user'] { color: #fff; }
-      [data-message-author-role='assistant'] { color: #e0e0e0; }
-      [data-testid='turn-actions'] button { min-width: 70px; min-height: 30px; }
+      [data-message-author-role='user'] {
+        color: #fff;
+      }
+      [data-message-author-role='assistant'] {
+        color: #e0e0e0;
+      }
+      [data-testid='turn-actions'] button {
+        min-width: 70px;
+        min-height: 30px;
+      }
       #composerWrap {
         position: fixed;
         left: 300px;
@@ -47,8 +78,15 @@
         border-radius: 14px;
         background: #303030;
       }
-      #prompt-textarea { flex: 1; min-height: 68px; padding: 10px; }
-      #send-button { width: 84px; min-height: 44px; }
+      #prompt-textarea {
+        flex: 1;
+        min-height: 68px;
+        padding: 10px;
+      }
+      #send-button {
+        width: 84px;
+        min-height: 44px;
+      }
     </style>
   </head>
   <body>
@@ -80,7 +118,7 @@
     </div>
 
     <div id="composerWrap">
-      <form id="composer" data-testid="composer" onsubmit="return false">
+      <form id="composer" data-testid="composer" onsubmit="return false;">
         <textarea id="prompt-textarea" aria-label="Message ChatGPT" placeholder="Message ChatGPT"></textarea>
         <button id="send-button" type="button" aria-label="Send" data-testid="send-button">Send</button>
       </form>

@@ -140,9 +140,7 @@ function createRenderer({
 
   function hasCompactedContext(session = state.currentSession) {
     return Boolean(
-      session?.kind === 'compacted' &&
-        typeof session.compaction?.text === 'string' &&
-        session.compaction.text.trim()
+      session?.kind === 'compacted' && typeof session.compaction?.text === 'string' && session.compaction.text.trim()
     );
   }
 

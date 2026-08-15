@@ -21,10 +21,7 @@ import { monitorBrowserFailures } from './playwright-support.mjs';
 const ROOT_DIR = path.resolve(import.meta.dirname, '..');
 const EXTENSION_DIR = path.join(ROOT_DIR, 'browser-extension');
 const PROVIDER_URL = 'https://chatgpt.com/local-chat-e2e?temporary-chat=true';
-const PROTOCOL_MARKERS = [
-  '<<<LOCAL_CHAT_COMPACTION_REQUEST_V1>>>',
-  '<<<LOCAL_CHAT_COMPACTION_RESPONSE_V1>>>'
-];
+const PROTOCOL_MARKERS = ['<<<LOCAL_CHAT_COMPACTION_REQUEST_V1>>>', '<<<LOCAL_CHAT_COMPACTION_RESPONSE_V1>>>'];
 
 async function createSourceSession(baseUrl, title, messagePrefix = title) {
   const session = await apiJson(baseUrl, '/api/sessions', {
@@ -238,8 +235,14 @@ test('browser extension compaction workflow works end to end', { timeout: 90_000
 
     await apiJson(baseUrl, `/api/sessions/${encodeURIComponent(happyParent.id)}`, { method: 'DELETE' });
     let trash = await apiJson(baseUrl, '/api/trash');
-    assert.equal(trash.some((session) => session.id === happyParent.id), true);
-    assert.equal(trash.some((session) => session.id === childId), true);
+    assert.equal(
+      trash.some((session) => session.id === happyParent.id),
+      true
+    );
+    assert.equal(
+      trash.some((session) => session.id === childId),
+      true
+    );
     await apiJson(baseUrl, `/api/trash/${encodeURIComponent(happyParent.id)}/restore`, { method: 'POST' });
     parent = await apiJson(baseUrl, `/api/sessions/${encodeURIComponent(happyParent.id)}`);
     child = await apiJson(baseUrl, `/api/sessions/${encodeURIComponent(childId)}`);

@@ -399,10 +399,7 @@ test('background helpers reject missing required payload fields before fetching'
   await assert.rejects(() => background.deleteLocalChatFolder({}), /folder id/i);
   await assert.rejects(() => background.setActiveLocalChatSession({}), /session id/i);
   await assert.rejects(() => background.upsertLocalChatCompaction({}), /session id/i);
-  await assert.rejects(
-    () => background.upsertLocalChatCompaction({ sessionId: 'chat_1' }),
-    /compaction request id/i
-  );
+  await assert.rejects(() => background.upsertLocalChatCompaction({ sessionId: 'chat_1' }), /compaction request id/i);
   await assert.rejects(
     () => background.upsertLocalChatCompaction({ sessionId: 'chat_1', requestId: 'compact:req:test-001' }),
     /compacted message/i

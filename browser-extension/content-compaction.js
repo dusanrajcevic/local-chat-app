@@ -30,17 +30,13 @@
       return Array.from(values, (value) => value.toString(16).padStart(8, '0')).join('');
     }
 
-    return `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`
-      .slice(0, 16)
-      .padEnd(16, '0');
+    return `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`.slice(0, 16).padEnd(16, '0');
   }
 
   function createCompactionRequestId(options = {}) {
     const now = typeof options.now === 'function' ? options.now() : Date.now();
     const token = typeof options.randomToken === 'function' ? options.randomToken() : randomToken();
-    return normalizeRequestId(
-      `compact:req:${Number(now).toString(36)}:${String(token).replace(/[^a-zA-Z0-9]/g, '')}`
-    );
+    return normalizeRequestId(`compact:req:${Number(now).toString(36)}:${String(token).replace(/[^a-zA-Z0-9]/g, '')}`);
   }
 
   function buildCompactionPrompt({ requestId } = {}) {
@@ -57,7 +53,7 @@
       'Create a compact continuation context for the conversation up to this point.',
       '',
       'The context will replace the earlier turns when this conversation is continued later. Preserve durable information that is needed to continue accurately, including:',
-      '- the user\'s goals, preferences, constraints, and decisions;',
+      "- the user's goals, preferences, constraints, and decisions;",
       '- important facts, names, IDs, paths, commands, code details, and exact values that still matter;',
       '- work already completed and its verified result;',
       '- unresolved issues, pending decisions, and the next intended action;',
@@ -139,19 +135,22 @@
   }
 
   function isCompactionRequestText(text) {
-    return String(text || '').trimStart().startsWith(REQUEST_START);
+    return String(text || '')
+      .trimStart()
+      .startsWith(REQUEST_START);
   }
 
   function isCompactionResponseText(text) {
-    return String(text || '').trimStart().startsWith(RESPONSE_START);
+    return String(text || '')
+      .trimStart()
+      .startsWith(RESPONSE_START);
   }
 
   function compactionApiPayload(response, providerKey = '') {
     if (!response || typeof response !== 'object') throw new Error('Compaction response is required.');
-    const parsed = parseCompactionResponse(
-      `${RESPONSE_START}\n${JSON.stringify(response)}\n${RESPONSE_END}`,
-      { expectedRequestId: response.requestId }
-    );
+    const parsed = parseCompactionResponse(`${RESPONSE_START}\n${JSON.stringify(response)}\n${RESPONSE_END}`, {
+      expectedRequestId: response.requestId
+    });
 
     return {
       requestId: parsed.requestId,

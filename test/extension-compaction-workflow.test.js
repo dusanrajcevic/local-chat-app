@@ -160,7 +160,7 @@ function createHarness(options = {}) {
     },
     get refreshCount() {
       return refreshCount;
-    },
+    }
   };
 }
 
@@ -221,7 +221,6 @@ test('Compact workflow stops if the provider conversation changes while waiting'
   await assert.rejects(() => harness.workflow.startCompaction(), /provider conversation changed/i);
   assert.equal(harness.runtimeMessages.length, 0);
 });
-
 
 test('Compact workflow does not steal activation if the user switches local sessions during persistence', async () => {
   const harness = createHarness({
