@@ -13,6 +13,7 @@ function createRenderer({
   const markdown = renderMarkdown || htmlEscape;
   const dateFormatter = formatDate || ((value) => String(value || ''));
   const botName = (session = state.currentSession) => (getBotName ? getBotName(session) : 'AI Bot');
+  const expandedCompactedContexts = new Set();
 
   function applySidebarState() {
     el.appShell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
@@ -137,6 +138,65 @@ function createRenderer({
     el.isMeCheckbox.disabled = !state.currentSession || state.currentSession.trashed;
   }
 
+  function hasCompactedContext(session = state.currentSession) {
+    return Boolean(
+      session?.kind === 'compacted' &&
+        typeof session.compaction?.text === 'string' &&
+        session.compaction.text.trim()
+    );
+  }
+
+  function renderCompactedContext(session = state.currentSession) {
+    if (!hasCompactedContext(session)) return '';
+
+    const expanded = expandedCompactedContexts.has(session.id);
+    const sourceCount = session.compaction.sourceMessageCount;
+    const sourceLabel = Number.isInteger(sourceCount)
+      ? `${sourceCount} source message${sourceCount === 1 ? '' : 's'}`
+      : 'Compacted history';
+
+    return `
+      <section class="compacted-context" aria-labelledby="compactedContextTitle">
+        <button
+          type="button"
+          class="compacted-context-toggle"
+          data-toggle-compacted-context
+          aria-expanded="${expanded}"
+          aria-controls="compactedContextContent"
+        >
+          <span class="compacted-context-heading">
+            <span id="compactedContextTitle" class="compacted-context-title">Compacted context</span>
+            <span class="compacted-context-meta">${htmlEscape(sourceLabel)}</span>
+          </span>
+          <span class="compacted-context-chevron" aria-hidden="true">›</span>
+        </button>
+        <div
+          id="compactedContextContent"
+          class="compacted-context-content"
+          ${expanded ? '' : 'hidden'}
+        >
+          ${markdown(session.compaction.text)}
+        </div>
+      </section>
+    `;
+  }
+
+  function toggleCompactedContext() {
+    const session = state.currentSession;
+    if (!hasCompactedContext(session)) return;
+
+    const toggle = el.messages.querySelector('[data-toggle-compacted-context]');
+    const content = el.messages.querySelector('#compactedContextContent');
+    if (!toggle || !content) return;
+
+    const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(expanded));
+    content.hidden = !expanded;
+
+    if (expanded) expandedCompactedContexts.add(session.id);
+    else expandedCompactedContexts.delete(session.id);
+  }
+
   function renderMessageActions(message) {
     return `
       <span class="message-actions" role="group" aria-label="Message actions">
@@ -241,13 +301,19 @@ function createRenderer({
     el.copyChatBtn.disabled = false;
     el.messages.className = 'messages';
 
+    const compactedContext = renderCompactedContext(state.currentSession);
+
     if (!state.currentSession.messages.length) {
-      el.messages.innerHTML = `<div class="empty-card"><span>✍</span><h3>No messages yet</h3><p>Write the first message below.</p></div>`;
+      const emptyTitle = compactedContext ? 'No messages after compaction yet' : 'No messages yet';
+      const emptyCopy = compactedContext ? 'Continue the conversation below.' : 'Write the first message below.';
+      el.messages.innerHTML = `${compactedContext}<div class="empty-card${
+        compactedContext ? ' compacted-empty-tail' : ''
+      }"><span>✍</span><h3>${emptyTitle}</h3><p>${emptyCopy}</p></div>`;
       messageNavigator?.render(state.currentSession);
       return;
     }
 
-    el.messages.innerHTML = state.currentSession.messages
+    const renderedMessages = state.currentSession.messages
       .map(
         (message) => `
       <article class="message ${message.sender === 'me' ? 'me' : 'bot'}" data-chat-message-id="${htmlEscape(message.id)}">
@@ -263,6 +329,8 @@ function createRenderer({
     `
       )
       .join('');
+
+    el.messages.innerHTML = compactedContext + renderedMessages;
     el.messages.scrollTop = el.messages.scrollHeight;
     messageNavigator?.render(state.currentSession);
   }
@@ -276,6 +344,9 @@ function createRenderer({
     renderSessions,
     renderTrash,
     syncSenderCheckbox,
+    hasCompactedContext,
+    renderCompactedContext,
+    toggleCompactedContext,
     renderMessageActions,
     renderMessageFooterActions,
     renderMessages

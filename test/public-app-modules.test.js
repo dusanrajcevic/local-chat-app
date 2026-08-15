@@ -261,6 +261,89 @@ test('message navigator renders one preview rail item per user message and jumps
   assert.equal(items[0].tabIndex, 0);
 });
 
+test('compacted sessions render expandable context without turning it into a message', async () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 'chat_compacted',
+    kind: 'compacted',
+    parentSessionId: 'chat_parent',
+    title: 'Architecture review (compacted)',
+    aiName: 'Assistant',
+    trashed: false,
+    compaction: {
+      text: ['**Current plan**', '', '```bash', 'npm run verify', '```', '', '<img src=x onerror=alert(1)>'].join('\n'),
+      sourceMessageCount: 12
+    },
+    messages: [
+      { id: 'm1', sender: 'me', text: 'Continue with the next patch.' },
+      { id: 'm2', sender: 'bot', text: 'Ready to continue.' }
+    ]
+  };
+
+  harness.view.renderMessages();
+
+  const context = harness.el.messages.querySelector('.compacted-context');
+  const toggle = context.querySelector('[data-toggle-compacted-context]');
+  const content = context.querySelector('#compactedContextContent');
+
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(content.hidden, true);
+  assert.match(context.textContent, /Compacted context/);
+  assert.match(context.textContent, /12 source messages/);
+  assert.equal(context.querySelectorAll('.message-actions, .message-footer-actions').length, 0);
+  assert.equal(context.querySelector('img'), null);
+  assert.equal(harness.el.messages.querySelectorAll('[data-chat-message-id]').length, 2);
+  assert.equal(harness.el.messageNavigator.querySelectorAll('[data-message-nav-id]').length, 1);
+
+  harness.view.toggleCompactedContext();
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(content.hidden, false);
+  assert.equal(content.querySelector('strong').textContent, 'Current plan');
+
+  const codeCopyButton = content.querySelector('[data-copy-code]');
+  await harness.clipboard.copyCodeBlock(codeCopyButton);
+  assert.equal(harness.clipboard.lastText, 'npm run verify');
+
+  harness.view.renderMessages();
+  assert.equal(
+    harness.el.messages.querySelector('[data-toggle-compacted-context]').getAttribute('aria-expanded'),
+    'true'
+  );
+  assert.equal(harness.el.messages.querySelector('#compactedContextContent').hidden, false);
+});
+
+test('compacted context renders before an empty continuation tail and stays off normal parents', () => {
+  const harness = createHarness();
+  harness.state.currentSession = {
+    id: 'chat_compacted_empty',
+    kind: 'compacted',
+    title: 'Fresh compacted chat',
+    aiName: 'Assistant',
+    trashed: false,
+    compaction: { text: 'Preserved compacted state.', sourceMessageCount: 1 },
+    messages: []
+  };
+
+  harness.view.renderMessages();
+  assert.equal(harness.el.messages.firstElementChild.classList.contains('compacted-context'), true);
+  assert.match(harness.el.messages.textContent, /No messages after compaction yet/);
+  assert.match(harness.el.messages.textContent, /Continue the conversation below/);
+
+  harness.state.currentSession = {
+    id: 'chat_parent',
+    kind: 'normal',
+    title: 'Parent archive',
+    aiName: 'Assistant',
+    trashed: false,
+    compaction: { text: 'Should not render on a normal parent.', sourceMessageCount: 2 },
+    messages: []
+  };
+
+  harness.view.renderMessages();
+  assert.equal(harness.el.messages.querySelector('.compacted-context'), null);
+  assert.match(harness.el.messages.textContent, /No messages yet/);
+});
+
 test('rendered messages expose hover quick actions with icon tooltips', async () => {
   const harness = createHarness();
   harness.state.currentSession = {
@@ -799,10 +882,19 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
   let selectedFolder = null;
   let copiedMessage = null;
   let copiedCode = false;
+  let compactedContextToggles = 0;
   eventsModule.wireEvents({
     state: harness.state,
     el: harness.el,
-    view: { ...harness.view, applySidebarState() {}, toggleSidebar() {}, syncSenderCheckbox() {} },
+    view: {
+      ...harness.view,
+      applySidebarState() {},
+      toggleSidebar() {},
+      syncSenderCheckbox() {},
+      toggleCompactedContext() {
+        compactedContextToggles += 1;
+      }
+    },
     modal: harness.modal,
     controllers: {
       ...harness.controllers,
@@ -851,6 +943,10 @@ test('event wiring delegates sidebar folder clicks and copy buttons to controlle
   harness.el.messages.querySelector('[data-copy-code]').click();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(copiedCode, true);
+
+  harness.el.messages.innerHTML = '<button data-toggle-compacted-context>Compacted context</button>';
+  harness.el.messages.querySelector('[data-toggle-compacted-context]').click();
+  assert.equal(compactedContextToggles, 1);
 
   harness.state.currentSession = {
     id: 's1',

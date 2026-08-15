@@ -105,7 +105,7 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
 
   doc.addEventListener('click', async (event) => {
     const target = event.target.closest(
-      '[data-search-session-id], [data-open-session], [data-rename-session], [data-trash-session], [data-delete-trash], [data-restore-session], [data-folder], [data-rename-folder], [data-delete-folder], [data-copy-message], [data-copy-code], [data-edit-message], [data-delete-message]'
+      '[data-search-session-id], [data-open-session], [data-rename-session], [data-trash-session], [data-delete-trash], [data-restore-session], [data-folder], [data-rename-folder], [data-delete-folder], [data-toggle-compacted-context], [data-copy-message], [data-copy-code], [data-edit-message], [data-delete-message]'
     );
     if (!target) return;
 
@@ -114,6 +114,7 @@ function wireEvents({ state, el, view, modal, controllers, clipboard, doc = docu
       if (target.dataset.openSession) return controllers.openSession(target.dataset.openSession);
       if (target.dataset.renameSession) return controllers.renameSession(target.dataset.renameSession);
       if (target.dataset.renameFolder) return controllers.renameFolder(target.dataset.renameFolder);
+      if (target.hasAttribute('data-toggle-compacted-context')) return view.toggleCompactedContext();
       if (target.dataset.copyMessage) return clipboard.copyMessageMarkdown(target.dataset.copyMessage, target);
       if (target.hasAttribute('data-copy-code')) return clipboard.copyCodeBlock(target);
       if (target.dataset.editMessage) return controllers.openMessageForEdit(target.dataset.editMessage);

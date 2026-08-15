@@ -646,6 +646,87 @@ textarea::-webkit-scrollbar-thumb {
   color: var(--muted);
 }
 
+.compacted-context {
+  width: min(760px, 100%);
+  align-self: center;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.compacted-context-toggle {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.compacted-context-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.compacted-context-toggle:focus-visible {
+  outline: 2px solid rgba(16, 163, 127, 0.55);
+  outline-offset: -2px;
+}
+
+.compacted-context-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compacted-context-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.compacted-context-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.compacted-context-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.16s ease;
+}
+
+.compacted-context-toggle[aria-expanded='true'] .compacted-context-chevron {
+  transform: rotate(90deg);
+}
+
+.compacted-context-content {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--soft);
+  line-height: 1.55;
+}
+
+.compacted-context-content .markdown-body {
+  padding-top: 14px;
+}
+
+.compacted-empty-tail {
+  align-self: center;
+  box-shadow: none;
+}
+
 .message {
   position: relative;
   width: fit-content;
@@ -1398,7 +1479,8 @@ body.modal-open {
   .message-navigator,
   .message-nav-item,
   .message-nav-line,
-  .message-nav-preview {
+  .message-nav-preview,
+  .compacted-context-chevron {
     transition: none;
   }
 }
