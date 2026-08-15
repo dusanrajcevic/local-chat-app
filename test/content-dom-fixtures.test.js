@@ -228,6 +228,19 @@ test('ChatGPT fixture rejects nested code-copy controls while accepting message-
   );
 });
 
+test('ChatGPT static Tailwind streaming variants do not keep completed responses marked as streaming', () => {
+  installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), false);
+
+  const streamingMarker = document.createElement('span');
+  streamingMarker.className = 'result-streaming';
+  assistantContainer.append(streamingMarker);
+
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), true);
+});
+
 test('assistant completion signatures do not clone and re-render the whole message tree', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 

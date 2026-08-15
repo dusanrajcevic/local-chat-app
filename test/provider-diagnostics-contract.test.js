@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const diagnostics = require('../browser-extension/content-diagnostics');
+const providers = require('../browser-extension/content-providers');
 
 const repoRoot = path.join(__dirname, '..');
 
@@ -76,4 +77,13 @@ test('popup exposes an explicit provider diagnostics control without requesting 
   assert.match(popupScript, /chrome\.tabs\.query\(\{ active: true, currentWindow: true \}\)/);
   assert.match(popupScript, /GET_PROVIDER_DIAGNOSTICS/);
   assert.equal(manifest.permissions.includes('tabs'), false);
+});
+
+
+test('ChatGPT streaming selectors avoid static Tailwind variant class substrings', () => {
+  const adapter = providers.adapterForHostname('chatgpt.com');
+
+  assert.equal(adapter.streamingSelectors.includes('.result-streaming'), true);
+  assert.equal(adapter.streamingSelectors.includes('.result-thinking'), true);
+  assert.equal(adapter.streamingSelectors.some((selector) => selector.includes('[class*="streaming"')), false);
 });

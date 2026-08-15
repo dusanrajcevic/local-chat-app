@@ -8,7 +8,11 @@
     <div data-testid="turn-actions"><button aria-label="Copy">Copy</button></div>
   </div>
 
-  <div data-testid="conversation-turn-2">
+  <div
+    data-testid="conversation-turn-2"
+    data-conversation-screenshot-content=""
+    class="[&_:is(.result-streaming,.result-thinking)]:[--theme-submit-btn-bg:var(--default-theme-submit-btn-bg)] group/turn-messages agent-turn"
+  >
     <div data-message-author-role="assistant">
       <div class="markdown prose">
         <p>
@@ -22,6 +26,8 @@
         <div class="code-toolbar"><button aria-label="Copy code">Copy code</button></div>
       </div>
     </div>
-    <div data-testid="turn-actions"><button aria-label="Copy">Copy</button></div>
+    <div data-testid="turn-actions">
+      <button type="button" aria-label="Copy response" data-testid="copy-turn-action-button">Copy response</button>
+    </div>
   </div>
 </main>
