@@ -1,6 +1,6 @@
 {
   "name": "local-chat-app",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local-first desktop chat archive with browser-extension capture for AI chat apps.",
   "author": {
     "name": "Dusan Rajcevic",
