@@ -5,6 +5,16 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createLocalChatContentCompactionWorkflow() {
   'use strict';
 
+  const RUNNING_PHASES = new Set([
+    'sending-request',
+    'waiting-response',
+    'cancelling',
+    'persisting',
+    'activating'
+  ]);
+
+  const CANCELLABLE_PHASES = new Set(['sending-request', 'waiting-response']);
+
   const DEFAULTS = Object.freeze({
     sendButtonTimeoutMs: 5000,
     responseTimeoutMs: 2 * 60 * 1000,
@@ -41,6 +51,7 @@
 
     let state = { phase: 'idle', requestId: '', sessionId: '', error: '' };
     let activePromise = null;
+    let activeRun = null;
 
     function setState(phase, details = {}) {
       state = {
@@ -54,11 +65,29 @@
     }
 
     function getState() {
-      return { ...state, running: Boolean(activePromise) };
+      return {
+        ...state,
+        running: RUNNING_PHASES.has(state.phase),
+        cancellable: CANCELLABLE_PHASES.has(state.phase)
+      };
     }
 
     function isRunning() {
-      return Boolean(activePromise);
+      return Boolean(activePromise) || RUNNING_PHASES.has(state.phase);
+    }
+
+    function cancellationError() {
+      const error = new Error('Compaction was cancelled.');
+      error.name = 'CompactionCancelledError';
+      return error;
+    }
+
+    function assertNotCancelled(run) {
+      if (run?.cancelled) throw cancellationError();
+    }
+
+    function isCancellationError(error) {
+      return error?.name === 'CompactionCancelledError';
     }
 
     function protocolTurnKind(text) {
@@ -102,9 +131,10 @@
       );
     }
 
-    async function waitForSendButton() {
+    async function waitForSendButton(run) {
       const startedAt = Date.now();
       while (Date.now() - startedAt < config.sendButtonTimeoutMs) {
+        assertNotCancelled(run);
         const composer = findComposerContainer();
         const button = composer ? findSendButtonNear(composer) : null;
         if (button && !isDisabledControl(button)) return button;
@@ -123,12 +153,13 @@
       }
     }
 
-    async function waitForResponse(expected) {
+    async function waitForResponse(expected, run) {
       const startedAt = Date.now();
       let lastText = '';
       let stableSince = 0;
 
       while (Date.now() - startedAt < config.responseTimeoutMs) {
+        assertNotCancelled(run);
         assertConversationUnchanged(expected);
         hideMatchingRequestTurn(expected.requestId);
 
@@ -160,11 +191,12 @@
       throw new Error('Timed out waiting for the provider compaction response.');
     }
 
-    async function sendCompactionRequest(expected) {
+    async function sendCompactionRequest(expected, run) {
       const prompt = protocol.buildCompactionPrompt({ requestId: expected.requestId });
       await replaceComposerWithText(prompt);
+      assertNotCancelled(run);
       assertConversationUnchanged(expected);
-      const sendButton = await waitForSendButton();
+      const sendButton = await waitForSendButton(run);
       sendButton.click();
       return prompt;
     }
@@ -175,7 +207,7 @@
       return response;
     }
 
-    async function runCompaction() {
+    async function runCompaction(run) {
       const target = currentLocalChatTarget();
       if (!target?.sessionId) throw new Error('Open a local chat session before compacting this conversation.');
       if (hasGeneratingAssistant()) throw new Error('Wait for the current assistant response to finish before compacting.');
@@ -190,11 +222,13 @@
       };
 
       setState('sending-request', expected);
-      await sendCompactionRequest(expected);
+      await sendCompactionRequest(expected, run);
 
+      assertNotCancelled(run);
       setState('waiting-response', expected);
-      const parsed = await waitForResponse(expected);
+      const parsed = await waitForResponse(expected, run);
 
+      assertNotCancelled(run);
       markProtocolTurn(parsed.container, 'response');
       assertConversationUnchanged(expected);
       setState('persisting', expected);
@@ -234,10 +268,23 @@
     }
 
     function startCompaction() {
-      if (activePromise) return Promise.reject(new Error('A compaction is already in progress.'));
+      if (activePromise || RUNNING_PHASES.has(state.phase)) {
+        return Promise.reject(new Error('A compaction is already in progress.'));
+      }
 
-      activePromise = runCompaction()
+      const run = { cancelled: false };
+      activeRun = run;
+      activePromise = runCompaction(run)
         .catch((error) => {
+          if (isCancellationError(error)) {
+            setState('cancelled', {
+              requestId: state.requestId,
+              sessionId: state.sessionId
+            });
+            showToast('Compaction cancelled.');
+            return { ok: false, cancelled: true, requestId: state.requestId, sessionId: state.sessionId };
+          }
+
           setState('error', {
             requestId: state.requestId,
             sessionId: state.sessionId,
@@ -248,13 +295,28 @@
         })
         .finally(() => {
           activePromise = null;
+          activeRun = null;
         });
 
       return activePromise;
     }
 
+    function cancelCompaction() {
+      if (!activeRun || !CANCELLABLE_PHASES.has(state.phase)) return false;
+      activeRun.cancelled = true;
+      setState('cancelling', { requestId: state.requestId, sessionId: state.sessionId });
+      return true;
+    }
+
+    function clearStatus() {
+      if (isRunning()) return false;
+      setState('idle', { requestId: '', sessionId: '', error: '' });
+      return true;
+    }
+
     function resetForTest() {
       activePromise = null;
+      activeRun = null;
       state = { phase: 'idle', requestId: '', sessionId: '', error: '' };
     }
 
@@ -266,12 +328,16 @@
       getState,
       isRunning,
       startCompaction,
+      cancelCompaction,
+      clearStatus,
       resetForTest
     };
   }
 
   return {
     DEFAULTS,
+    RUNNING_PHASES,
+    CANCELLABLE_PHASES,
     createCompactionWorkflow
   };
 });

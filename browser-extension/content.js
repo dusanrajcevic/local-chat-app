@@ -336,6 +336,10 @@ sidebarController = LocalChatContentSidebar.createSidebarController({
   updateLoadPastControls,
   showToast,
   startCompaction: () => compactionWorkflow?.startCompaction?.(),
+  cancelCompaction: () => compactionWorkflow?.cancelCompaction?.() || false,
+  clearCompactionStatus: () => compactionWorkflow?.clearStatus?.() || false,
+  getCompactionState: () =>
+    compactionWorkflow?.getState?.() || { phase: 'idle', running: false, cancellable: false, error: '' },
   isCompactionRunning: () => compactionWorkflow?.isRunning?.() || false,
   chromeApi: typeof chrome !== 'undefined' ? chrome : null
 });
@@ -447,7 +451,8 @@ compactionWorkflow = LocalChatContentCompactionWorkflow.createCompactionWorkflow
   setActiveSession: (response) => sidebarController.setActiveSessionFromExport(response, response?.sessionId || ''),
   refreshSidebar: (force = true) => sidebarController.scheduleLocalSidebarRefresh(force),
   showToast,
-  sleep
+  sleep,
+  onStateChange: () => sidebarController?.refreshCompactionUi?.()
 });
 
 function startContentScriptRuntime() {

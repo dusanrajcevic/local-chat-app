@@ -58,6 +58,10 @@
     const updateLoadPastControls = deps.updateLoadPastControls || (() => {});
     const showToast = deps.showToast || (() => {});
     const startCompaction = deps.startCompaction || createNoopDependency('startCompaction');
+    const cancelCompaction = deps.cancelCompaction || (() => false);
+    const clearCompactionStatus = deps.clearCompactionStatus || (() => false);
+    const getCompactionState =
+      deps.getCompactionState || (() => ({ phase: 'idle', running: false, cancellable: false, error: '' }));
     const isCompactionRunning = deps.isCompactionRunning || (() => false);
     const chromeApi = deps.chromeApi || (typeof chrome !== 'undefined' ? chrome : null);
 
@@ -639,8 +643,128 @@
   `;
     }
 
+    function compactionPresentation() {
+      const state = getCompactionState() || {};
+      const phase = String(state.phase || 'idle');
+      const providerName = providerInfo().name || 'provider';
+      const common = {
+        phase,
+        running: Boolean(state.running),
+        cancellable: Boolean(state.cancellable),
+        error: String(state.error || '')
+      };
+
+      if (phase === 'sending-request') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Sending…',
+          title: 'Sending compaction request',
+          detail: `Sending the structured request to ${providerName}.`
+        };
+      }
+      if (phase === 'waiting-response') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Waiting…',
+          title: `Waiting for ${providerName}`,
+          detail: 'Keep this provider conversation open while the compacted context is generated.'
+        };
+      }
+      if (phase === 'cancelling') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Cancelling…',
+          title: 'Cancelling compaction',
+          detail: 'Stopping before compacted context is saved.'
+        };
+      }
+      if (phase === 'persisting') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Saving…',
+          title: 'Saving compacted context',
+          detail: 'The provider response is valid. Local Chat is saving the continuation context.'
+        };
+      }
+      if (phase === 'activating') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Opening…',
+          title: 'Opening compacted chat',
+          detail: 'Switching Local Chat to the compacted continuation.'
+        };
+      }
+      if (phase === 'complete') {
+        return {
+          ...common,
+          tone: 'success',
+          buttonLabel: 'Compact',
+          title: 'Compaction complete',
+          detail: 'The compacted continuation is ready.'
+        };
+      }
+      if (phase === 'cancelled') {
+        return {
+          ...common,
+          tone: 'neutral',
+          buttonLabel: 'Compact',
+          title: 'Compaction cancelled',
+          detail: 'No compacted session was created.'
+        };
+      }
+      if (phase === 'error') {
+        return {
+          ...common,
+          tone: 'error',
+          buttonLabel: 'Retry compact',
+          title: 'Compaction failed',
+          detail: common.error || 'Could not compact this conversation.'
+        };
+      }
+
+      return {
+        ...common,
+        tone: 'idle',
+        buttonLabel: 'Compact',
+        title: '',
+        detail: ''
+      };
+    }
+
+    function renderCompactionStatus(presentation) {
+      if (!presentation || presentation.phase === 'idle') return '';
+
+      const action = presentation.cancellable
+        ? '<button type="button" class="local-chat-compaction-status-action" data-local-sidebar-cancel-compaction>Cancel</button>'
+        : presentation.running
+          ? ''
+          : '<button type="button" class="local-chat-compaction-status-action" data-local-sidebar-dismiss-compaction>Dismiss</button>';
+      const role = presentation.tone === 'error' ? 'alert' : 'status';
+      const live = presentation.tone === 'error' ? 'assertive' : 'polite';
+      const spinner = presentation.running
+        ? '<span class="local-chat-compaction-status-spinner" aria-hidden="true"></span>'
+        : '';
+
+      return `
+      <div class="local-chat-compaction-status ${escapeHtml(presentation.tone)}" role="${role}" aria-live="${live}" data-local-compaction-phase="${escapeHtml(presentation.phase)}">
+        ${spinner}
+        <span class="local-chat-compaction-status-copy">
+          <strong>${escapeHtml(presentation.title)}</strong>
+          <span>${escapeHtml(presentation.detail)}</span>
+        </span>
+        ${action}
+      </div>
+    `;
+    }
+
     function renderLocalSidebarPanel(panel) {
       const folders = Array.isArray(localSidebarData.folders) ? localSidebarData.folders : [];
+      const compaction = compactionPresentation();
       const sessions = Array.isArray(localSidebarData.sessions) ? localSidebarData.sessions : [];
       const counts = folderCountsForLocalSidebar(sessions);
       const selectedFolderId = localSidebarSelectedFolderId || null;
@@ -692,7 +816,7 @@
           <button type="button" class="local-chat-sidebar-item local-chat-sidebar-chat${active ? ' active' : ''}${pending ? ' loading' : ''}" data-local-sidebar-session-id="${escapeHtml(session.id)}" ${pending ? 'disabled' : ''}>
             <span class="local-chat-sidebar-item-main">
               <span class="local-chat-sidebar-title">${escapeHtml(session.title || 'Untitled chat')}</span>
-              <span class="local-chat-sidebar-meta">${escapeHtml(session.dateFolder || '')}${session.messageCount !== undefined ? ` · ${Number(session.messageCount || 0)} messages` : ''}${session.updatedAt ? ` · ${escapeHtml(formatLocalDate(session.updatedAt))}` : ''}</span>
+              <span class="local-chat-sidebar-meta">${escapeHtml(session.dateFolder || '')}${session.messageCount !== undefined ? ` · ${Number(session.messageCount || 0)} messages` : ''}${session.kind === 'compacted' ? ' · Compacted' : ''}${session.updatedAt ? ` · ${escapeHtml(formatLocalDate(session.updatedAt))}` : ''}</span>
             </span>
           </button>
           ${actions}
@@ -726,14 +850,23 @@
       <div class="local-chat-sidebar-section-row">
         <div class="local-chat-sidebar-section-title">Local chats</div>
         <div class="local-chat-sidebar-section-actions">
-          <button type="button" class="local-chat-sidebar-new" data-local-sidebar-compact title="Compact the active local chat into continuation context"${localSidebarData.activeSessionId && !isCompactionRunning() ? '' : ' disabled'}>${isCompactionRunning() ? 'Compacting…' : 'Compact'}</button>
+          <button type="button" class="local-chat-sidebar-new" data-local-sidebar-compact title="Compact the active local chat into continuation context"${localSidebarData.activeSessionId && !compaction.running ? '' : ' disabled'}>${escapeHtml(compaction.buttonLabel)}</button>
           <button type="button" class="local-chat-sidebar-new" data-local-sidebar-new title="Create a new local chat session">New chat</button>
         </div>
       </div>
+      ${renderCompactionStatus(compaction)}
       <div class="local-chat-sidebar-subtitle">${escapeHtml(folderLabelForLocalSidebar(localSidebarSelectedFolderId, folders))}</div>
       <div class="local-chat-sidebar-list local-chat-sidebar-chat-list">${chatButtons}</div>
     </div>
   `;
+    }
+
+    function refreshCompactionUi() {
+      if (typeof document === 'undefined') return false;
+      const panel = document.querySelector(`[${LOCAL_SIDEBAR_MARKER}]`);
+      if (!panel) return false;
+      renderLocalSidebarPanel(panel);
+      return true;
     }
 
     async function requestLocalSidebarData(force = false) {
@@ -1410,13 +1543,28 @@
         return;
       }
 
+      const cancelCompactionButton = event.target?.closest?.('[data-local-sidebar-cancel-compaction]');
+      if (cancelCompactionButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (cancelCompaction()) refreshCompactionUi();
+        return;
+      }
+
+      const dismissCompactionButton = event.target?.closest?.('[data-local-sidebar-dismiss-compaction]');
+      if (dismissCompactionButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (clearCompactionStatus()) refreshCompactionUi();
+        return;
+      }
+
       const compactButton = event.target?.closest?.('[data-local-sidebar-compact]');
       if (compactButton) {
         event.preventDefault();
         event.stopPropagation();
         if (compactButton.disabled || isCompactionRunning()) return;
         compactButton.disabled = true;
-        compactButton.textContent = 'Compacting…';
         Promise.resolve(startCompaction())
           .catch(() => {})
           .finally(() => scheduleLocalSidebarRefresh(true));
@@ -1529,6 +1677,9 @@
       sessionsForLocalSidebarFolder,
       folderLabelForLocalSidebar,
       renderLocalSidebarPanel,
+      compactionPresentation,
+      renderCompactionStatus,
+      refreshCompactionUi,
       requestLocalSidebarData,
       invalidateLocalSidebarCache,
       renderLocalSidebarReplacement,

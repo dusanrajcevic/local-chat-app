@@ -355,3 +355,69 @@ test('outgoing autosave queue ignores a compaction protocol prompt before arming
   assert.equal(sendCount, 0);
   assert.equal(removedEmptyButtons, 1);
 });
+
+test('Compact workflow can be cancelled before persistence and reports a terminal cancelled state', async () => {
+  let releaseComposer;
+  const composerGate = new Promise((resolve) => {
+    releaseComposer = resolve;
+  });
+  const stateChanges = [];
+  const toasts = [];
+  const workflow = createCompactionWorkflow(
+    {
+      protocol: { ...protocol, createCompactionRequestId: () => 'compact:req:cancel-001' },
+      providerInfo: () => ({ name: 'ChatGPT', key: 'chatgpt' }),
+      currentLocalChatTarget: () => ({ sessionId: 'chat_1700000000000_11111111', sessionTitle: 'Source' }),
+      currentPageIdentity: () => 'https://chatgpt.com/c/source',
+      replaceComposerWithText: async () => composerGate,
+      findComposerContainer: () => ({ id: 'composer' }),
+      findSendButtonNear: () => ({ click() {} }),
+      visibleMessageContainers: () => [],
+      sendRuntimeMessage: async () => {
+        throw new Error('persistence should not run after cancellation');
+      },
+      showToast: (message, isError) => toasts.push({ message, isError: Boolean(isError) }),
+      sleep: async () => {},
+      onStateChange: (value) => stateChanges.push(value.phase)
+    },
+    { sendButtonTimeoutMs: 50, responseTimeoutMs: 50, responsePollMs: 0, responseStableMs: 0 }
+  );
+
+  const pending = workflow.startCompaction();
+  assert.equal(workflow.getState().phase, 'sending-request');
+  assert.equal(workflow.getState().cancellable, true);
+  assert.equal(workflow.cancelCompaction(), true);
+  assert.equal(workflow.getState().phase, 'cancelling');
+  assert.equal(workflow.cancelCompaction(), false);
+
+  releaseComposer();
+  const result = await pending;
+
+  assert.deepEqual(result, {
+    ok: false,
+    cancelled: true,
+    requestId: 'compact:req:cancel-001',
+    sessionId: 'chat_1700000000000_11111111'
+  });
+  assert.equal(workflow.getState().phase, 'cancelled');
+  assert.equal(workflow.getState().running, false);
+  assert.equal(workflow.getState().cancellable, false);
+  assert.deepEqual(stateChanges, ['sending-request', 'cancelling', 'cancelled']);
+  assert.deepEqual(toasts, [{ message: 'Compaction cancelled.', isError: false }]);
+});
+
+test('Compact workflow status can be cleared only after the workflow is terminal', async () => {
+  const harness = createHarness();
+  const result = await harness.workflow.startCompaction();
+  assert.equal(result.ok, true);
+  assert.equal(harness.workflow.getState().phase, 'complete');
+  assert.equal(harness.workflow.clearStatus(), true);
+  assert.deepEqual(harness.workflow.getState(), {
+    phase: 'idle',
+    requestId: '',
+    sessionId: '',
+    error: '',
+    running: false,
+    cancellable: false
+  });
+});

@@ -51,7 +51,7 @@ The content script includes a versioned `local-chat-compaction` protocol for fut
 
 The background worker exposes `UPSERT_LOCAL_CHAT_COMPACTION`, which forwards a validated `{ requestId, compactedMessage, providerKey }` payload to the existing `PUT /api/sessions/:sessionId/compaction` endpoint. The local sidebar now exposes **Compact** for the active chat. The workflow inserts the structured prompt into the provider composer, sends it through the provider's existing send control, waits for the matching response, persists the compacted child, activates it, and refreshes the local sidebar.
 
-Compaction request/response turns are implementation details: autosave ignores them, Save local controls are not injected for them, and successfully recognized protocol turns are hidden from the provider conversation UI. A compaction is cancelled if the active local session or provider conversation changes while it is running, and concurrent Compact requests are rejected.
+Compaction request/response turns are implementation details: autosave ignores them, Save local controls are not injected for them, and successfully recognized protocol turns are hidden from the provider conversation UI. The sidebar reports each workflow stage (sending, waiting for the provider, saving, and opening the compacted continuation), exposes cancellation while it is still safe before persistence, and shows retry/dismiss controls after terminal errors. A compaction is also cancelled if the active local session or provider conversation changes while it is running, and concurrent Compact requests are rejected. Compacted child sessions are identified in the local chat list.
 
 ## Provider diagnostics
 

@@ -732,3 +732,86 @@
 [data-local-chat-compaction-turn] {
   display: none !important;
 }
+
+.local-chat-compaction-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px;
+  margin: 1px 0 2px;
+  padding: 8px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.07);
+  font-size: 11px;
+}
+
+.local-chat-compaction-status.progress {
+  border-color: rgba(59, 130, 246, 0.32);
+  background: rgba(30, 64, 175, 0.12);
+}
+
+.local-chat-compaction-status.success {
+  border-color: rgba(16, 163, 127, 0.35);
+  background: rgba(16, 163, 127, 0.1);
+}
+
+.local-chat-compaction-status.error {
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.local-chat-compaction-status-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.local-chat-compaction-status-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.local-chat-compaction-status-copy span {
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  line-height: 1.35;
+}
+
+.local-chat-compaction-status-action {
+  border: 0;
+  padding: 1px 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.local-chat-compaction-status-action:hover,
+.local-chat-compaction-status-action:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.local-chat-compaction-status-spinner {
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border: 2px solid rgba(127, 127, 127, 0.28);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: local-chat-compaction-spin 0.8s linear infinite;
+}
+
+@keyframes local-chat-compaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .local-chat-compaction-status-spinner {
+    animation: none;
+  }
+}
