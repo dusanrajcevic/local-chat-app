@@ -830,12 +830,13 @@ async function applyCompactedSessionLifecycle(mutation) {
   }
 
   if (action === 'restore-pair') {
-    const parent = await applyRestoreSession({
+    await applyRestoreSession({
       ...mutation,
       payload: { sessionId: parentSessionId, restoreDate: payload.parentRestoreDate }
     });
     await checkpoint('compacted-lifecycle:after-parent-restore', mutation);
-    const child = await applyRestoreSession({
+
+    await applyRestoreSession({
       ...mutation,
       payload: { sessionId: childSessionId, restoreDate: payload.childRestoreDate }
     });
