@@ -65,12 +65,13 @@ The extension is split into:
 - `content-dom.js`: shared DOM/extraction orchestration used by tests and the runtime;
 - `content-diagnostics.js`: privacy-preserving provider health reporting for selector hits, message discovery, sender inference, and extraction coverage;
 - `content-compaction.js`: versioned provider compaction prompt/response contract, request-ID generation, strict response parsing, and local API payload conversion;
+- `content-compaction-workflow.js`: Compact orchestration across provider composer send, structured response detection, persistence, active-session switching, and protocol-turn hiding;
 - `content-message-save.js`: selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message-container filtering for manual/autosave extraction;
 - `content-autosave.js`: autosave state, assistant-readiness tracking, idempotency-key generation, prompt-capture scheduling, and outgoing/assistant save dedupe;
 - `content-sidebar.js`: local sidebar replacement, provider-sidebar hiding/restoration, folder/session rendering, refresh, and session-selection behavior;
 - `content-composer.js`: composer detection, transcript insertion, pasted-text attachment fallbacks, Load past conversations modal/search behavior, and top active-folder controls;
 - `content-runtime.js`: local-app availability checks, auto-save toggle state/UI, Save local button target selection/injection, and content-script runtime scheduling;
-- `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, and runtime modules together;
+- `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, compaction workflow, and runtime modules together;
 - `popup.*`: loopback local API URL and pairing-code configuration.
 
 The content-script runtime remains the largest maintenance risk because provider UIs change often. Reduced DOM fixtures cover provider extraction and Save local injection behavior, mutation tests vary neutral wrappers and presentation-oriented attributes, and the popup can request a privacy-preserving live adapter diagnostic report from the active provider tab. Provider-specific selectors and sender/container preferences now live in `providers/*.js`, `content-dom.js` keeps shared extraction and markdown conversion testable, `content-message-save.js` isolates clipboard/manual extraction behavior, `content-autosave.js` isolates autosave timing/dedupe state, `content-sidebar.js` isolates local sidebar replacement, `content-composer.js` isolates composer loading plus modal/search behavior, and `content-runtime.js` isolates app availability, auto-send toggle coordination, and Save local injection from the bootstrap coordinator.

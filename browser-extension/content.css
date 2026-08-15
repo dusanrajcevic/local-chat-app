@@ -716,3 +716,19 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+
+.local-chat-sidebar-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.local-chat-sidebar-new:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.local-chat-compaction-protocol-turn,
+[data-local-chat-compaction-turn] {
+  display: none !important;
+}

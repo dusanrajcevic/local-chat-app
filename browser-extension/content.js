@@ -32,6 +32,20 @@ const LocalChatContentRuntime = (() => {
   throw new Error('LocalChatContentRuntime must be loaded before content.js');
 })();
 
+const LocalChatContentCompaction = (() => {
+  if (typeof require === 'function') return require('./content-compaction');
+  if (typeof globalThis !== 'undefined' && globalThis.LocalChatContentCompaction)
+    return globalThis.LocalChatContentCompaction;
+  throw new Error('LocalChatContentCompaction must be loaded before content.js');
+})();
+
+const LocalChatContentCompactionWorkflow = (() => {
+  if (typeof require === 'function') return require('./content-compaction-workflow');
+  if (typeof globalThis !== 'undefined' && globalThis.LocalChatContentCompactionWorkflow)
+    return globalThis.LocalChatContentCompactionWorkflow;
+  throw new Error('LocalChatContentCompactionWorkflow must be loaded before content.js');
+})();
+
 const LocalChatContentMessageSave = (() => {
   if (typeof require === 'function') return require('./content-message-save');
   if (typeof globalThis !== 'undefined' && globalThis.LocalChatContentMessageSave)
@@ -110,6 +124,7 @@ let messageSaveController = null;
 let sidebarController = null;
 let composerController = null;
 let autosaveController = null;
+let compactionWorkflow = null;
 
 function composerControllerOrNull() {
   return composerController || null;
@@ -267,6 +282,26 @@ function findSendButtonNear(startNode) {
   return composerControllerOrNull()?.findSendButtonNear(startNode) || null;
 }
 
+function isCompactionProtocolText(text) {
+  return (
+    LocalChatContentCompaction.isCompactionRequestText(text) ||
+    LocalChatContentCompaction.isCompactionResponseText(text)
+  );
+}
+
+function isCompactionProtocolContainer(container, sender = null) {
+  if (!container) return false;
+  const text = extractMessageTextFallback(container, sender || inferSender(container));
+  return isCompactionProtocolText(text);
+}
+
+function sendExtensionRuntimeMessage(message) {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+    return Promise.reject(new Error('Browser extension runtime is unavailable.'));
+  }
+  return chrome.runtime.sendMessage(message);
+}
+
 messageSaveController = LocalChatContentMessageSave.createMessageSaveController({
   markers: LocalChatContentDom.markers,
   normalizeText,
@@ -300,6 +335,8 @@ sidebarController = LocalChatContentSidebar.createSidebarController({
   replaceComposerWithText,
   updateLoadPastControls,
   showToast,
+  startCompaction: () => compactionWorkflow?.startCompaction?.(),
+  isCompactionRunning: () => compactionWorkflow?.isRunning?.() || false,
   chromeApi: typeof chrome !== 'undefined' ? chrome : null
 });
 
@@ -363,6 +400,7 @@ autosaveController = LocalChatContentAutosave.createAutosaveController({
   extractMessageTextFallback,
   cleanExtractedMessageText,
   shouldSkipExtractedMessageText,
+  isCompactionProtocolText,
   assistantContentSignature,
   hasStreamingMarker,
   sendLocalChatMessage,
@@ -383,12 +421,33 @@ runtimeController = LocalChatContentRuntime.createRuntimeController({
   buttonLabel,
   findComposerContainer,
   composerInputs,
+  shouldHideMessageSaveTarget: (container, sender) => isCompactionProtocolContainer(container, sender),
   showToast,
   removeLoadPastButtons,
   injectLoadPastButton,
   getSidebarController: () => sidebarController,
   getAutosaveController: () => autosaveController,
   chromeApi: typeof chrome !== 'undefined' ? chrome : null
+});
+
+compactionWorkflow = LocalChatContentCompactionWorkflow.createCompactionWorkflow({
+  protocol: LocalChatContentCompaction,
+  providerInfo,
+  currentLocalChatTarget,
+  currentPageIdentity: () => `${location.origin}${location.pathname}${location.search}`,
+  replaceComposerWithText,
+  findComposerContainer,
+  findSendButtonNear,
+  isDisabledControl,
+  visibleMessageContainers,
+  inferSender,
+  extractMessageTextFallback,
+  hasStreamingMarker,
+  sendRuntimeMessage: sendExtensionRuntimeMessage,
+  setActiveSession: (response) => sidebarController.setActiveSessionFromExport(response, response?.sessionId || ''),
+  refreshSidebar: (force = true) => sidebarController.scheduleLocalSidebarRefresh(force),
+  showToast,
+  sleep
 });
 
 function startContentScriptRuntime() {
@@ -408,6 +467,7 @@ function resetContentScriptStateForTest() {
   sidebarController.resetForTest();
   autosaveController.resetForTest();
   composerController?.resetForTest?.();
+  compactionWorkflow?.resetForTest?.();
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -443,7 +503,9 @@ if (typeof module !== 'undefined' && module.exports) {
     sidebarController,
     composerController,
     runtimeController,
-    messageSaveController
+    messageSaveController,
+    compactionWorkflow,
+    isCompactionProtocolText
   };
 } else {
   startContentScriptRuntime();

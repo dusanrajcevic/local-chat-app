@@ -79,6 +79,7 @@
           .toLowerCase());
     const findComposerContainer = deps.findComposerContainer || (() => null);
     const composerInputs = deps.composerInputs || (() => []);
+    const shouldHideMessageSaveTarget = deps.shouldHideMessageSaveTarget || (() => false);
     const showToast = deps.showToast || (() => {});
     const removeLoadPastButtons = deps.removeLoadPastButtons || (() => {});
     const injectLoadPastButton = deps.injectLoadPastButton || (() => {});
@@ -708,7 +709,8 @@
           copyButton: chooseMessageCopyButton(container, copyButtons),
           sender: inferSender(container)
         }))
-        .filter((target) => target.copyButton);
+        .filter((target) => target.copyButton)
+        .filter((target) => !shouldHideMessageSaveTarget(target.container, target.sender));
 
       const newestAssistantTarget = [...targets].reverse().find((target) => target.sender === 'bot') || null;
 

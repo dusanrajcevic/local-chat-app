@@ -50,6 +50,7 @@
     const extractMessageTextFallback = deps.extractMessageTextFallback || (() => '');
     const cleanExtractedMessageText = deps.cleanExtractedMessageText || ((value) => normalizeText(value));
     const shouldSkipExtractedMessageText = deps.shouldSkipExtractedMessageText || (() => false);
+    const isCompactionProtocolText = deps.isCompactionProtocolText || (() => false);
     const assistantContentSignature = deps.assistantContentSignature || (() => '');
     const hasStreamingMarker = deps.hasStreamingMarker || (() => false);
     const sendLocalChatMessage = deps.sendLocalChatMessage || createNoopDependency('sendLocalChatMessage');
@@ -279,6 +280,11 @@
           return { ok: false, skipped: true, reason: 'empty' };
         }
 
+        if (isCompactionProtocolText(text)) {
+          button.textContent = originalText;
+          return { ok: true, skipped: true, reason: 'compaction-protocol' };
+        }
+
         const source = isAuto ? 'auto-assistant-complete' : 'manual-save-button';
         if (shouldSkipExtractedMessageText(text, sender, source)) {
           if (!isAuto) showToast('That does not look like a complete chat message yet.', true);
@@ -439,6 +445,9 @@
       const provider = providerInfo();
       const text = normalizeText(extractMessageTextFallback(container, 'me'));
       if (!text) return { ok: false, skipped: true, reason: 'empty' };
+      if (isCompactionProtocolText(text)) {
+        return { ok: true, skipped: true, reason: 'compaction-protocol' };
+      }
       if (shouldSkipExtractedMessageText(text, 'me', trigger)) {
         return { ok: true, skipped: true, reason: 'transient-or-transcript' };
       }
@@ -533,6 +542,10 @@
       const saveTarget = currentLocalChatTarget();
 
       if (text) removeEmptyChatOnlyButtons();
+      if (text && isCompactionProtocolText(text)) {
+        resetComposerSnapshot();
+        return;
+      }
 
       if (!isAutoSendEnabled()) return;
 

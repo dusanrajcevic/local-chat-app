@@ -57,6 +57,8 @@
     const replaceComposerWithText = deps.replaceComposerWithText || createNoopDependency('replaceComposerWithText');
     const updateLoadPastControls = deps.updateLoadPastControls || (() => {});
     const showToast = deps.showToast || (() => {});
+    const startCompaction = deps.startCompaction || createNoopDependency('startCompaction');
+    const isCompactionRunning = deps.isCompactionRunning || (() => false);
     const chromeApi = deps.chromeApi || (typeof chrome !== 'undefined' ? chrome : null);
 
     let localSidebarSelectedFolderId = null;
@@ -723,7 +725,10 @@
     <div class="local-chat-sidebar-section local-chat-sidebar-chats-section">
       <div class="local-chat-sidebar-section-row">
         <div class="local-chat-sidebar-section-title">Local chats</div>
-        <button type="button" class="local-chat-sidebar-new" data-local-sidebar-new title="Create a new local chat session">New chat</button>
+        <div class="local-chat-sidebar-section-actions">
+          <button type="button" class="local-chat-sidebar-new" data-local-sidebar-compact title="Compact the active local chat into continuation context"${localSidebarData.activeSessionId && !isCompactionRunning() ? '' : ' disabled'}>${isCompactionRunning() ? 'Compacting…' : 'Compact'}</button>
+          <button type="button" class="local-chat-sidebar-new" data-local-sidebar-new title="Create a new local chat session">New chat</button>
+        </div>
       </div>
       <div class="local-chat-sidebar-subtitle">${escapeHtml(folderLabelForLocalSidebar(localSidebarSelectedFolderId, folders))}</div>
       <div class="local-chat-sidebar-list local-chat-sidebar-chat-list">${chatButtons}</div>
@@ -1402,6 +1407,19 @@
         event.preventDefault();
         event.stopPropagation();
         createLocalFolderFromSidebar();
+        return;
+      }
+
+      const compactButton = event.target?.closest?.('[data-local-sidebar-compact]');
+      if (compactButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (compactButton.disabled || isCompactionRunning()) return;
+        compactButton.disabled = true;
+        compactButton.textContent = 'Compacting…';
+        Promise.resolve(startCompaction())
+          .catch(() => {})
+          .finally(() => scheduleLocalSidebarRefresh(true));
         return;
       }
 
