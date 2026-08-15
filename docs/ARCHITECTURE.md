@@ -113,8 +113,9 @@ The repo now has public-portfolio quality gates:
 
 - ESLint flat config in `eslint.config.mjs` for Node, browser, WebExtension, CommonJS, and native ES module files.
 - Prettier config in `.prettierrc.json` with `.prettierignore` for generated/runtime artifacts.
-- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, the required web Playwright smoke test, and a packaged-Electron launch smoke test built with `electron-builder --dir`.
+- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, the required web Playwright smoke test, the real browser-extension compaction E2E workflow, and a packaged-Electron launch smoke test built with `electron-builder --dir`.
 - `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium, including accessible-name/ARIA checks and modal focus containment/restoration.
+- `e2e/compaction-workflow.mjs` loads the real Manifest V3 extension in an isolated Chromium profile, pairs it to an isolated server, and drives the compact/continue/export/render/lifecycle plus malformed-response and cancellation paths against a controlled ChatGPT fixture.
 - The required smoke test fails when Chromium is unavailable and also rejects uncaught page errors, browser `console.error` messages, and failed network requests.
 - `npm run test:smoke:optional` is available only for lightweight local development where a missing browser may be skipped.
 - CI installs Chromium with Playwright and runs `xvfb-run -a npm run verify` on Linux so the packaged Electron smoke test has a display; it never uses the optional smoke command.

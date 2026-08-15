@@ -53,6 +53,7 @@ That command runs:
 - recursive JavaScript syntax checks
 - Node/jsdom tests
 - the required Playwright smoke test against a live local server
+- the required browser-extension compaction E2E test against an isolated live server/provider fixture
 - the packaged-Electron launch smoke test built with `electron-builder --dir`
 
 Useful targeted commands:
@@ -65,10 +66,11 @@ npm test
 npm run test:coverage
 npm run test:smoke
 npm run test:smoke:optional
+npm run test:compaction-e2e
 npm run test:electron-smoke
 ```
 
-The required web Playwright smoke test fails when Chromium is unavailable. This keeps `npm run verify` and CI from succeeding without browser-level coverage. The packaged-Electron smoke test is also part of `npm run verify`; it builds the current platform with `electron-builder --dir` and launches the packaged executable. Linux CI runs verification under `xvfb-run` so Electron has a display.
+The required web Playwright smoke test and browser-extension compaction E2E test fail when Chromium is unavailable. This keeps `npm run verify` and CI from succeeding without browser-level coverage. The compaction E2E test uses the real unpacked extension with an isolated Chromium profile, server data directory, and controlled ChatGPT fixture. The packaged-Electron smoke test is also part of `npm run verify`; it builds the current platform with `electron-builder --dir` and launches the packaged executable. Linux CI runs verification under `xvfb-run` so Electron has a display.
 
 In CI, Chromium is installed with:
 
