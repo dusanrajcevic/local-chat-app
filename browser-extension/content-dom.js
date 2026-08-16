@@ -240,7 +240,7 @@
     if (!actionBar || !adapter.turnContainerSelectors?.length) return null;
 
     const selectors = adapter.turnContainerSelectors.join(',');
-    let turns = [];
+    let turns;
     try {
       turns = Array.from(document.querySelectorAll(selectors));
     } catch {

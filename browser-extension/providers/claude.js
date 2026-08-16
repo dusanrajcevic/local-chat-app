@@ -13,15 +13,12 @@
     name: 'Claude',
     hostIncludes: ['claude.ai'],
     turnContainerSelectors: ['[role="article"]', 'article'],
-    actionBarSelectors: [
-      '[data-cds="MessageActions"]',
-      '[role="toolbar"][aria-label="Message actions" i]'
-    ],
+    actionBarSelectors: ['[data-cds="MessageActions"]', '[role="toolbar"][aria-label="Message actions" i]'],
     actionBarCompletionSignal: true,
     actionBarCopySelectors: ['button[aria-label="Copy" i]', '[role="button"][aria-label="Copy" i]'],
     roleContainerSelectors: [],
     senderFromContainer(container) {
-      const row = container?.closest?.('[data-testid="transcript-row"][data-perf-row]');
+      const row = container?.closest?.('[data-perf-row="human"], [data-perf-row="user"], [data-perf-row="assistant"]');
       const role = String(row?.getAttribute?.('data-perf-row') || '').toLowerCase();
       if (role === 'human' || role === 'user') return 'me';
       if (role === 'assistant') return 'bot';
