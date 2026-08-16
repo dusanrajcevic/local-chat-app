@@ -176,8 +176,84 @@
     return false;
   }
 
+  function closestMatching(element, selectors = []) {
+    for (const selector of selectors) {
+      try {
+        const match = element?.closest?.(selector);
+        if (match) return match;
+      } catch {
+        // Provider DOM changes should not break the whole content script.
+      }
+    }
+    return null;
+  }
+
+  function nearbyMessageContainer(subtree, adapter) {
+    if (!subtree || subtree.nodeType !== Node.ELEMENT_NODE) return null;
+
+    const hasEnoughText = normalizeText(subtree.innerText || subtree.textContent || '').length > 20;
+    const hasContentRoot =
+      matchesAny(subtree, adapter.contentSelectors) || hasDescendantMatching(subtree, adapter.contentSelectors);
+    if (matchesAny(subtree, adapter.turnContainerSelectors) && hasContentRoot && hasEnoughText) return subtree;
+
+    for (const selector of adapter.turnContainerSelectors || []) {
+      try {
+        const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
+          const text = normalizeText(element.innerText || element.textContent || '');
+          return text.length > 20 && hasDescendantMatching(element, adapter.contentSelectors);
+        });
+        if (turns.length) return turns[turns.length - 1];
+      } catch {
+        // Ignore invalid selectors from stale provider adapters.
+      }
+    }
+
+    if (!hasContentRoot || !hasEnoughText) return null;
+
+    const content = querySelectorAny(subtree, adapter.contentSelectors);
+    if (!content) return matchesAny(subtree, adapter.contentSelectors) ? subtree : null;
+
+    for (const selector of adapter.turnContainerSelectors || []) {
+      try {
+        const turn = content.closest?.(selector);
+        if (turn && subtree.contains(turn)) return turn;
+      } catch {
+        // Ignore invalid selectors from stale provider adapters.
+      }
+    }
+
+    return content;
+  }
+
+  function findMessageContainerForActionBar(startNode, adapter) {
+    const actionBar = closestMatching(startNode, adapter.actionBarSelectors || []);
+    if (!actionBar) return null;
+
+    let branch = actionBar;
+    let parent = actionBar.parentElement;
+    let depth = 0;
+
+    while (parent && parent !== document.body && depth < 8) {
+      let sibling = branch.previousElementSibling;
+      while (sibling) {
+        const candidate = nearbyMessageContainer(sibling, adapter);
+        if (candidate) return candidate;
+        sibling = sibling.previousElementSibling;
+      }
+
+      branch = parent;
+      parent = parent.parentElement;
+      depth += 1;
+    }
+
+    return null;
+  }
+
   function findMessageContainer(startNode) {
     const adapter = currentProviderAdapter();
+    const actionBarContainer = findMessageContainerForActionBar(startNode, adapter);
+    if (actionBarContainer) return actionBarContainer;
+
     let node = startNode;
     let depth = 0;
     const candidates = [];

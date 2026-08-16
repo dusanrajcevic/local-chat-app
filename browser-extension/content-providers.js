@@ -44,6 +44,7 @@
     return Object.freeze({
       hostIncludes: [],
       turnContainerSelectors: [],
+      actionBarSelectors: [],
       roleContainerSelectors: ['[data-message-author-role]'],
       contentSelectors: DEFAULT_CONTENT_SELECTORS,
       containerPreference: DEFAULT_CONTAINER_PREFERENCE,

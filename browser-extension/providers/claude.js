@@ -13,6 +13,10 @@
     name: 'Claude',
     hostIncludes: ['claude.ai'],
     turnContainerSelectors: ['article'],
+    actionBarSelectors: [
+      '[data-cds="MessageActions"]',
+      '[role="toolbar"][aria-label="Message actions" i]'
+    ],
     roleContainerSelectors: [],
     contentSelectors: [
       ':scope .prose',

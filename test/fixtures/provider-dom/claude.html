@@ -6,12 +6,38 @@
     <footer class="message-actions"><button title="Copy">Copy</button></footer>
   </article>
 
-  <article aria-label="Assistant response">
-    <div class="prose">
-      <h2>Recommendation</h2>
-      <p>Start with JSON only when the write path is simple and the data volume is small.</p>
-      <blockquote>SQLite becomes better once search, concurrency, or migrations matter.</blockquote>
+  <div class="claude-assistant-turn">
+    <article aria-label="Assistant response">
+      <div class="prose">
+        <h2>Recommendation</h2>
+        <p>Start with JSON only when the write path is simple and the data volume is small.</p>
+        <blockquote>SQLite becomes better once search, concurrency, or migrations matter.</blockquote>
+      </div>
+    </article>
+
+    <div class="claude-message-actions-wrap">
+      <div
+        data-cds="MessageActions"
+        data-reveal="fade"
+        role="toolbar"
+        aria-label="Message actions"
+        data-size="xs"
+        tabindex="-1"
+      >
+        <button type="button" data-cds="Button" data-size="xs" aria-label="Copy" tabindex="-1">
+          <span aria-hidden="true">Copy</span>
+        </button>
+        <button
+          type="button"
+          data-cds="Button"
+          data-size="xs"
+          aria-label="Read aloud"
+          data-testid="action-bar-read-aloud"
+          tabindex="-1"
+        >
+          <span aria-hidden="true">Read aloud</span>
+        </button>
+      </div>
     </div>
-    <footer class="message-actions"><button aria-label="Copy response">Copy</button></footer>
-  </article>
+  </div>
 </main>

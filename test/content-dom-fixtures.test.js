@@ -215,6 +215,28 @@ for (const providerCase of providerCases) {
   });
 }
 
+test('Claude associates the current MessageActions toolbar with the preceding assistant turn', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  const toolbar = document.querySelector('[data-cds="MessageActions"]');
+  const copyButton = toolbar.querySelector('button[aria-label="Copy"]');
+  const container = content.findMessageContainer(copyButton);
+
+  assert.ok(container, 'expected Claude toolbar Copy button to resolve to an assistant message');
+  assert.equal(container.tagName, 'ARTICLE');
+  assert.equal(container.getAttribute('aria-label'), 'Assistant response');
+  assert.equal(content.inferSender(container), 'bot');
+  assert.equal(content.isCopyButton(copyButton), true);
+
+  content.markAssistantContainerReadyForTest(container);
+  content.injectButtons();
+
+  const saveButton = copyButton.nextElementSibling;
+  assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.__localChatContainer, container);
+});
+
 test('ChatGPT fixture rejects nested code-copy controls while accepting message-level copy controls', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
