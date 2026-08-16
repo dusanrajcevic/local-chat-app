@@ -13,6 +13,7 @@ The project is designed for private local use, not as a hosted multi-user servic
 - Renders fenced code blocks with a copy control and a language label when the fence declares one; common C++ fence aliases are displayed as `c++`.
 - Stores each chat as a JSON file grouped by date under a local data directory.
 - Provides a browser extension for saving prompts and completed AI responses from AI chat UIs.
+- Compacts long AI conversations into a continuation session while preserving the original transcript, so future chats can continue from condensed context instead of resending the entire conversation.
 - Supports ChatGPT, Claude, DeepSeek, and Gemini through best-effort DOM adapters.
 - Runs as either a Node/Express web app or a packaged Electron desktop app.
 
@@ -97,6 +98,20 @@ npm run desktop
 
 The extension communicates with the local API only through its background worker. Pairing binds a generated token to the browser extension ID; the server stores only a SHA-256 token hash. Pairing is the normal browser-extension setup. `LOCAL_CHAT_AUTH_TOKEN` remains a server-side compatibility fallback for API clients that already provide the required extension headers, while `LOCAL_CHAT_EXTENSION_IDS` can optionally restrict which extension IDs may pair or use that fallback.
 
+## Compacted conversations
+
+Long conversations can be compacted from the Local Chat sidebar on a supported AI provider.
+
+Click **Compact** on the active local chat. The extension asks the provider to produce structured continuation context, validates the response, stores it locally, and opens a compacted child session.
+
+The original conversation remains unchanged as the complete archive. The compacted session contains the condensed historical context plus messages written after compaction.
+
+In the local web and Electron app, compacted sessions show an expandable **Compacted context** section above the continuation messages.
+
+When a compacted conversation is exported or loaded back into an AI provider, Local Chat sends the compacted context followed only by messages written after compaction. This avoids repeatedly sending the full original transcript.
+
+Internal compaction request and response messages are hidden from the provider conversation and are not saved as normal chat messages.
+
 ## Security model
 
 The app is local-first and binds to `127.0.0.1` by default. The API rejects untrusted browser origins, requires browser-extension pairing, validates route IDs, writes JSON atomically, and uses per-file write locks for read-modify-write flows. The Electron shell blocks unexpected navigation and child windows, allowlists external URL schemes, serves the UI with restrictive browser security headers, and waits for the local HTTP server to close during shutdown.
@@ -156,6 +171,7 @@ See [`DESKTOP_BUILD.md`](DESKTOP_BUILD.md).
 - The browser content-script has been split into tested modules: provider adapters live in `browser-extension/providers/*`, shared extraction lives in `content-dom.js`, clipboard/manual message extraction lives in `content-message-save.js`, autosave state/scheduling lives in `content-autosave.js`, local sidebar replacement lives in `content-sidebar.js`, composer/load-past modal behavior lives in `content-composer.js`, and Save local injection plus local-app availability / auto-save toggle coordination lives in `content-runtime.js`. `content.js` is now mostly the bootstrap/coordinator that wires these modules together.
 - The frontend is intentionally vanilla JavaScript and uses a single native ES module entrypoint at `public/app/main.mjs`. Browser code is split into `api.mjs`, `state.mjs`, `render.mjs`, `message-navigator.mjs`, `modals.mjs`, `clipboard.mjs`, `events.mjs`, `export.mjs`, and `markdown.mjs` without a bundler. `controllers.mjs` is only a controller composition root; domain behavior lives under `public/app/controllers/` in session, folder, message, active-session, and search modules.
 - Content-script fixture tests now cover provider extraction, Save local injection, mutation resistance, and privacy-preserving adapter diagnostics for ChatGPT, Claude, DeepSeek, and Gemini. Autosave unit tests cover idempotency-key generation, armed assistant-target saves, and outgoing prompt dedupe. Sidebar fixture tests cover local folder/session rendering, session selection, refresh behavior, and native-sidebar hide/restore. Composer tests cover composer detection, transcript insertion, pasted-text attachment fallback behavior, modal search/rendering, local export loading, and top active-folder controls. Manual-save tests cover selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message filtering. Runtime tests cover auto-send toggle persistence, local-app unavailability cleanup, Save local delegation, and health-check/save coordination. Web UI module tests cover the API client, renderer escaping/filtering, markdown rendering integration, session/message controllers, labelled controls, live status output, modal focus containment/restoration, delegated events, and the native ES module entrypoint. Browser-level jsdom integration tests boot the real `createRuntime`, click actual UI controls/modals, exercise fake API-backed folder/session/message creation, rename, trash, and restore flows, and assert DOM/state updates. A Playwright smoke test starts the real Express server with an isolated temp data directory, opens the actual web UI in Chromium, creates a folder/session/message, renames, trashes, restores, and verifies persisted API state. Provider fixtures remain reduced fixtures rather than live-site E2E tests, so provider UI changes can still require adapter updates.
+- Conversation compaction is generated by the active AI provider. Local Chat validates and preserves the resulting structured context, but the quality and completeness of the condensed context ultimately depend on the provider's response. The original parent conversation is always retained as the complete archive.
 
 ## Contributing
 
