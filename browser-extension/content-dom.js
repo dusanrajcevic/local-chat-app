@@ -188,19 +188,30 @@
     return null;
   }
 
-  function nearbyMessageContainer(subtree, adapter) {
+  function nearbyMessageContainer(subtree, adapter, options = {}) {
     if (!subtree || subtree.nodeType !== Node.ELEMENT_NODE) return null;
 
+    const allowTurnWithoutContentRoot = Boolean(options.allowTurnWithoutContentRoot);
     const hasEnoughText = normalizeText(subtree.innerText || subtree.textContent || '').length > 20;
     const hasContentRoot =
       matchesAny(subtree, adapter.contentSelectors) || hasDescendantMatching(subtree, adapter.contentSelectors);
-    if (matchesAny(subtree, adapter.turnContainerSelectors) && hasContentRoot && hasEnoughText) return subtree;
+    if (
+      matchesAny(subtree, adapter.turnContainerSelectors) &&
+      hasEnoughText &&
+      (hasContentRoot || allowTurnWithoutContentRoot)
+    )
+      return subtree;
 
     for (const selector of adapter.turnContainerSelectors || []) {
       try {
         const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
           const text = normalizeText(element.innerText || element.textContent || '');
-          return text.length > 20 && hasDescendantMatching(element, adapter.contentSelectors);
+          return (
+            text.length > 20 &&
+            (allowTurnWithoutContentRoot ||
+              matchesAny(element, adapter.contentSelectors) ||
+              hasDescendantMatching(element, adapter.contentSelectors))
+          );
         });
         if (turns.length) return turns[turns.length - 1];
       } catch {
@@ -225,9 +236,39 @@
     return content;
   }
 
+  function precedingTurnContainer(actionBar, adapter) {
+    if (!actionBar || !adapter.turnContainerSelectors?.length) return null;
+
+    const selectors = adapter.turnContainerSelectors.join(',');
+    let turns = [];
+    try {
+      turns = Array.from(document.querySelectorAll(selectors));
+    } catch {
+      return null;
+    }
+
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      const turn = turns[index];
+      if (!turn || turn.contains?.(actionBar)) continue;
+
+      const position = turn.compareDocumentPosition?.(actionBar) || 0;
+      if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+
+      const text = normalizeText(turn.innerText || turn.textContent || '');
+      if (text.length > 20) return turn;
+    }
+
+    return null;
+  }
+
   function findMessageContainerForActionBar(startNode, adapter) {
     const actionBar = closestMatching(startNode, adapter.actionBarSelectors || []);
     if (!actionBar) return null;
+
+    const containingTurn = closestMatching(actionBar, adapter.turnContainerSelectors || []);
+    if (containingTurn && normalizeText(containingTurn.innerText || containingTurn.textContent || '').length > 20) {
+      return containingTurn;
+    }
 
     let branch = actionBar;
     let parent = actionBar.parentElement;
@@ -236,7 +277,7 @@
     while (parent && parent !== document.body && depth < 8) {
       let sibling = branch.previousElementSibling;
       while (sibling) {
-        const candidate = nearbyMessageContainer(sibling, adapter);
+        const candidate = nearbyMessageContainer(sibling, adapter, { allowTurnWithoutContentRoot: true });
         if (candidate) return candidate;
         sibling = sibling.previousElementSibling;
       }
@@ -246,7 +287,13 @@
       depth += 1;
     }
 
-    return null;
+    return precedingTurnContainer(actionBar, adapter);
+  }
+
+  function isProviderActionBarControl(startNode) {
+    const adapter = currentProviderAdapter();
+    if (!adapter.actionBarCompletionSignal) return false;
+    return Boolean(closestMatching(startNode, adapter.actionBarSelectors || []));
   }
 
   function findMessageContainer(startNode) {
@@ -689,6 +736,7 @@
     hashText,
     isCopyButton,
     isNestedContentCopyButton,
+    isProviderActionBarControl,
     findMessageContainer,
     selectionInside,
     removeUiNoise,

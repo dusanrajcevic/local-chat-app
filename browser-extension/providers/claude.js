@@ -17,6 +17,7 @@
       '[data-cds="MessageActions"]',
       '[role="toolbar"][aria-label="Message actions" i]'
     ],
+    actionBarCompletionSignal: true,
     roleContainerSelectors: [],
     contentSelectors: [
       ':scope .prose',

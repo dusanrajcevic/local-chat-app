@@ -227,8 +227,41 @@ test('Claude associates the current MessageActions toolbar with the preceding as
   assert.equal(container.getAttribute('aria-label'), 'Assistant response');
   assert.equal(content.inferSender(container), 'bot');
   assert.equal(content.isCopyButton(copyButton), true);
+  assert.equal(content.isProviderActionBarControl(copyButton), true);
 
-  content.markAssistantContainerReadyForTest(container);
+  content.injectButtons();
+
+  const saveButton = copyButton.nextElementSibling;
+  assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.__localChatContainer, container);
+});
+
+test('Claude MessageActions toolbar resolves to the nearest preceding article across unrelated wrappers', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  document.body.innerHTML = `
+    <article aria-label="Assistant response">
+      <div class="font-claude-response">
+        <p>This completed Claude response deliberately uses no configured prose or message-content class.</p>
+      </div>
+    </article>
+    <div data-cds="MessageActions" data-reveal="fade" role="toolbar" aria-label="Message actions" data-size="xs" tabindex="-1">
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Copy" tabindex="0"><span aria-hidden="true">Copy</span></button>
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Read aloud" tabindex="-1"><span aria-hidden="true">Read aloud</span></button>
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Retry" tabindex="-1"><span aria-hidden="true">Retry</span></button>
+      <time data-cds="RelativeTime">just now</time>
+    </div>
+  `;
+
+  const copyButton = document.querySelector('button[aria-label="Copy"]');
+  const container = content.findMessageContainer(copyButton);
+
+  assert.ok(container, 'expected the external Claude toolbar to resolve to the preceding response article');
+  assert.equal(container.tagName, 'ARTICLE');
+  assert.match(content.extractMessageTextFallback(container, 'bot'), /completed Claude response/i);
+  assert.equal(content.isCopyButton(copyButton), true);
+
   content.injectButtons();
 
   const saveButton = copyButton.nextElementSibling;

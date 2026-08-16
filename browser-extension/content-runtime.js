@@ -63,6 +63,7 @@
     const inferSender = deps.inferSender || (() => 'bot');
     const isCopyButton = deps.isCopyButton || (() => false);
     const isNestedContentCopyButton = deps.isNestedContentCopyButton || (() => false);
+    const isProviderActionBarControl = deps.isProviderActionBarControl || (() => false);
     const buttonLabel =
       deps.buttonLabel ||
       ((button) =>
@@ -729,6 +730,13 @@
           // Providers stream the newest assistant turn. Historical turns can receive
           // their controls immediately; only the newest one needs stability checks.
           if (!target.isNewestAssistant) return true;
+
+          // Some providers expose their message action toolbar only once the
+          // response is complete. Treat that provider-declared toolbar as a
+          // completion signal so the manual Save local control appears with
+          // the native Copy action instead of waiting for a second stability
+          // polling cycle.
+          if (isProviderActionBarControl(target.copyButton)) return true;
 
           return Boolean(
             autosaveController()?.isAssistantMessageReadyForButton?.(target.container, { assumeNewest: true })
