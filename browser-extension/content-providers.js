@@ -46,6 +46,8 @@
       turnContainerSelectors: [],
       actionBarSelectors: [],
       actionBarCompletionSignal: false,
+      actionBarCopySelectors: [],
+      senderFromContainer: null,
       roleContainerSelectors: ['[data-message-author-role]'],
       contentSelectors: DEFAULT_CONTENT_SELECTORS,
       containerPreference: DEFAULT_CONTAINER_PREFERENCE,

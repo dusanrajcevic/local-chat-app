@@ -1,42 +1,63 @@
 <main>
-  <article aria-label="User message">
-    <div class="prose">
-      <p>Compare JSON files and SQLite for a small desktop chat archive.</p>
-    </div>
-    <footer class="message-actions"><button title="Copy">Copy</button></footer>
-  </article>
-
-  <div class="claude-assistant-turn">
-    <article aria-label="Assistant response">
-      <div class="font-claude-response">
-        <h2>Recommendation</h2>
-        <p>Start with JSON only when the write path is simple and the data volume is small.</p>
-        <blockquote>SQLite becomes better once search, concurrency, or migrations matter.</blockquote>
-      </div>
-    </article>
-
-    <div class="claude-message-actions-wrap">
-      <div
-        data-cds="MessageActions"
-        data-reveal="fade"
-        role="toolbar"
-        aria-label="Message actions"
-        data-size="xs"
-        tabindex="-1"
-      >
-        <button type="button" data-cds="Button" data-size="xs" aria-label="Copy" tabindex="-1">
-          <span aria-hidden="true">Copy</span>
-        </button>
-        <button
-          type="button"
-          data-cds="Button"
-          data-size="xs"
-          aria-label="Read aloud"
-          data-testid="action-bar-read-aloud"
-          tabindex="-1"
+  <div data-testid="transcript-list">
+    <div role="feed" aria-label="Chat messages">
+      <div data-testid="transcript-sizer">
+        <div
+          data-rs-index="0"
+          data-index="0"
+          data-testid="transcript-row"
+          data-perf-row="human"
+          data-perf-row-streaming="false"
         >
-          <span aria-hidden="true">Read aloud</span>
-        </button>
+          <div role="article" tabindex="-1" aria-label="Message 1 of 2">
+            <div class="group group/message-row">
+              <h2 class="sr-only">You said: Compare JSON files and SQLite for a small desktop chat archive.</h2>
+              <div data-cds="UserMessage">
+                <div data-testid="user-message">
+                  <p>Compare JSON files and SQLite for a small desktop chat archive.</p>
+                </div>
+              </div>
+              <div data-cds="MessageActions" role="toolbar" aria-label="Message actions">
+                <button type="button" data-cds="Button" aria-label="Retry"><span aria-hidden="true">Retry</span></button>
+                <button type="button" data-cds="Button" aria-label="Edit"><span aria-hidden="true">Edit</span></button>
+                <button type="button" data-cds="Button" aria-label="Copy"><span aria-hidden="true">Copy</span></button>
+                <span role="status" class="sr-only"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          data-rs-index="1"
+          data-index="1"
+          data-testid="transcript-row"
+          data-perf-row="assistant"
+          data-perf-row-streaming="false"
+        >
+          <div role="article" tabindex="0" aria-label="Message 2 of 2">
+            <div class="group group/message-row">
+              <div data-is-streaming="false">
+                <h2 class="sr-only">Claude responded: Recommendation</h2>
+                <div class="font-claude-response">
+                  <div class="standard-markdown">
+                    <h2>Recommendation</h2>
+                    <p>Start with JSON only when the write path is simple and the data volume is small.</p>
+                    <blockquote>SQLite becomes better once search, concurrency, or migrations matter.</blockquote>
+                  </div>
+                </div>
+              </div>
+              <div data-cds="MessageActions" role="toolbar" aria-label="Message actions">
+                <button type="button" data-cds="Button" aria-label="Copy"><span aria-hidden="true">Copy</span></button>
+                <span role="status" class="sr-only"></span>
+                <button type="button" data-cds="Button" aria-label="Read aloud"><span aria-hidden="true">Read aloud</span></button>
+                <button type="button" data-cds="Button" aria-label="Good response"><span aria-hidden="true">Good</span></button>
+                <button type="button" data-cds="Button" aria-label="Bad response"><span aria-hidden="true">Bad</span></button>
+                <button type="button" data-cds="Button" aria-label="Retry"><span aria-hidden="true">Retry</span></button>
+                <time data-cds="RelativeTime">just now</time>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

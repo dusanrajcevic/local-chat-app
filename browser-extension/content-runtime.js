@@ -64,6 +64,7 @@
     const isCopyButton = deps.isCopyButton || (() => false);
     const isNestedContentCopyButton = deps.isNestedContentCopyButton || (() => false);
     const isProviderActionBarControl = deps.isProviderActionBarControl || (() => false);
+    const providerActionBarSaveTargets = deps.providerActionBarSaveTargets || (() => []);
     const buttonLabel =
       deps.buttonLabel ||
       ((button) =>
@@ -692,8 +693,17 @@
 
     function collectMessageSaveTargets() {
       const grouped = new Map();
-      const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const senderHints = new Map();
 
+      for (const target of providerActionBarSaveTargets()) {
+        const { container, copyButton, sender } = target || {};
+        if (!container || !copyButton) continue;
+        if (!grouped.has(container)) grouped.set(container, []);
+        grouped.get(container).push(copyButton);
+        if (sender === 'me' || sender === 'bot') senderHints.set(container, sender);
+      }
+
+      const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
       for (const copyButton of buttons) {
         if (!isCopyButton(copyButton)) continue;
 
@@ -701,14 +711,14 @@
         if (!container) continue;
 
         if (!grouped.has(container)) grouped.set(container, []);
-        grouped.get(container).push(copyButton);
+        if (!grouped.get(container).includes(copyButton)) grouped.get(container).push(copyButton);
       }
 
       const targets = Array.from(grouped.entries())
         .map(([container, copyButtons]) => ({
           container,
           copyButton: chooseMessageCopyButton(container, copyButtons),
-          sender: inferSender(container)
+          sender: senderHints.get(container) || inferSender(container)
         }))
         .filter((target) => target.copyButton)
         .filter((target) => !shouldHideMessageSaveTarget(target.container, target.sender));
@@ -748,7 +758,12 @@
       document.querySelectorAll(`[${EXT_MARKER}]`).forEach((saveButton) => {
         const copyButton =
           saveButton.__localChatCopyButton || saveButton.previousElementSibling || saveButton.nextElementSibling;
-        if (!copyButton || !validCopyButtons.has(copyButton) || !isCopyButton(copyButton)) saveButton.remove();
+        if (
+          !copyButton ||
+          !validCopyButtons.has(copyButton) ||
+          (!isCopyButton(copyButton) && !isProviderActionBarControl(copyButton))
+        )
+          saveButton.remove();
       });
     }
 

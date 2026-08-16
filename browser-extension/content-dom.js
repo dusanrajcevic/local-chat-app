@@ -296,6 +296,39 @@
     return Boolean(closestMatching(startNode, adapter.actionBarSelectors || []));
   }
 
+  function providerActionBarSaveTargets() {
+    const adapter = currentProviderAdapter();
+    const actionBarSelectors = adapter.actionBarSelectors || [];
+    const copySelectors = adapter.actionBarCopySelectors || [];
+    if (!actionBarSelectors.length || !copySelectors.length) return [];
+
+    const actionBars = uniqueElements(
+      actionBarSelectors.flatMap((selector) => {
+        try {
+          return Array.from(document.querySelectorAll?.(selector) || []);
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    return actionBars
+      .map((actionBar) => {
+        const copyButton = querySelectorAny(actionBar, copySelectors);
+        if (!copyButton) return null;
+
+        const container = findMessageContainerForActionBar(copyButton, adapter);
+        if (!container) return null;
+
+        return {
+          container,
+          copyButton,
+          sender: inferSender(container)
+        };
+      })
+      .filter(Boolean);
+  }
+
   function findMessageContainer(startNode) {
     const adapter = currentProviderAdapter();
     const actionBarContainer = findMessageContainerForActionBar(startNode, adapter);
@@ -675,6 +708,15 @@
 
   function inferSender(container) {
     const adapter = currentProviderAdapter();
+    if (typeof adapter.senderFromContainer === 'function') {
+      try {
+        const sender = adapter.senderFromContainer(container);
+        if (sender === 'me' || sender === 'bot') return sender;
+      } catch {
+        // Fall through to generic sender inference when a provider hook becomes stale.
+      }
+    }
+
     const roleSelectors = adapter.roleContainerSelectors || [];
     const closestRole =
       roleSelectors.length && matchesAny(container, roleSelectors)
@@ -737,6 +779,7 @@
     isCopyButton,
     isNestedContentCopyButton,
     isProviderActionBarControl,
+    providerActionBarSaveTargets,
     findMessageContainer,
     selectionInside,
     removeUiNoise,

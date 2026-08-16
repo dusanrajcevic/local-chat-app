@@ -215,26 +215,33 @@ for (const providerCase of providerCases) {
   });
 }
 
-test('Claude associates the current MessageActions toolbar with the preceding assistant turn', () => {
+test('Claude current transcript tree resolves MessageActions toolbars by transcript-row sender', () => {
   installDomFixture('claude', 'https://claude.ai/chat/test');
 
-  const toolbar = document.querySelector('[data-cds="MessageActions"]');
-  const copyButton = toolbar.querySelector('button[aria-label="Copy"]');
-  const container = content.findMessageContainer(copyButton);
+  const targets = contentDom.providerActionBarSaveTargets();
+  assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.sender),
+    ['me', 'bot']
+  );
 
-  assert.ok(container, 'expected Claude toolbar Copy button to resolve to an assistant message');
-  assert.equal(container.tagName, 'ARTICLE');
-  assert.equal(container.getAttribute('aria-label'), 'Assistant response');
-  assert.equal(content.inferSender(container), 'bot');
-  assert.equal(content.isCopyButton(copyButton), true);
-  assert.equal(content.isProviderActionBarControl(copyButton), true);
+  const assistantTarget = targets.find((target) => target.sender === 'bot');
+  assert.ok(assistantTarget);
+  assert.equal(assistantTarget.container.tagName, 'DIV');
+  assert.equal(assistantTarget.container.getAttribute('role'), 'article');
+  assert.equal(assistantTarget.container.getAttribute('aria-label'), 'Message 2 of 2');
+  assert.equal(content.isCopyButton(assistantTarget.copyButton), true);
+  assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
+  assert.match(content.extractMessageTextFallback(assistantTarget.container, 'bot'), /Start with JSON/i);
 
   content.injectButtons();
 
-  const saveButton = copyButton.nextElementSibling;
-  assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
-  assert.equal(saveButton.textContent, 'Save local');
-  assert.equal(saveButton.__localChatContainer, container);
+  for (const target of targets) {
+    const saveButton = target.copyButton.nextElementSibling;
+    assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+    assert.equal(saveButton.textContent, 'Save local');
+    assert.equal(saveButton.__localChatContainer, target.container);
+  }
 });
 
 test('Claude MessageActions toolbar resolves to the nearest preceding article across unrelated wrappers', () => {
