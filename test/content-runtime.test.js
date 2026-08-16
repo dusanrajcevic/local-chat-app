@@ -245,6 +245,61 @@ test('content runtime injects Save local buttons and delegates clicks to autosav
   assert.ok(autosaveCalls.some((call) => call[0] === 'save-container'));
 });
 
+test('content runtime keeps provider completion toolbars visible and forwards completion to autosave', () => {
+  installRuntimeDom(
+    `
+    <main>
+      <div data-perf-row="assistant">
+        <div role="article" aria-label="Message 2 of 2">
+          <div class="standard-markdown">Completed Claude response</div>
+          <div data-cds="MessageActions" role="toolbar" aria-label="Message actions">
+            <button aria-label="Copy">Copy</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  `,
+    'https://claude.ai/chat/test'
+  );
+
+  const assistantScheduleCalls = [];
+  const { controller } = createController({
+    deps: {
+      providerInfo: () => ({ name: 'Claude', key: 'claude' }),
+      findMessageContainer: contentDom.findMessageContainer,
+      inferSender: contentDom.inferSender,
+      isCopyButton: contentDom.isCopyButton,
+      isNestedContentCopyButton: contentDom.isNestedContentCopyButton,
+      isProviderActionBarControl: contentDom.isProviderActionBarControl,
+      providerActionBarForControl: contentDom.providerActionBarForControl,
+      providerActionBarSaveTargets: contentDom.providerActionBarSaveTargets
+    },
+    autosaveController: {
+      scheduleAssistantAutoSave(...args) {
+        assistantScheduleCalls.push(args);
+      }
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectButtons();
+
+  const actionBar = document.querySelector('[data-cds="MessageActions"]');
+  const saveButton = document.querySelector(`[${contentDom.markers.EXT_MARKER}]`);
+  assert.ok(saveButton);
+  assert.equal(actionBar.getAttribute(contentDom.markers.ACTION_BAR_VISIBLE_MARKER), 'true');
+  assert.equal(assistantScheduleCalls.length, 1);
+  assert.deepEqual(assistantScheduleCalls[0][3], {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
+});
+
 test('content runtime health checks update availability and invalidate sidebar after saves', async () => {
   installRuntimeDom('<main></main>');
   const chromeApi = createChromeMock({

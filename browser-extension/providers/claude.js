@@ -48,6 +48,7 @@
       '[data-streaming="true"]',
       '[class*="streaming" i]',
       '[class*="generating" i]'
-    ]
+    ],
+    streamingAncestorSelectors: ['[data-perf-row-streaming="true"]']
   };
 });

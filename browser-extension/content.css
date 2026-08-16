@@ -1,3 +1,13 @@
+/* Claude and other providers may fade their native message action bar until
+   hover. Once Local Chat injects a control into a provider-declared action bar,
+   keep that bar visible so Save local is discoverable and its autosave state is
+   observable without requiring pointer hover. */
+[data-local-chat-action-bar-visible='true'] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
 .local-chat-save-btn,
 .local-chat-new-session-btn {
   font: inherit;

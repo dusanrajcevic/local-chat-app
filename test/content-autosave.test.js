@@ -112,3 +112,103 @@ test('content autosave queues outgoing prompts once within the dedupe window', a
   assert.equal(payloads[0].sessionId, 'chat_target');
   assert.match(payloads[0].idempotencyKey, /^lc-auto-submit-claude-me-chat_target-/);
 });
+
+test('content autosave trusts provider completion signals once streaming has ended', () => {
+  installDom();
+  const container = document.querySelector('#msg');
+  let streaming = false;
+
+  const controller = autosave.createAutosaveController(
+    {
+      normalizeText: contentDom.normalizeText,
+      inferSender: () => 'bot',
+      assistantContentSignature: () => '16:provider-complete',
+      hasStreamingMarker: () => streaming
+    },
+    { assistantReadyForButtonStableMs: 10_000 }
+  );
+
+  assert.equal(
+    controller.isAssistantMessageReadyForButton(container, { providerCompletionSignal: true }),
+    true,
+    'a provider-declared completion toolbar should not wait for the generic stability timer'
+  );
+
+  streaming = true;
+  assert.equal(
+    controller.isAssistantMessageReadyForButton(container, { providerCompletionSignal: true }),
+    false,
+    'an explicit streaming marker must still win over the provider completion signal'
+  );
+});
+
+test('content autosave keeps its response slot when a transient Claude render disappears', async () => {
+  installDom();
+  const firstContainer = document.querySelector('#msg');
+  const firstButton = document.querySelector('#save');
+  const firstCopy = document.createElement('button');
+  firstCopy.textContent = 'Copy';
+  document.body.appendChild(firstCopy);
+
+  const payloads = [];
+  const controller = autosave.createAutosaveController(
+    {
+      normalizeText: contentDom.normalizeText,
+      hashText: contentDom.hashText,
+      providerInfo: () => ({ name: 'Claude', key: 'claude' }),
+      currentLocalChatTarget: () => ({ sessionId: 'chat_target', sessionTitle: 'Target' }),
+      isAutoSendEnabled: () => true,
+      inferSender: () => 'bot',
+      assistantContentSignature: (container) => contentDom.normalizeText(container?.textContent || ''),
+      hasStreamingMarker: () => false,
+      extractMessageText: async (container) => contentDom.normalizeText(container?.textContent || ''),
+      cleanExtractedMessageText: (value) => contentDom.normalizeText(value),
+      shouldSkipExtractedMessageText: () => false,
+      sendLocalChatMessage: async (payload) => {
+        payloads.push(payload);
+        return { sessionTitle: 'Target' };
+      },
+      showToast: () => {},
+      sleep: async () => {}
+    },
+    {
+      autoAssistantSaveDelayMs: 1,
+      assistantCompletePollMs: 1,
+      assistantCompleteTimeoutMs: 25
+    }
+  );
+
+  controller.armAssistantAutoSave('User prompt', {
+    sessionId: 'chat_target',
+    sessionTitle: 'Target'
+  });
+
+  controller.scheduleAssistantAutoSave(firstContainer, firstButton, firstCopy, {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
+
+  firstContainer.remove();
+  firstButton.remove();
+  firstCopy.remove();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const replacementContainer = document.createElement('article');
+  replacementContainer.textContent = 'Final Claude answer';
+  const replacementCopy = document.createElement('button');
+  replacementCopy.textContent = 'Copy';
+  const replacementSave = document.createElement('button');
+  replacementSave.textContent = 'Save local';
+  document.body.append(replacementContainer, replacementCopy, replacementSave);
+
+  controller.scheduleAssistantAutoSave(replacementContainer, replacementSave, replacementCopy, {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].text, 'Final Claude answer');
+  assert.equal(payloads[0].source, 'auto-assistant-complete');
+});

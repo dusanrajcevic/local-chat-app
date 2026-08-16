@@ -29,6 +29,7 @@
     const AUTO_SEND_TOGGLE_MOUNT_MARKER = markers.AUTO_SEND_TOGGLE_MOUNT_MARKER || 'data-local-chat-auto-send-mount';
     const AUTO_SEND_COMPOSER_MARKER = markers.AUTO_SEND_COMPOSER_MARKER || 'data-local-chat-auto-send-composer';
     const AUTO_SEND_LAYOUT_MARKER = markers.AUTO_SEND_LAYOUT_MARKER || 'data-local-chat-auto-send-layout';
+    const ACTION_BAR_VISIBLE_MARKER = markers.ACTION_BAR_VISIBLE_MARKER || 'data-local-chat-action-bar-visible';
     const LOCAL_SIDEBAR_MARKER = markers.LOCAL_SIDEBAR_MARKER || 'data-local-chat-sidebar';
     const LOAD_PAST_MODAL_ID = markers.LOAD_PAST_MODAL_ID || 'local-chat-load-past-modal';
     const RELEVANT_MUTATION_SELECTOR = [
@@ -64,6 +65,7 @@
     const isCopyButton = deps.isCopyButton || (() => false);
     const isNestedContentCopyButton = deps.isNestedContentCopyButton || (() => false);
     const isProviderActionBarControl = deps.isProviderActionBarControl || (() => false);
+    const providerActionBarForControl = deps.providerActionBarForControl || (() => null);
     const providerActionBarSaveTargets = deps.providerActionBarSaveTargets || (() => []);
     const buttonLabel =
       deps.buttonLabel ||
@@ -216,6 +218,9 @@
     }
 
     function removeSaveLocalButtons() {
+      document.querySelectorAll?.(`[${ACTION_BAR_VISIBLE_MARKER}]`).forEach((actionBar) => {
+        actionBar.removeAttribute(ACTION_BAR_VISIBLE_MARKER);
+      });
       document.querySelectorAll?.(`[${EXT_MARKER}]`).forEach((button) => button.remove());
     }
 
@@ -660,6 +665,25 @@
       return null;
     }
 
+    function keepProviderActionBarVisible(copyButton) {
+      if (!isProviderActionBarControl(copyButton)) return null;
+      const actionBar = providerActionBarForControl(copyButton);
+      if (!actionBar) return null;
+      actionBar.setAttribute(ACTION_BAR_VISIBLE_MARKER, 'true');
+      return actionBar;
+    }
+
+    function releaseProviderActionBar(saveButton) {
+      const copyButton = saveButton?.__localChatCopyButton || saveButton?.previousElementSibling || null;
+      const actionBar = providerActionBarForControl(copyButton || saveButton);
+      if (!actionBar) return;
+
+      const hasOtherSaveButton = Array.from(actionBar.querySelectorAll?.(`[${EXT_MARKER}]`) || []).some(
+        (button) => button !== saveButton
+      );
+      if (!hasOtherSaveButton) actionBar.removeAttribute(ACTION_BAR_VISIBLE_MARKER);
+    }
+
     function scoreMessageCopyButton(button, container) {
       if (!button || !container) return -1;
       const rect = button.getBoundingClientRect?.();
@@ -762,8 +786,10 @@
           !copyButton ||
           !validCopyButtons.has(copyButton) ||
           (!isCopyButton(copyButton) && !isProviderActionBarControl(copyButton))
-        )
+        ) {
+          releaseProviderActionBar(saveButton);
           saveButton.remove();
+        }
       });
     }
 
@@ -799,9 +825,12 @@
           saveButton.__localChatCopyButton = copyButton;
         }
 
+        const providerCompletionSignal = Boolean(keepProviderActionBarVisible(copyButton));
+
         if (sender === 'bot' && isNewestAssistant) {
           autosaveController()?.scheduleAssistantAutoSave?.(container, saveButton, copyButton, {
-            assumeNewest: true
+            assumeNewest: true,
+            providerCompletionSignal
           });
         }
       }

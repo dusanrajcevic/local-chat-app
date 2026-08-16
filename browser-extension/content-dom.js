@@ -13,6 +13,7 @@
   const AUTO_SEND_TOGGLE_MOUNT_MARKER = 'data-local-chat-auto-send-toggle-mount';
   const AUTO_SEND_COMPOSER_MARKER = 'data-local-chat-auto-send-composer';
   const AUTO_SEND_LAYOUT_MARKER = 'data-local-chat-auto-send-layout';
+  const ACTION_BAR_VISIBLE_MARKER = 'data-local-chat-action-bar-visible';
   const LOCAL_SIDEBAR_MARKER = 'data-local-chat-sidebar';
   const LOCAL_SIDEBAR_NATIVE_HIDDEN_MARKER = 'data-local-chat-native-sidebar-hidden';
   const LOAD_PAST_MODAL_ID = 'local-chat-load-past-modal';
@@ -290,10 +291,15 @@
     return precedingTurnContainer(actionBar, adapter);
   }
 
+  function providerActionBarForControl(startNode) {
+    const adapter = currentProviderAdapter();
+    return closestMatching(startNode, adapter.actionBarSelectors || []);
+  }
+
   function isProviderActionBarControl(startNode) {
     const adapter = currentProviderAdapter();
     if (!adapter.actionBarCompletionSignal) return false;
-    return Boolean(closestMatching(startNode, adapter.actionBarSelectors || []));
+    return Boolean(providerActionBarForControl(startNode));
   }
 
   function providerActionBarSaveTargets() {
@@ -754,8 +760,14 @@
   function hasStreamingMarker(container) {
     if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
 
-    const selectors = currentProviderAdapter().streamingSelectors || [];
-    return matchesAny(container, selectors) || hasDescendantMatching(container, selectors);
+    const adapter = currentProviderAdapter();
+    const selectors = adapter.streamingSelectors || [];
+    const ancestorSelectors = adapter.streamingAncestorSelectors || [];
+    return (
+      matchesAny(container, selectors) ||
+      hasDescendantMatching(container, selectors) ||
+      Boolean(closestMatching(container, ancestorSelectors))
+    );
   }
 
   return {
@@ -768,6 +780,7 @@
       AUTO_SEND_TOGGLE_MOUNT_MARKER,
       AUTO_SEND_COMPOSER_MARKER,
       AUTO_SEND_LAYOUT_MARKER,
+      ACTION_BAR_VISIBLE_MARKER,
       LOCAL_SIDEBAR_MARKER,
       LOCAL_SIDEBAR_NATIVE_HIDDEN_MARKER,
       LOAD_PAST_MODAL_ID
@@ -779,6 +792,7 @@
     isCopyButton,
     isNestedContentCopyButton,
     isProviderActionBarControl,
+    providerActionBarForControl,
     providerActionBarSaveTargets,
     findMessageContainer,
     selectionInside,

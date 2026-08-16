@@ -244,6 +244,18 @@ test('Claude current transcript tree resolves MessageActions toolbars by transcr
   }
 });
 
+test('Claude transcript-row streaming metadata participates in completion detection', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  const row = assistantContainer.closest('[data-perf-row="assistant"]');
+  assert.ok(row);
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), false);
+
+  row.setAttribute('data-perf-row-streaming', 'true');
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), true);
+});
+
 test('Claude MessageActions toolbar resolves to the nearest preceding article across unrelated wrappers', () => {
   installDomFixture('claude', 'https://claude.ai/chat/test');
 

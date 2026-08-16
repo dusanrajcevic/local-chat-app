@@ -234,6 +234,15 @@
       const signature = assistantContentSignature(container);
       if (!signature) return false;
 
+      // Some providers only expose their native message action toolbar after
+      // the assistant response has completed. When the runtime passes that
+      // provider-declared completion signal, trust it once no streaming marker
+      // remains instead of applying the generic stability/stop-button heuristic.
+      if (options.providerCompletionSignal && !hasStreamingMarker(container)) {
+        assistantCompletionStates.set(container, { signature, stableSince: Date.now() });
+        return true;
+      }
+
       const now = Date.now();
       let state = assistantCompletionStates.get(container);
 
@@ -344,8 +353,11 @@
       if (!options.assumeNewest && !isLikelyNewestAssistantContainer(container)) return;
       if (assistantContainersIgnoredByArm.get(container) === assistantAutoSaveArmId) return;
       if (attemptedAssistantContainers.has(container) || pendingAssistantContainers.has(container)) return;
-      if (!reserveAssistantAutoSaveSlot()) return;
 
+      // Do not consume the one-response autosave budget while the provider may
+      // still replace/re-render the assistant container. Claude can swap the
+      // completed row/action toolbar shortly after it first appears; reserving
+      // here would permanently lose the slot if that transient node disappears.
       pendingAssistantContainers.add(container);
       button.dataset.localChatAutoPending = 'true';
 
@@ -364,6 +376,10 @@
           )
             return;
 
+          // Reserve only when this exact rendered response is complete and
+          // still attached. If an earlier transient render vanished, the
+          // replacement response can still claim the pending autosave slot.
+          if (!reserveAssistantAutoSaveSlot()) return;
           attemptedAssistantContainers.add(container);
 
           await sleep(120);
