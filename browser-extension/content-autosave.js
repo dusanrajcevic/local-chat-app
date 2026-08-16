@@ -123,13 +123,17 @@
       markExistingAssistantContainersIgnoredForCurrentArm();
     }
 
-    function reserveAssistantAutoSaveSlot() {
+    function hasActiveAssistantAutoSaveSlot() {
       if (!assistantAutoSaveBudget) return false;
       if (Date.now() - assistantAutoSaveArmedAt > config.assistantAutoSaveArmWindowMs) {
         assistantAutoSaveBudget = 0;
         return false;
       }
+      return true;
+    }
 
+    function reserveAssistantAutoSaveSlot() {
+      if (!hasActiveAssistantAutoSaveSlot()) return false;
       assistantAutoSaveBudget -= 1;
       return true;
     }
@@ -351,8 +355,11 @@
       if (!container || !button || !copyButton) return;
       if (inferSender(container) !== 'bot') return;
       if (!options.assumeNewest && !isLikelyNewestAssistantContainer(container)) return;
+      if (!hasActiveAssistantAutoSaveSlot()) return;
       if (assistantContainersIgnoredByArm.get(container) === assistantAutoSaveArmId) return;
       if (attemptedAssistantContainers.has(container) || pendingAssistantContainers.has(container)) return;
+
+      const scheduledArmId = assistantAutoSaveArmId;
 
       // Do not consume the one-response autosave budget while the provider may
       // still replace/re-render the assistant container. Claude can swap the
@@ -365,6 +372,7 @@
         try {
           delete button.dataset.localChatAutoPending;
           if (!isAutoSendEnabled()) return;
+          if (scheduledArmId !== assistantAutoSaveArmId) return;
           if (!document.documentElement.contains(container) || !document.documentElement.contains(button)) return;
 
           const isComplete = await waitForAssistantMessageCompletion(container, options);
@@ -376,9 +384,11 @@
           )
             return;
 
-          // Reserve only when this exact rendered response is complete and
-          // still attached. If an earlier transient render vanished, the
-          // replacement response can still claim the pending autosave slot.
+          // Reserve only when this exact rendered response is complete, still
+          // attached, and belongs to the same outgoing-message arm that
+          // scheduled it. A stale pre-existing response must never consume a
+          // later prompt's autosave budget.
+          if (scheduledArmId !== assistantAutoSaveArmId) return;
           if (!reserveAssistantAutoSaveSlot()) return;
           attemptedAssistantContainers.add(container);
 
