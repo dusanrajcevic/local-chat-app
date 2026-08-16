@@ -79,11 +79,13 @@ test('popup exposes an explicit provider diagnostics control without requesting 
   assert.equal(manifest.permissions.includes('tabs'), false);
 });
 
-
 test('ChatGPT streaming selectors avoid static Tailwind variant class substrings', () => {
   const adapter = providers.adapterForHostname('chatgpt.com');
 
   assert.equal(adapter.streamingSelectors.includes('.result-streaming'), true);
   assert.equal(adapter.streamingSelectors.includes('.result-thinking'), true);
-  assert.equal(adapter.streamingSelectors.some((selector) => selector.includes('[class*="streaming"')), false);
+  assert.equal(
+    adapter.streamingSelectors.some((selector) => selector.includes('[class*="streaming"')),
+    false
+  );
 });
