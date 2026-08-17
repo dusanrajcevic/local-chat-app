@@ -195,6 +195,57 @@ test('content runtime injects the auto-save toggle and persists toggle changes',
   assert.ok(autosaveCalls.some((call) => call[0] === 'clear'));
 });
 
+test('content runtime keeps the ChatGPT Local toggle outside the native composer surface', () => {
+  installRuntimeDom(`
+    <main>
+      <form id="composer-form">
+        <div class="relative">
+          <div data-composer-surface="true">
+            <div data-composer-body>
+              <textarea aria-label="Message ChatGPT"></textarea>
+              <button type="button">Send</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </main>
+  `);
+
+  const surface = document.querySelector('[data-composer-surface="true"]');
+  surface.getBoundingClientRect = () => ({
+    x: 100,
+    y: 640,
+    top: 640,
+    left: 100,
+    right: 600,
+    bottom: 720,
+    width: 500,
+    height: 80
+  });
+
+  const { controller } = createController({
+    deps: {
+      findComposerContainer: () => document.querySelector('[data-composer-body]')
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectAutoSendToggle();
+
+  const mount = document.querySelector(`[${contentDom.markers.AUTO_SEND_TOGGLE_MOUNT_MARKER}]`);
+  assert.equal(mount.parentElement, document.documentElement);
+  assert.equal(mount.classList.contains('is-floating'), true);
+  assert.equal(surface.hasAttribute(contentDom.markers.AUTO_SEND_LAYOUT_MARKER), false);
+  assert.equal(document.querySelector('[data-composer-body]').contains(mount), false);
+  assert.equal(surface.contains(mount), false);
+  assert.equal(mount.style.left, '608px');
+});
+
 test('content runtime hides local UI when the local app becomes unavailable', () => {
   installRuntimeDom(`
     <main>

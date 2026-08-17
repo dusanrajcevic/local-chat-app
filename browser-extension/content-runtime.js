@@ -493,8 +493,20 @@
       return providerInfo().key === 'chatgpt';
     }
 
+    function chatGptComposerSurface(composer) {
+      if (!isChatGptProvider() || !composer) return null;
+      if (composer.matches?.('[data-composer-surface="true"]')) return composer;
+      return composer.closest?.('[data-composer-surface="true"]') || null;
+    }
+
     function canUseAutoSendSiblingLayout(composer) {
       if (!isChatGptProvider()) return false;
+
+      // ChatGPT's current composer body sits inside the rounded surface. Making that
+      // surface a flex layout causes the Local toggle to render inside the native
+      // composer background. Keep the native surface untouched and use the floating
+      // placement path so the toggle can sit just outside its right edge instead.
+      if (chatGptComposerSurface(composer)) return false;
 
       const parent = composer?.parentElement;
       if (!parent || parent === document.body || parent === document.documentElement) return false;
@@ -597,7 +609,8 @@
     function positionFloatingAutoSendMount(mount, composer) {
       if (!mount || !composer) return;
 
-      const rect = composer.getBoundingClientRect?.();
+      const anchor = chatGptComposerSurface(composer) || composer;
+      const rect = anchor.getBoundingClientRect?.();
       if (!rect || rect.width <= 0 || rect.height <= 0) return;
 
       const width = mount.offsetWidth || 96;
