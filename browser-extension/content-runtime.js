@@ -641,6 +641,7 @@
       button.textContent = 'Save local';
       button.title = 'Save this whole message to your local chat app using the original copy button when possible';
       button.setAttribute(EXT_MARKER, 'true');
+      button.dataset.localChatProvider = providerInfo().key || 'unknown';
       button.__localChatContainer = container || null;
       button.__localChatCopyButton = copyButton || null;
 
@@ -670,12 +671,30 @@
       return button;
     }
 
+    function saveButtonInsertionAnchor(copyButton) {
+      if (!copyButton) return null;
+
+      // Gemini wraps its real Copy <button> in copy-button > gem-icon-button.
+      // Inserting our button next to the inner <button> makes Angular Material
+      // lay it out inside the icon control, which drops the pill underneath the
+      // Copy icon. Place it beside the whole copy-button component instead.
+      if (providerInfo().key === 'gemini') {
+        const copyHost = copyButton.closest?.('copy-button');
+        if (copyHost?.parentElement) return copyHost;
+      }
+
+      return copyButton;
+    }
+
     function saveButtonForCopyButton(copyButton) {
-      const next = copyButton?.nextElementSibling;
-      const prev = copyButton?.previousElementSibling;
-      if (next?.hasAttribute?.(EXT_MARKER)) return next;
-      if (prev?.hasAttribute?.(EXT_MARKER)) return prev;
-      return null;
+      const anchor = saveButtonInsertionAnchor(copyButton);
+      const candidates = [
+        anchor?.nextElementSibling,
+        anchor?.previousElementSibling,
+        copyButton?.nextElementSibling,
+        copyButton?.previousElementSibling
+      ];
+      return candidates.find((candidate) => candidate?.hasAttribute?.(EXT_MARKER)) || null;
     }
 
     function keepProviderActionBarVisible(copyButton) {
@@ -829,13 +848,22 @@
 
       for (const { container, copyButton, sender, isNewestAssistant } of targets) {
         let saveButton = saveButtonForCopyButton(copyButton);
+        const insertionAnchor = saveButtonInsertionAnchor(copyButton);
 
         if (!saveButton) {
           saveButton = createSaveButton(container, copyButton);
-          copyButton.insertAdjacentElement('afterend', saveButton);
         } else {
           saveButton.__localChatContainer = container;
           saveButton.__localChatCopyButton = copyButton;
+          saveButton.dataset.localChatProvider = providerInfo().key || 'unknown';
+        }
+
+        if (
+          insertionAnchor &&
+          (saveButton.parentElement !== insertionAnchor.parentElement ||
+            saveButton.previousElementSibling !== insertionAnchor)
+        ) {
+          insertionAnchor.insertAdjacentElement('afterend', saveButton);
         }
 
         const providerCompletionSignal = Boolean(keepProviderActionBarVisible(copyButton));
