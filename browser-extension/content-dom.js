@@ -193,7 +193,8 @@
     if (!subtree || subtree.nodeType !== Node.ELEMENT_NODE) return null;
 
     const allowTurnWithoutContentRoot = Boolean(options.allowTurnWithoutContentRoot);
-    const hasEnoughText = normalizeText(subtree.innerText || subtree.textContent || '').length > 20;
+    const allowShortText = Boolean(options.allowShortText);
+    const hasEnoughText = allowShortText || normalizeText(subtree.innerText || subtree.textContent || '').length > 20;
     const hasContentRoot =
       matchesAny(subtree, adapter.contentSelectors) || hasDescendantMatching(subtree, adapter.contentSelectors);
     if (
@@ -208,7 +209,7 @@
         const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
           const text = normalizeText(element.innerText || element.textContent || '');
           return (
-            text.length > 20 &&
+            (allowShortText || text.length > 20) &&
             (allowTurnWithoutContentRoot ||
               matchesAny(element, adapter.contentSelectors) ||
               hasDescendantMatching(element, adapter.contentSelectors))
@@ -237,8 +238,10 @@
     return content;
   }
 
-  function precedingTurnContainer(actionBar, adapter) {
+  function precedingTurnContainer(actionBar, adapter, options = {}) {
     if (!actionBar || !adapter.turnContainerSelectors?.length) return null;
+
+    const allowShortText = Boolean(options.allowShortText);
 
     const selectors = adapter.turnContainerSelectors.join(',');
     let turns;
@@ -256,7 +259,7 @@
       if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
 
       const text = normalizeText(turn.innerText || turn.textContent || '');
-      if (text.length > 20) return turn;
+      if ((allowShortText && text.length > 0) || text.length > 20) return turn;
     }
 
     return null;
@@ -266,8 +269,10 @@
     const actionBar = closestMatching(startNode, adapter.actionBarSelectors || []);
     if (!actionBar) return null;
 
+    const allowShortText = Boolean(adapter.actionBarAllowShortTurnText);
     const containingTurn = closestMatching(actionBar, adapter.turnContainerSelectors || []);
-    if (containingTurn && normalizeText(containingTurn.innerText || containingTurn.textContent || '').length > 20) {
+    const containingText = normalizeText(containingTurn?.innerText || containingTurn?.textContent || '');
+    if (containingTurn && ((allowShortText && containingText.length > 0) || containingText.length > 20)) {
       return containingTurn;
     }
 
@@ -278,7 +283,10 @@
     while (parent && parent !== document.body && depth < 8) {
       let sibling = branch.previousElementSibling;
       while (sibling) {
-        const candidate = nearbyMessageContainer(sibling, adapter, { allowTurnWithoutContentRoot: true });
+        const candidate = nearbyMessageContainer(sibling, adapter, {
+          allowTurnWithoutContentRoot: true,
+          allowShortText
+        });
         if (candidate) return candidate;
         sibling = sibling.previousElementSibling;
       }
@@ -288,7 +296,7 @@
       depth += 1;
     }
 
-    return precedingTurnContainer(actionBar, adapter);
+    return precedingTurnContainer(actionBar, adapter, { allowShortText });
   }
 
   function providerActionBarForControl(startNode) {

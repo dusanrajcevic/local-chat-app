@@ -296,6 +296,61 @@ test('content runtime injects Save local buttons and delegates clicks to autosav
   assert.ok(autosaveCalls.some((call) => call[0] === 'save-container'));
 });
 
+test('content runtime places Gemini Save local beside the copy component instead of inside its icon control', () => {
+  installRuntimeDom(
+    `
+    <main>
+      <article>
+        <div data-testid="message-content">Gemini response</div>
+        <div class="actions-container-v2">
+          <div class="buttons-container-v2">
+            <copy-button>
+              <gem-icon-button>
+                <button type="button" aria-label="Copy">Copy</button>
+              </gem-icon-button>
+            </copy-button>
+            <div class="menu-button-wrapper"><button aria-label="Show more options">More</button></div>
+          </div>
+        </div>
+      </article>
+    </main>
+  `,
+    'https://gemini.google.com/app/test'
+  );
+
+  const { controller } = createController({
+    deps: {
+      providerInfo: () => ({ name: 'Gemini', key: 'gemini' }),
+      findMessageContainer: (node) => node?.closest?.('article') || null,
+      inferSender: () => 'bot',
+      isCopyButton: (button) => button?.matches?.('button[aria-label="Copy"]') || false,
+      isNestedContentCopyButton: () => false
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: false,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectButtons();
+  controller.injectButtons();
+
+  const copyButton = document.querySelector('copy-button button[aria-label="Copy"]');
+  const copyHost = document.querySelector('copy-button');
+  const saveButtons = Array.from(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`));
+  assert.equal(saveButtons.length, 1);
+
+  const saveButton = saveButtons[0];
+  assert.equal(saveButton.dataset.localChatProvider, 'gemini');
+  assert.equal(saveButton.parentElement, copyHost.parentElement);
+  assert.equal(saveButton.previousElementSibling, copyHost);
+  assert.equal(copyHost.contains(saveButton), false);
+  assert.equal(document.querySelector('gem-icon-button').contains(saveButton), false);
+  assert.equal(controller.saveButtonForCopyButton(copyButton), saveButton);
+});
+
 test('content runtime keeps provider completion toolbars visible and forwards completion to autosave', () => {
   installRuntimeDom(
     `

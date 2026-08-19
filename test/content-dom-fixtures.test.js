@@ -215,6 +215,36 @@ for (const providerCase of providerCases) {
   });
 }
 
+test('DeepSeek current icon-only action rows expose structural Copy controls and Save local buttons', () => {
+  installDomFixture('deepseek-current', 'https://chat.deepseek.com/a/chat/s/test');
+
+  const targets = contentDom.providerActionBarSaveTargets();
+  assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.sender),
+    ['me', 'bot']
+  );
+
+  const [userTarget, assistantTarget] = targets;
+  assert.equal(userTarget.copyButton.getAttribute('aria-label'), null);
+  assert.equal(assistantTarget.copyButton.getAttribute('aria-label'), null);
+  assert.equal(content.isProviderActionBarControl(userTarget.copyButton), true);
+  assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
+  assert.equal(content.extractMessageTextFallback(userTarget.container, 'me'), 'Hey there');
+  assert.match(content.extractMessageTextFallback(assistantTarget.container, 'bot'), /How can I help you today/i);
+
+  content.injectButtons();
+
+  for (const target of targets) {
+    const saveButton = target.copyButton.nextElementSibling;
+    assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+    assert.equal(saveButton.textContent, 'Save local');
+    assert.equal(saveButton.dataset.localChatProvider, 'deepseek');
+    assert.equal(saveButton.__localChatContainer, target.container);
+    assert.equal(content.saveButtonForCopyButton(target.copyButton), saveButton);
+  }
+});
+
 test('Claude current transcript tree resolves MessageActions toolbars by transcript-row sender', () => {
   installDomFixture('claude', 'https://claude.ai/chat/test');
 
