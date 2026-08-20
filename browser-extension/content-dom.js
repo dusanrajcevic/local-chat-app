@@ -324,7 +324,13 @@
           return [];
         }
       })
-    );
+    ).sort((left, right) => {
+      if (left === right) return 0;
+      const position = left.compareDocumentPosition?.(right) || 0;
+      if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
 
     return actionBars
       .map((actionBar) => {
