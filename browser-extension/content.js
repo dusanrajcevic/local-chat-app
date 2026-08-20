@@ -403,6 +403,7 @@ autosaveController = LocalChatContentAutosave.createAutosaveController({
   isSendButton,
   textFromComposer,
   visibleMessageContainers,
+  providerActionBarSaveTargets,
   extractMessageText,
   extractMessageTextFallback,
   cleanExtractedMessageText,

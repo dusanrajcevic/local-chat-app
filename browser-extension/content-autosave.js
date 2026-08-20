@@ -46,6 +46,7 @@
     const isSendButton = deps.isSendButton || (() => false);
     const textFromComposer = deps.textFromComposer || (() => '');
     const visibleMessageContainers = deps.visibleMessageContainers || (() => []);
+    const providerActionBarSaveTargets = deps.providerActionBarSaveTargets || (() => []);
     const extractMessageText = deps.extractMessageText || createNoopDependency('extractMessageText');
     const extractMessageTextFallback = deps.extractMessageTextFallback || (() => '');
     const cleanExtractedMessageText = deps.cleanExtractedMessageText || ((value) => normalizeText(value));
@@ -192,34 +193,33 @@
       return Array.from(document.querySelectorAll('button, [role="button"]')).some(isGenerationStopControl);
     }
 
+    function knownMessageContainers() {
+      const seen = new Set();
+      const providerContainers = providerActionBarSaveTargets()
+        .map((target) => target?.container)
+        .filter(Boolean);
+
+      return [...visibleMessageContainers(), ...providerContainers]
+        .map((element) => findMessageContainer(element) || element)
+        .filter((element) => {
+          if (!element || element.nodeType !== Node.ELEMENT_NODE || seen.has(element)) return false;
+          if (!isVisibleElement(element)) return false;
+          seen.add(element);
+          return true;
+        });
+    }
+
     function isLikelyNewestAssistantContainer(container) {
       if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
 
-      const seen = new Set();
-      const candidates = Array.from(
-        document.querySelectorAll(
-          [
-            '[data-message-author-role="assistant"]',
-            '[data-testid^="conversation-turn"]',
-            '[data-testid="message-content"]',
-            'article'
-          ].join(',')
-        )
-      )
-        .map((element) => findMessageContainer(element) || element)
-        .filter((element) => {
-          if (!element || seen.has(element) || !isVisibleElement(element)) return false;
-          seen.add(element);
-          return inferSender(element) === 'bot';
-        });
-
+      const candidates = knownMessageContainers().filter((element) => inferSender(element) === 'bot');
       const latest = candidates[candidates.length - 1];
       if (!latest) return false;
       return latest === container || latest.contains(container) || container.contains(latest);
     }
 
     function markExistingAssistantContainersIgnoredForCurrentArm() {
-      for (const container of visibleMessageContainers()) {
+      for (const container of knownMessageContainers()) {
         if (inferSender(container) === 'bot') {
           assistantContainersIgnoredByArm.set(container, assistantAutoSaveArmId);
         }

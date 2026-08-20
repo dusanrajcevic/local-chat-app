@@ -781,10 +781,22 @@
 
       const newestAssistantTarget = [...targets].reverse().find((target) => target.sender === 'bot') || null;
 
+      function hasNewerUserTurn(target) {
+        if (!target?.container || target.sender !== 'bot') return false;
+
+        return targets.some((candidate) => {
+          if (candidate.sender !== 'me' || !candidate.container || candidate.container === target.container)
+            return false;
+          const position = target.container.compareDocumentPosition?.(candidate.container) || 0;
+          return Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+      }
+
       return targets
         .map((target) => ({
           ...target,
-          isNewestAssistant: target === newestAssistantTarget
+          isNewestAssistant: target === newestAssistantTarget,
+          hasNewerUserTurn: hasNewerUserTurn(target)
         }))
         .filter((target) => {
           if (target.sender !== 'bot') return true;
@@ -846,7 +858,7 @@
       const validCopyButtons = new Set(targets.map((target) => target.copyButton));
       removeInvalidSaveButtons(validCopyButtons);
 
-      for (const { container, copyButton, sender, isNewestAssistant } of targets) {
+      for (const { container, copyButton, sender, isNewestAssistant, hasNewerUserTurn } of targets) {
         let saveButton = saveButtonForCopyButton(copyButton);
         const insertionAnchor = saveButtonInsertionAnchor(copyButton);
 
@@ -868,7 +880,7 @@
 
         const providerCompletionSignal = Boolean(keepProviderActionBarVisible(copyButton));
 
-        if (sender === 'bot' && isNewestAssistant) {
+        if (sender === 'bot' && isNewestAssistant && !hasNewerUserTurn) {
           autosaveController()?.scheduleAssistantAutoSave?.(container, saveButton, copyButton, {
             assumeNewest: true,
             providerCompletionSignal

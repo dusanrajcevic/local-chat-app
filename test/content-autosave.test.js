@@ -281,3 +281,73 @@ test('content autosave does not let a pre-arm assistant consume a later response
   assert.equal(payloads[0].text, 'Continuation response');
   assert.equal(payloads[0].sessionId, 'chat_target');
 });
+
+test('content autosave ignores provider action-bar assistants that existed when a prompt was armed', async () => {
+  installDom();
+  const staleContainer = document.querySelector('#msg');
+  const staleButton = document.querySelector('#save');
+  const staleCopy = document.createElement('button');
+  staleCopy.textContent = 'Copy';
+  document.body.appendChild(staleCopy);
+
+  const payloads = [];
+  const controller = autosave.createAutosaveController(
+    {
+      normalizeText: contentDom.normalizeText,
+      hashText: contentDom.hashText,
+      providerInfo: () => ({ name: 'DeepSeek', key: 'deepseek' }),
+      currentLocalChatTarget: () => ({ sessionId: 'chat_target', sessionTitle: 'Target' }),
+      isAutoSendEnabled: () => true,
+      inferSender: () => 'bot',
+      findMessageContainer: (element) => element,
+      isVisibleElement: () => true,
+      visibleMessageContainers: () => [],
+      providerActionBarSaveTargets: () => [{ container: staleContainer, copyButton: staleCopy, sender: 'bot' }],
+      assistantContentSignature: (container) => contentDom.normalizeText(container?.textContent || ''),
+      hasStreamingMarker: () => false,
+      extractMessageText: async (container) => contentDom.normalizeText(container?.textContent || ''),
+      cleanExtractedMessageText: (value) => contentDom.normalizeText(value),
+      shouldSkipExtractedMessageText: () => false,
+      sendLocalChatMessage: async (payload) => {
+        payloads.push(payload);
+        return { sessionTitle: 'Target' };
+      },
+      showToast: () => {},
+      sleep: async () => {}
+    },
+    {
+      autoAssistantSaveDelayMs: 1,
+      assistantCompletePollMs: 1,
+      assistantCompleteTimeoutMs: 25
+    }
+  );
+
+  controller.armAssistantAutoSave('New DeepSeek prompt', {
+    sessionId: 'chat_target',
+    sessionTitle: 'Target'
+  });
+
+  controller.scheduleAssistantAutoSave(staleContainer, staleButton, staleCopy, {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
+
+  const freshContainer = document.createElement('article');
+  freshContainer.textContent = 'Fresh DeepSeek response';
+  const freshCopy = document.createElement('button');
+  freshCopy.textContent = 'Copy';
+  const freshSave = document.createElement('button');
+  freshSave.textContent = 'Save local';
+  document.body.append(freshContainer, freshCopy, freshSave);
+
+  controller.scheduleAssistantAutoSave(freshContainer, freshSave, freshCopy, {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(payloads.length, 1);
+  assert.equal(payloads[0].text, 'Fresh DeepSeek response');
+  assert.equal(payloads[0].providerKey, 'deepseek');
+});

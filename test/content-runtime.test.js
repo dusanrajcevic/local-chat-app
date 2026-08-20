@@ -544,3 +544,45 @@ test('content runtime only performs completion checks for the newest assistant t
     'expensive sidebar discovery should be rate-limited across rapid scans'
   );
 });
+
+test('content runtime does not autosave an older assistant while a newer user turn is awaiting a response', () => {
+  installRuntimeDom(`
+    <main>
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant"><div class="markdown">Previous assistant response</div></div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+      <article data-testid="conversation-turn-2">
+        <div data-message-author-role="user">Newest user prompt</div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+    </main>
+  `);
+
+  const assistantScheduleCalls = [];
+  const { controller } = createController({
+    autosaveController: {
+      isAssistantMessageReadyForButton: () => true,
+      scheduleAssistantAutoSave(...args) {
+        assistantScheduleCalls.push(args);
+      }
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  const targets = controller.collectMessageSaveTargets();
+  const assistantTarget = targets.find((target) => target.sender === 'bot');
+  assert.ok(assistantTarget);
+  assert.equal(assistantTarget.isNewestAssistant, true);
+  assert.equal(assistantTarget.hasNewerUserTurn, true);
+
+  controller.injectButtons();
+
+  assert.equal(assistantScheduleCalls.length, 0);
+  assert.equal(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`).length, 2);
+});
