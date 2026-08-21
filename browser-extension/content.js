@@ -294,6 +294,7 @@ function isCompactionProtocolText(text) {
 
 function isCompactionProtocolContainer(container, sender = null) {
   if (!container) return false;
+  if (container.hasAttribute?.('data-local-chat-compaction-turn')) return true;
   const text = extractMessageTextFallback(container, sender || inferSender(container));
   return isCompactionProtocolText(text);
 }

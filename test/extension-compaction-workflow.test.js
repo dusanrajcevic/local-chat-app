@@ -5,14 +5,14 @@ const protocol = require('../browser-extension/content-compaction');
 const { createCompactionWorkflow } = require('../browser-extension/content-compaction-workflow');
 const { createAutosaveController } = require('../browser-extension/content-autosave');
 
-function responseText(requestId, compactedMessage = 'Compact continuation context.') {
+function responseText(requestId, compactedMessage = 'Local Chat handoff snapshot.') {
   return [
     protocol.RESPONSE_START,
     JSON.stringify({
       protocol: protocol.COMPACTION_PROTOCOL,
       version: protocol.COMPACTION_PROTOCOL_VERSION,
       requestId,
-      compactedMessage
+      handoffMessage: compactedMessage
     }),
     protocol.RESPONSE_END
   ].join('\n');
@@ -48,7 +48,7 @@ function createHarness(options = {}) {
   const toasts = [];
   const requestContainer = fakeContainer('me', '');
   const responseContainer = fakeContainer('bot', '');
-  const containers = [];
+  const containers = Array.isArray(options.initialContainers) ? [...options.initialContainers] : [];
   let target = { sessionId: 'chat_1700000000000_11111111', sessionTitle: 'Source chat' };
   let pageIdentity = 'https://chatgpt.com/c/source';
   let composerText = '';
@@ -86,7 +86,12 @@ function createHarness(options = {}) {
         }
       }),
       isDisabledControl: () => false,
-      visibleMessageContainers: () => containers.filter((container) => !container.classes.has('hidden-for-test')),
+      visibleMessageContainers: () =>
+        containers.filter(
+          (container) =>
+            !container.classes.has('hidden-for-test') &&
+            !(options.hideMarkedTurnsFromVisible && container.attributes.has('data-local-chat-compaction-turn'))
+        ),
       inferSender: (container) => container.sender,
       extractMessageTextFallback: (container) => container.text,
       hasStreamingMarker: () => false,
@@ -130,14 +135,14 @@ function createHarness(options = {}) {
         refreshCount += 1;
       },
       showToast: (message, isError) => toasts.push({ message, isError: Boolean(isError) }),
-      sleep: async () => {},
+      sleep: options.sleep || (async () => {}),
       onStateChange: (value) => stateChanges.push(value.phase)
     },
     {
-      sendButtonTimeoutMs: 50,
-      responseTimeoutMs: 50,
-      responsePollMs: 0,
-      responseStableMs: 0
+      sendButtonTimeoutMs: options.sendButtonTimeoutMs ?? 50,
+      responseTimeoutMs: options.responseTimeoutMs ?? 50,
+      responsePollMs: options.responsePollMs ?? 0,
+      responseStableMs: options.responseStableMs ?? 0
     }
   );
 
@@ -178,7 +183,7 @@ test('Compact workflow sends the protocol prompt, persists the response, and act
   assert.deepEqual(harness.runtimeMessages[0].payload, {
     sessionId: 'chat_1700000000000_11111111',
     requestId: harness.requestId,
-    compactedMessage: 'Compact continuation context.',
+    compactedMessage: 'Local Chat handoff snapshot.',
     providerKey: 'chatgpt'
   });
   assert.equal(harness.runtimeMessages[1].payload.sessionId, 'chat_1700000000000_22222222');
@@ -195,6 +200,43 @@ test('Compact workflow sends the protocol prompt, persists the response, and act
   assert.equal(harness.requestContainer.attributes.get('data-local-chat-compaction-turn'), 'request');
   assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
   assert.equal(harness.toasts.at(-1).isError, false);
+});
+
+test('Compact workflow associates a plain ChatGPT-style reply with the exact request instead of an older assistant turn', async () => {
+  const oldAssistant = fakeContainer('bot', 'Older assistant reply that must never be used for this handoff.');
+  const plainReply =
+    'Conversation state: Preserve the current Local Chat App work, verified fixes, and the next pending action.';
+  const harness = createHarness({
+    initialContainers: [oldAssistant],
+    responseText: plainReply
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.equal(harness.runtimeMessages[0].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
+  assert.equal(harness.runtimeMessages[0].payload.compactedMessage, plainReply);
+  assert.notEqual(harness.runtimeMessages[0].payload.compactedMessage, oldAssistant.text);
+  assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
+  assert.equal(oldAssistant.attributes.has('data-local-chat-compaction-turn'), false);
+});
+
+test('Compact workflow keeps tracking an associated response after hiding it from visible message discovery', async () => {
+  const plainReply = 'Plain handoff response that remains trackable after the provider turn is hidden.';
+  const harness = createHarness({
+    responseText: plainReply,
+    hideMarkedTurnsFromVisible: true,
+    responseStableMs: 5,
+    responsePollMs: 1,
+    responseTimeoutMs: 100,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(ms, 1)))
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.equal(harness.runtimeMessages[0].payload.compactedMessage, plainReply);
+  assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
 });
 
 test('Compact workflow rejects malformed matching provider responses without persisting them', async () => {

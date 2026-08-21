@@ -97,25 +97,71 @@
       return true;
     }
 
-    function hideMatchingRequestTurn(requestId) {
-      for (const container of visibleMessageContainers()) {
+    function matchingRequestIndex(containers, requestId) {
+      for (let index = containers.length - 1; index >= 0; index -= 1) {
+        const container = containers[index];
         if (inferSender(container) !== 'me') continue;
         const text = String(extractMessageTextFallback(container, 'me') || '');
-        if (!protocol.isCompactionRequestText(text) || !text.includes(requestId)) continue;
-        markProtocolTurn(container, 'request');
+        if (protocol.isCompactionRequestText(text) && text.includes(requestId)) return index;
       }
+      return -1;
     }
 
-    function responseCandidate(expectedRequestId) {
+    function hideMatchingRequestTurn(requestId) {
       const containers = visibleMessageContainers();
+      const index = matchingRequestIndex(containers, requestId);
+      if (index < 0) return null;
+      const container = containers[index];
+      markProtocolTurn(container, 'request');
+      return container;
+    }
+
+    function responseCandidate(expected) {
+      const requestId = typeof expected === 'string' ? expected : expected?.requestId;
+      if (!requestId) return null;
+
+      const containers = visibleMessageContainers();
+      const requestIndex = matchingRequestIndex(containers, requestId);
+
+      // Once the exact request turn is visible, the first assistant turn after it
+      // is the response owned by this workflow. This is more reliable than
+      // searching for response text because providers may ignore our envelope.
+      if (requestIndex >= 0) {
+        for (let index = requestIndex + 1; index < containers.length; index += 1) {
+          const container = containers[index];
+          if (inferSender(container) !== 'bot') continue;
+          return {
+            container,
+            text: String(extractMessageTextFallback(container, 'bot') || ''),
+            association: 'after-request'
+          };
+        }
+      }
+
+      // A correctly structured response can still be matched safely when a
+      // virtualized provider has already removed the request turn from the DOM.
       for (let index = containers.length - 1; index >= 0; index -= 1) {
         const container = containers[index];
         if (inferSender(container) !== 'bot') continue;
-
         const text = String(extractMessageTextFallback(container, 'bot') || '');
-        if (!text.includes(protocol.RESPONSE_START) || !text.includes(expectedRequestId)) continue;
-        return { container, text };
+        if (!protocol.isCompactionResponseText(text) || !text.includes(requestId)) continue;
+        return { container, text, association: 'structured-request-id' };
       }
+
+      // During the small window before the user request turn is rendered, only
+      // consider assistant containers that did not exist before we clicked Send.
+      const before = expected?.assistantContainersBeforeRequest;
+      if (before instanceof Set) {
+        for (const container of containers) {
+          if (inferSender(container) !== 'bot' || before.has(container)) continue;
+          return {
+            container,
+            text: String(extractMessageTextFallback(container, 'bot') || ''),
+            association: 'new-assistant-container'
+          };
+        }
+      }
+
       return null;
     }
 
@@ -151,14 +197,36 @@
       const startedAt = Date.now();
       let lastText = '';
       let stableSince = 0;
+      let activeCandidate = null;
 
       while (Date.now() - startedAt < config.responseTimeoutMs) {
         assertNotCancelled(run);
         assertConversationUnchanged(expected);
         hideMatchingRequestTurn(expected.requestId);
 
-        const candidate = responseCandidate(expected.requestId);
+        const discoveredCandidate = responseCandidate(expected);
+        if (discoveredCandidate) activeCandidate = discoveredCandidate;
+        if (activeCandidate?.container && activeCandidate.container.isConnected === false) activeCandidate = null;
+
+        const candidate = activeCandidate
+          ? {
+              ...activeCandidate,
+              text: String(extractMessageTextFallback(activeCandidate.container, 'bot') || '')
+            }
+          : null;
+
         if (!candidate) {
+          lastText = '';
+          stableSince = 0;
+          await sleep(config.responsePollMs);
+          continue;
+        }
+
+        // Hide the provider-owned implementation response as soon as it is
+        // associated with this exact request, including plain-text fallbacks.
+        markProtocolTurn(candidate.container, 'response');
+
+        if (!candidate.text.trim()) {
           lastText = '';
           stableSince = 0;
           await sleep(config.responsePollMs);
@@ -173,7 +241,8 @@
         const streaming = Boolean(hasStreamingMarker(candidate.container));
         const stable = stableSince > 0 && Date.now() - stableSince >= config.responseStableMs;
         if (!streaming && stable) {
-          const parsed = protocol.parseCompactionResponse(candidate.text, {
+          const parseResponse = protocol.parseCompactionResponseOrPlainText || protocol.parseCompactionResponse;
+          const parsed = parseResponse(candidate.text, {
             expectedRequestId: expected.requestId
           });
           return { response: parsed, container: candidate.container };
@@ -213,7 +282,10 @@
         requestId,
         sessionId: target.sessionId,
         providerKey: provider.key,
-        pageIdentity: currentPageIdentity()
+        pageIdentity: currentPageIdentity(),
+        assistantContainersBeforeRequest: new Set(
+          visibleMessageContainers().filter((container) => inferSender(container) === 'bot')
+        )
       };
 
       setState('sending-request', expected);

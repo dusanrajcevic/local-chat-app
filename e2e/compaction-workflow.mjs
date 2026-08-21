@@ -21,7 +21,7 @@ import { monitorBrowserFailures } from './playwright-support.mjs';
 const ROOT_DIR = path.resolve(import.meta.dirname, '..');
 const EXTENSION_DIR = path.join(ROOT_DIR, 'browser-extension');
 const PROVIDER_URL = 'https://chatgpt.com/local-chat-e2e?temporary-chat=true';
-const PROTOCOL_MARKERS = ['<<<LOCAL_CHAT_COMPACTION_REQUEST_V1>>>', '<<<LOCAL_CHAT_COMPACTION_RESPONSE_V1>>>'];
+const PROTOCOL_MARKERS = ['<<<LOCAL_CHAT_HANDOFF_REQUEST_V1>>>', '<<<LOCAL_CHAT_HANDOFF_RESPONSE_V1>>>'];
 
 async function createSourceSession(baseUrl, title, messagePrefix = title) {
   const session = await apiJson(baseUrl, '/api/sessions', {
@@ -257,6 +257,17 @@ test('browser extension compaction workflow works end to end', { timeout: 90_000
     assert.match(await providerPage.locator('[data-local-compaction-phase="error"]').textContent(), /failed/i);
     await assertNoCompactedChild(baseUrl, malformedParent.id);
     await providerPage.locator('[data-local-sidebar-dismiss-compaction]').click();
+
+    const plainParent = await createSourceSession(baseUrl, 'Plain handoff source', 'Plain');
+    await providerPage.evaluate(() => window.__localChatE2E.setMode('plain'));
+    await activateSourceSession(baseUrl, providerPage, plainParent.id);
+    await compactButton.click();
+    await waitForCompactionPhase(providerPage, 'complete');
+    const plainActive = await apiJson(baseUrl, '/api/active-session');
+    const plainChild = await apiJson(baseUrl, `/api/sessions/${encodeURIComponent(plainActive.sessionId)}`);
+    assert.equal(plainChild.parentSessionId, plainParent.id);
+    assert.match(plainChild.compaction.text, /handoff fallback end to end/i);
+    assert.equal(responseHasProtocolText(plainChild, PROTOCOL_MARKERS), false);
 
     const cancelledParent = await createSourceSession(baseUrl, 'Cancelled compaction source', 'Cancelled');
     await providerPage.evaluate(() => window.__localChatE2E.setMode('hold'));

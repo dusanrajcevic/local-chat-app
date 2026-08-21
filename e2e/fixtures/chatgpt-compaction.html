@@ -132,9 +132,9 @@
         let turn = 2;
         let mode = 'valid';
 
-        const REQUEST_START = '<<<LOCAL_CHAT_COMPACTION_REQUEST_V1>>>';
-        const RESPONSE_START = '<<<LOCAL_CHAT_COMPACTION_RESPONSE_V1>>>';
-        const RESPONSE_END = '<<<END_LOCAL_CHAT_COMPACTION_RESPONSE_V1>>>';
+        const REQUEST_START = '<<<LOCAL_CHAT_HANDOFF_REQUEST_V1>>>';
+        const RESPONSE_START = '<<<LOCAL_CHAT_HANDOFF_RESPONSE_V1>>>';
+        const RESPONSE_END = '<<<END_LOCAL_CHAT_HANDOFF_RESPONSE_V1>>>';
 
         function appendTurn(sender, text) {
           turn += 1;
@@ -163,17 +163,17 @@
         }
 
         function requestIdFrom(text) {
-          return String(text || '').match(/compact:req:[a-zA-Z0-9._:-]+/)?.[0] || '';
+          return String(text || '').match(/(?:handoff|compact):req:[a-zA-Z0-9._:-]+/)?.[0] || '';
         }
 
         function validResponse(requestId) {
           return [
             RESPONSE_START,
             JSON.stringify({
-              protocol: 'local-chat-compaction',
+              protocol: 'local-chat-handoff',
               version: 1,
               requestId,
-              compactedMessage:
+              handoffMessage:
                 'The user is testing Local Chat App compaction end to end. ' +
                 'Preserve the verified compaction workflow and continue from the compacted child.'
             }),
@@ -184,9 +184,16 @@
         function malformedResponse(requestId) {
           return [
             RESPONSE_START,
-            `{"protocol":"local-chat-compaction","version":1,"requestId":"${requestId}","compactedMessage":`,
+            `{"protocol":"local-chat-handoff","version":1,"requestId":"${requestId}","handoffMessage":`,
             RESPONSE_END
           ].join('\n');
+        }
+
+        function plainResponse() {
+          return (
+            'Conversation state: The user is testing Local Chat App handoff fallback end to end. ' +
+            'Preserve the verified workflow and continue from the compacted child.'
+          );
         }
 
         sendButton.addEventListener('click', () => {
@@ -199,10 +206,15 @@
           if (text.includes(REQUEST_START)) {
             const requestId = requestIdFrom(text);
             if (mode === 'hold') return;
-            setTimeout(
-              () => appendTurn('bot', mode === 'malformed' ? malformedResponse(requestId) : validResponse(requestId)),
-              60
-            );
+            setTimeout(() => {
+              const response =
+                mode === 'malformed'
+                  ? malformedResponse(requestId)
+                  : mode === 'plain'
+                    ? plainResponse()
+                    : validResponse(requestId);
+              appendTurn('bot', response);
+            }, 60);
             return;
           }
 

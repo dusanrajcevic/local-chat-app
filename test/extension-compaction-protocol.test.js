@@ -9,61 +9,127 @@ function responseText(payload) {
   return [protocol.RESPONSE_START, JSON.stringify(payload), protocol.RESPONSE_END].join('\n');
 }
 
-test('builds a versioned compaction request with a stable request ID', () => {
+function legacyResponseText(payload) {
+  return [protocol.LEGACY_RESPONSE_START, JSON.stringify(payload), protocol.LEGACY_RESPONSE_END].join('\n');
+}
+
+test('builds a neutral provider handoff request with a stable request ID', () => {
   const requestId = protocol.createCompactionRequestId({
     now: () => 1_700_000_000_000,
     randomToken: () => 'deadbeefcafebabe'
   });
   const prompt = protocol.buildCompactionPrompt({ requestId });
 
-  assert.equal(requestId, 'compact:req:loyw3v28:deadbeefcafebabe');
-  assert.match(prompt, /LOCAL_CHAT_COMPACTION_REQUEST_V1/);
-  assert.match(prompt, /LOCAL_CHAT_COMPACTION_RESPONSE_V1/);
+  assert.equal(requestId, 'handoff:req:loyw3v28:deadbeefcafebabe');
+  assert.match(prompt, /LOCAL_CHAT_HANDOFF_REQUEST_V1/);
+  assert.match(prompt, /LOCAL_CHAT_HANDOFF_RESPONSE_V1/);
   assert.match(prompt, new RegExp(requestId.replaceAll(':', '\\:')));
+  assert.match(prompt, /browser-extension data export request/i);
   assert.match(prompt, /do not include hidden reasoning/i);
+  assert.doesNotMatch(prompt, /\bcompaction\b/i);
+  assert.doesNotMatch(prompt, /compact continuation context/i);
+  assert.doesNotMatch(prompt, /conversation state/i);
   assert.equal(protocol.isCompactionRequestText(prompt), true);
   assert.equal(protocol.isCompactionResponseText(prompt), false);
 });
 
-test('parses the exact response envelope and returns the compacted continuation context', () => {
-  const requestId = 'compact:req:parse-001';
+test('parses the current handoff envelope into normalized compaction data', () => {
+  const requestId = 'handoff:req:parse-001';
   const compactedMessage = [
-    '# Continuation context',
+    '# Handoff snapshot',
     '- Goal: keep the local archive release-ready.',
-    '- Next action: add the compaction workflow.'
+    '- Next action: add the handoff workflow.'
   ].join('\n');
   const parsed = protocol.parseCompactionResponse(
     responseText({
       protocol: protocol.COMPACTION_PROTOCOL,
       version: protocol.COMPACTION_PROTOCOL_VERSION,
       requestId,
-      compactedMessage
+      handoffMessage: compactedMessage
     }),
     { expectedRequestId: requestId }
   );
 
   assert.deepEqual(parsed, {
-    protocol: 'local-chat-compaction',
+    protocol: 'local-chat-handoff',
     version: 1,
     requestId,
-    compactedMessage
+    compactedMessage,
+    responseFormat: 'structured'
   });
-  assert.equal(protocol.isCompactionResponseText(responseText(parsed)), true);
+  assert.equal(
+    protocol.isCompactionResponseText(
+      responseText({
+        protocol: protocol.COMPACTION_PROTOCOL,
+        version: 1,
+        requestId,
+        handoffMessage: compactedMessage
+      })
+    ),
+    true
+  );
 });
 
-test('rejects mismatched, malformed, ambiguous, or conversational compaction responses', () => {
-  const requestId = 'compact:req:reject-001';
+test('accepts legacy structured compaction envelopes for compatibility', () => {
+  const requestId = 'compact:req:legacy-001';
+  const parsed = protocol.parseCompactionResponse(
+    legacyResponseText({
+      protocol: protocol.LEGACY_COMPACTION_PROTOCOL,
+      version: protocol.COMPACTION_PROTOCOL_VERSION,
+      requestId,
+      compactedMessage: 'Legacy durable context.'
+    }),
+    { expectedRequestId: requestId }
+  );
+
+  assert.deepEqual(parsed, {
+    protocol: 'local-chat-handoff',
+    version: 1,
+    requestId,
+    compactedMessage: 'Legacy durable context.',
+    responseFormat: 'legacy-structured'
+  });
+  assert.equal(protocol.isCompactionRequestText(`${protocol.LEGACY_REQUEST_START}\nlegacy`), true);
+  assert.equal(
+    protocol.isCompactionResponseText(
+      legacyResponseText({
+        protocol: protocol.LEGACY_COMPACTION_PROTOCOL,
+        version: 1,
+        requestId,
+        compactedMessage: 'Legacy durable context.'
+      })
+    ),
+    true
+  );
+});
+
+test('uses a completed plain assistant reply as an exact-request fallback', () => {
+  const requestId = 'handoff:req:plain-001';
+  const plain =
+    'Conversation state: Preserve the Local Chat App project goal, the verified fixes, and the next pending action.';
+
+  assert.deepEqual(protocol.parseCompactionResponseOrPlainText(plain, { expectedRequestId: requestId }), {
+    protocol: 'local-chat-handoff',
+    version: 1,
+    requestId,
+    compactedMessage: plain,
+    responseFormat: 'plain-text-fallback'
+  });
+});
+
+test('rejects mismatched, malformed, ambiguous, or conversational structured responses', () => {
+  const requestId = 'handoff:req:reject-001';
   const valid = {
     protocol: protocol.COMPACTION_PROTOCOL,
     version: protocol.COMPACTION_PROTOCOL_VERSION,
     requestId,
-    compactedMessage: 'Durable compact context.'
+    handoffMessage: 'Durable handoff snapshot.'
   };
 
   assert.throws(
     () =>
       protocol.parseCompactionResponse(responseText(valid), {
-        expectedRequestId: 'compact:req:other-001'
+        expectedRequestId: 'handoff:req:other-001'
       }),
     /does not match/i
   );
@@ -83,20 +149,29 @@ test('rejects mismatched, malformed, ambiguous, or conversational compaction res
     () => protocol.parseCompactionResponse(responseText({ ...valid, version: 2 })),
     /unsupported protocol version/i
   );
-  assert.throws(() => protocol.parseCompactionResponse(responseText({ ...valid, compactedMessage: '   ' })), /empty/i);
+  assert.throws(() => protocol.parseCompactionResponse(responseText({ ...valid, handoffMessage: '   ' })), /empty/i);
+  assert.throws(
+    () =>
+      protocol.parseCompactionResponseOrPlainText(
+        [protocol.RESPONSE_START, '{bad json', protocol.RESPONSE_END].join('\n'),
+        { expectedRequestId: requestId }
+      ),
+    /invalid JSON/i
+  );
 });
 
-test('converts a validated structured response into the server compaction payload', () => {
+test('converts normalized provider output into the server compaction payload', () => {
   const response = {
     protocol: protocol.COMPACTION_PROTOCOL,
     version: protocol.COMPACTION_PROTOCOL_VERSION,
-    requestId: 'compact:req:payload-001',
-    compactedMessage: 'Keep this exact compact context.'
+    requestId: 'handoff:req:payload-001',
+    compactedMessage: 'Keep this exact handoff snapshot.',
+    responseFormat: 'plain-text-fallback'
   };
 
   assert.deepEqual(protocol.compactionApiPayload(response, 'chatgpt'), {
-    requestId: 'compact:req:payload-001',
-    compactedMessage: 'Keep this exact compact context.',
+    requestId: 'handoff:req:payload-001',
+    compactedMessage: 'Keep this exact handoff snapshot.',
     providerKey: 'chatgpt'
   });
 });
