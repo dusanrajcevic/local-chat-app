@@ -349,6 +349,28 @@
       .filter(Boolean);
   }
 
+  function hasMessageCompletionCopyControl(container) {
+    if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
+
+    // Some providers (for example Claude/DeepSeek) render the completed-message
+    // action bar outside the message body. Reuse the provider-specific action-bar
+    // resolver first so those Copy controls still count as completion signals.
+    if (
+      providerActionBarSaveTargets().some(
+        (target) =>
+          target?.container === container &&
+          target.copyButton &&
+          (isCopyButton(target.copyButton) || isProviderActionBarControl(target.copyButton))
+      )
+    )
+      return true;
+
+    // ChatGPT/Gemini normally render the final message-level Copy action inside
+    // the turn. Nested code/table copy controls are rejected by isCopyButton().
+    const candidates = Array.from(container.querySelectorAll?.('button, [role="button"]') || []);
+    return candidates.some((button) => isCopyButton(button) && findMessageContainer(button) === container);
+  }
+
   function findMessageContainer(startNode) {
     const adapter = currentProviderAdapter();
     const actionBarContainer = findMessageContainerForActionBar(startNode, adapter);
@@ -813,6 +835,7 @@
     isProviderActionBarControl,
     providerActionBarForControl,
     providerActionBarSaveTargets,
+    hasMessageCompletionCopyControl,
     findMessageContainer,
     selectionInside,
     removeUiNoise,

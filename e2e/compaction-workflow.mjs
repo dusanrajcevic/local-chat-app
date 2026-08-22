@@ -164,6 +164,13 @@ test('browser extension compaction workflow works end to end', { timeout: 90_000
     assert.equal(await providerPage.evaluate(() => window.__localChatE2E.isGeneratingHandoff()), true);
     await assertNoCompactedChild(baseUrl, happyParent.id);
 
+    const pendingResponse = providerPage.locator('[data-local-chat-compaction-pending-response="true"]').last();
+    await pendingResponse.waitFor({ state: 'attached' });
+    assert.notEqual(await pendingResponse.evaluate((element) => getComputedStyle(element).display), 'none');
+    assert.equal(await pendingResponse.locator('button[aria-label*="Copy" i]').count(), 0);
+    assert.equal(await providerPage.locator('[data-local-chat-compaction-turn="response"]').count(), 0);
+    await assertNoCompactedChild(baseUrl, happyParent.id);
+
     await waitForCompactionPhase(providerPage, 'complete');
     assert.equal(await providerPage.evaluate(() => window.__localChatE2E.isGeneratingHandoff()), false);
 

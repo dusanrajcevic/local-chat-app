@@ -71,6 +71,7 @@ const {
   isProviderActionBarControl,
   providerActionBarForControl,
   providerActionBarSaveTargets,
+  hasMessageCompletionCopyControl,
   findMessageContainer,
   markdownForElement,
   messageExtractionSource,
@@ -295,6 +296,7 @@ function isCompactionProtocolText(text) {
 function isCompactionProtocolContainer(container, sender = null) {
   if (!container) return false;
   if (container.hasAttribute?.('data-local-chat-compaction-turn')) return true;
+  if (container.hasAttribute?.('data-local-chat-compaction-pending-response')) return true;
   const text = extractMessageTextFallback(container, sender || inferSender(container));
   return isCompactionProtocolText(text);
 }
@@ -458,6 +460,7 @@ compactionWorkflow = LocalChatContentCompactionWorkflow.createCompactionWorkflow
   shouldSkipExtractedMessageText,
   hasStreamingMarker,
   hasVisibleGenerationStopControl: () => Boolean(autosaveController?.hasVisibleGenerationStopControl?.()),
+  hasMessageCompletionCopyControl,
   sendRuntimeMessage: sendExtensionRuntimeMessage,
   setActiveSession: (response) => sidebarController.setActiveSessionFromExport(response, response?.sessionId || ''),
   refreshSidebar: (force = true) => sidebarController.scheduleLocalSidebarRefresh(force),

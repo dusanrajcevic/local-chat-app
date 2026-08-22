@@ -44,6 +44,9 @@ function fakeContainer(sender, text) {
     setAttribute(name, value) {
       attributes.set(name, value);
     },
+    removeAttribute(name) {
+      attributes.delete(name);
+    },
     classList: {
       add(value) {
         classes.add(value);
@@ -113,6 +116,10 @@ function createHarness(options = {}) {
       shouldSkipExtractedMessageText: contentDom.shouldSkipExtractedMessageText,
       hasStreamingMarker: (container) => Boolean(options.hasStreamingMarker?.(container)),
       hasVisibleGenerationStopControl: () => Boolean(options.hasVisibleGenerationStopControl?.()),
+      hasMessageCompletionCopyControl: (container) =>
+        options.hasMessageCompletionCopyControl
+          ? Boolean(options.hasMessageCompletionCopyControl(container))
+          : container === responseContainer,
       sendRuntimeMessage: async (message) => {
         runtimeMessages.push(message);
         options.onRuntimeMessage?.(message);
@@ -440,6 +447,49 @@ test('Compact workflow waits while the provider exposes a generation stop contro
   assert.equal(result.ok, true);
   assert.equal(persistedWhileGenerating, false);
   assert.equal(generating, false);
+});
+
+test('Compact workflow waits for the final message Copy control before persisting or hiding the response', async () => {
+  const requestId = 'compact:req:workflow-copy-ready';
+  let copyReady = false;
+  let sleepCount = 0;
+  let persistedBeforeCopy = false;
+  const partial =
+    'I’m reading the latest portion of the full export so the handoff captures the newest fixes and unresolved state, not just the truncated preview.';
+  const finalResponse = responseText(requestId, 'Finished handoff after the provider exposed Copy.');
+  const harness = createHarness({
+    requestId,
+    responseText: partial,
+    hasMessageCompletionCopyControl: (container) => container.sender === 'bot' && copyReady,
+    responseStableMs: 0,
+    responsePollMs: 0,
+    responseTimeoutMs: 100,
+    sleep: async (_ms, { responseContainer }) => {
+      sleepCount += 1;
+      assert.equal(responseContainer.attributes.get('data-local-chat-compaction-turn'), undefined);
+      assert.equal(responseContainer.attributes.get('data-local-chat-compaction-pending-response'), 'true');
+      assert.equal(responseContainer.classes.has('local-chat-compaction-protocol-turn'), false);
+      if (sleepCount >= 1) {
+        responseContainer.text = finalResponse;
+        copyReady = true;
+      }
+    },
+    onRuntimeMessage(message) {
+      if (message.type === 'UPSERT_LOCAL_CHAT_COMPACTION' && !copyReady) persistedBeforeCopy = true;
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.ok(sleepCount >= 1);
+  assert.equal(persistedBeforeCopy, false);
+  assert.equal(
+    harness.runtimeMessages[1].payload.compactedMessage,
+    'Finished handoff after the provider exposed Copy.'
+  );
+  assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-pending-response'), undefined);
+  assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
 });
 
 test('Compact workflow refuses a second concurrent compaction request', async () => {

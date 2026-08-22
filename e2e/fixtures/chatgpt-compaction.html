@@ -140,7 +140,19 @@
         const SOURCE_START = '<<<LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>';
         const SOURCE_END = '<<<END_LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>';
 
-        function appendTurn(sender, text) {
+        function addCopyControl(wrapper) {
+          if (!wrapper || wrapper.querySelector('[data-testid="turn-actions"]')) return;
+          const actions = document.createElement('div');
+          actions.setAttribute('data-testid', 'turn-actions');
+          const copy = document.createElement('button');
+          copy.type = 'button';
+          copy.setAttribute('aria-label', 'Copy');
+          copy.textContent = 'Copy';
+          actions.appendChild(copy);
+          wrapper.appendChild(actions);
+        }
+
+        function appendTurn(sender, text, options = {}) {
           turn += 1;
           const wrapper = document.createElement('div');
           wrapper.setAttribute('data-testid', `conversation-turn-${turn}`);
@@ -153,15 +165,8 @@
           content.textContent = text;
           role.appendChild(content);
 
-          const actions = document.createElement('div');
-          actions.setAttribute('data-testid', 'turn-actions');
-          const copy = document.createElement('button');
-          copy.type = 'button';
-          copy.setAttribute('aria-label', 'Copy');
-          copy.textContent = 'Copy';
-          actions.appendChild(copy);
-
-          wrapper.append(role, actions);
+          wrapper.appendChild(role);
+          if (options.copy !== false) addCopyControl(wrapper);
           conversation.appendChild(wrapper);
           return wrapper;
         }
@@ -247,13 +252,16 @@
               // ChatGPT can expose a transient accessibility/status turn before
               // the actual assistant response. Compact must not treat this as
               // the completed handoff merely because it is stable DOM text.
-              appendTurn('bot', 'ChatGPT said:\nThinking');
+              appendTurn('bot', 'ChatGPT said:\nThinking', { copy: false });
               setTimeout(() => {
-                const wrapper = appendTurn('bot', response.slice(0, Math.max(1, Math.floor(response.length / 3))));
+                const wrapper = appendTurn('bot', response.slice(0, Math.max(1, Math.floor(response.length / 3))), {
+                  copy: false
+                });
                 wrapper.setAttribute('data-streaming', 'true');
                 setTimeout(() => {
                   setTurnText(wrapper, response);
                   wrapper.removeAttribute('data-streaming');
+                  addCopyControl(wrapper);
                   generatingHandoff = false;
                 }, 1000);
               }, 150);

@@ -47,6 +47,7 @@
       deps.shouldSkipExtractedMessageText || ((value) => !String(value || '').trim());
     const hasStreamingMarker = deps.hasStreamingMarker || (() => false);
     const hasVisibleGenerationStopControl = deps.hasVisibleGenerationStopControl || (() => false);
+    const hasMessageCompletionCopyControl = deps.hasMessageCompletionCopyControl || (() => false);
     const sendRuntimeMessage = deps.sendRuntimeMessage || createNoopDependency('sendRuntimeMessage');
     const setActiveSession = deps.setActiveSession || (() => {});
     const refreshSidebar = deps.refreshSidebar || (() => {});
@@ -103,8 +104,17 @@
 
     function markProtocolTurn(container, kind) {
       if (!container?.setAttribute) return false;
+      container.removeAttribute?.('data-local-chat-compaction-pending-response');
       container.setAttribute('data-local-chat-compaction-turn', kind || 'protocol');
       container.classList?.add?.('local-chat-compaction-protocol-turn');
+      return true;
+    }
+
+    function markPendingResponseTurn(container) {
+      if (!container?.setAttribute) return false;
+      // Keep the provider response visible while generation is in progress, but
+      // exclude this internal handoff turn from normal autosave/Save local logic.
+      container.setAttribute('data-local-chat-compaction-pending-response', 'true');
       return true;
     }
 
@@ -245,9 +255,9 @@
           continue;
         }
 
-        // Hide the provider-owned implementation response as soon as it is
-        // associated with this exact request, including plain-text fallbacks.
-        markProtocolTurn(candidate.container, 'response');
+        // Associate the response immediately so autosave cannot archive it, but
+        // leave it visible until the provider exposes its final Copy action.
+        markPendingResponseTurn(candidate.container);
 
         if (!candidate.text.trim()) {
           lastText = '';
@@ -263,8 +273,9 @@
 
         const streaming = Boolean(hasStreamingMarker(candidate.container));
         const providerStillGenerating = hasGeneratingAssistant();
+        const copyControlReady = Boolean(hasMessageCompletionCopyControl(candidate.container));
         const stable = stableSince > 0 && Date.now() - stableSince >= config.responseStableMs;
-        if (!streaming && !providerStillGenerating && stable) {
+        if (!streaming && !providerStillGenerating && copyControlReady && stable) {
           const parseResponse = protocol.parseCompactionResponseOrPlainText || protocol.parseCompactionResponse;
           const parsed = parseResponse(candidate.text, {
             expectedRequestId: expected.requestId

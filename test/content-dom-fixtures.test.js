@@ -332,6 +332,16 @@ test('ChatGPT fixture rejects nested code-copy controls while accepting message-
   );
 });
 
+test('ChatGPT completion detection requires the message-level Copy control, not nested code copy', () => {
+  installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  assert.equal(contentDom.hasMessageCompletionCopyControl(assistantContainer), true);
+
+  document.querySelector('[data-testid="copy-turn-action-button"]').remove();
+  assert.equal(contentDom.hasMessageCompletionCopyControl(assistantContainer), false);
+});
+
 test('ChatGPT static Tailwind streaming variants do not keep completed responses marked as streaming', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
