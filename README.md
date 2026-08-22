@@ -102,7 +102,7 @@ The extension communicates with the local API only through its background worker
 
 Long conversations can be compacted from the Local Chat sidebar on a supported AI provider.
 
-Click **Compact** on the active local chat. The extension asks the provider to produce structured continuation context, validates the response, stores it locally, and opens a compacted child session.
+Click **Compact** on the active local chat. The extension first reads the complete Local Chat archive for that conversation, sends the handoff instructions together with that full source transcript through the provider composer, and waits for the provider to finish generating the response. Only after the response is complete and valid does Local Chat persist it through the compaction API and open the compacted child session. If a compacted child already exists it is reused; otherwise the API creates it.
 
 The original conversation remains unchanged as the complete archive. The compacted session contains the condensed historical context plus messages written after compaction.
 
@@ -110,7 +110,7 @@ In the local web and Electron app, compacted sessions show an expandable **Compa
 
 When a compacted conversation is exported or loaded back into an AI provider, Local Chat sends the compacted context followed only by messages written after compaction. This avoids repeatedly sending the full original transcript.
 
-Internal compaction request and response messages are hidden from the provider conversation and are not saved as normal chat messages.
+Internal compaction request and response messages are hidden from the provider conversation and are not saved as normal chat messages. Re-compacting an existing compacted child reads from its normal parent archive so the provider still receives the complete canonical conversation rather than only the previous compacted context.
 
 ## Security model
 

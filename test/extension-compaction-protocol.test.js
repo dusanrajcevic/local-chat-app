@@ -18,19 +18,49 @@ test('builds a neutral provider handoff request with a stable request ID', () =>
     now: () => 1_700_000_000_000,
     randomToken: () => 'deadbeefcafebabe'
   });
-  const prompt = protocol.buildCompactionPrompt({ requestId });
+  const sourceConversation = [
+    'Chat title: Source chat',
+    '',
+    'Messages:',
+    '',
+    '[1] Me',
+    'Keep the local archive release-ready.',
+    '',
+    '[2] ChatGPT',
+    'The next action is to verify the handoff workflow.'
+  ].join('\n');
+  const prompt = protocol.buildCompactionPrompt({ requestId, sourceConversation });
 
   assert.equal(requestId, 'handoff:req:loyw3v28:deadbeefcafebabe');
   assert.match(prompt, /LOCAL_CHAT_HANDOFF_REQUEST_V1/);
   assert.match(prompt, /LOCAL_CHAT_HANDOFF_RESPONSE_V1/);
   assert.match(prompt, new RegExp(requestId.replaceAll(':', '\\:')));
   assert.match(prompt, /browser-extension data export request/i);
+  assert.match(prompt, /complete Local Chat source conversation/i);
+  assert.match(prompt, /Keep the local archive release-ready\./);
+  assert.match(prompt, new RegExp(protocol.SOURCE_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(prompt, new RegExp(protocol.SOURCE_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(prompt, /do not include hidden reasoning/i);
   assert.doesNotMatch(prompt, /\bcompaction\b/i);
   assert.doesNotMatch(prompt, /compact continuation context/i);
   assert.doesNotMatch(prompt, /conversation state/i);
   assert.equal(protocol.isCompactionRequestText(prompt), true);
   assert.equal(protocol.isCompactionResponseText(prompt), false);
+});
+
+test('requires the complete source conversation instead of relying on provider history', () => {
+  assert.throws(
+    () => protocol.buildCompactionPrompt({ requestId: 'handoff:req:missing-source-001' }),
+    /source conversation/i
+  );
+  assert.throws(
+    () =>
+      protocol.buildCompactionPrompt({
+        requestId: 'handoff:req:empty-source-001',
+        sourceConversation: '   '
+      }),
+    /source conversation is empty/i
+  );
 });
 
 test('parses the current handoff envelope into normalized compaction data', () => {

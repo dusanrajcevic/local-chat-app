@@ -33,6 +33,10 @@ test('compaction E2E fixture exposes the provider sidebar, composer, and control
   assert.match(html, /id="prompt-textarea"/);
   assert.match(html, /data-testid="send-button"/);
   assert.match(html, /setMode\(value\)/);
+  assert.match(html, /LOCAL_CHAT_SOURCE_CONVERSATION_V1/);
+  assert.match(html, /lastHandoffRequest\(\)/);
+  assert.match(html, /isGeneratingHandoff\(\)/);
+  assert.match(html, /data-streaming/);
   assert.match(html, /mode === 'malformed'/);
   assert.match(html, /mode === 'hold'/);
 });

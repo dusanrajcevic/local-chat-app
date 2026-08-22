@@ -654,13 +654,22 @@
         error: String(state.error || '')
       };
 
+      if (phase === 'loading-source') {
+        return {
+          ...common,
+          tone: 'progress',
+          buttonLabel: 'Loading…',
+          title: 'Loading source conversation',
+          detail: 'Reading the complete active Local Chat transcript before sending anything to the provider.'
+        };
+      }
       if (phase === 'sending-request') {
         return {
           ...common,
           tone: 'progress',
           buttonLabel: 'Sending…',
           title: 'Sending compaction request',
-          detail: `Sending the structured request to ${providerName}.`
+          detail: `Sending the handoff instructions and complete Local Chat transcript to ${providerName}.`
         };
       }
       if (phase === 'waiting-response') {

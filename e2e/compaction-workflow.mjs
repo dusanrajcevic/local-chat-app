@@ -154,7 +154,18 @@ test('browser extension compaction workflow works end to end', { timeout: 90_000
     assert.equal(await compactButton.isEnabled(), true);
     await compactButton.click();
     await waitForCompactionPhase(providerPage, 'waiting-response');
+
+    const submittedHandoffRequest = await providerPage.evaluate(() => window.__localChatE2E.lastHandoffRequest());
+    assert.match(submittedHandoffRequest, /<<<LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>/);
+    assert.match(submittedHandoffRequest, /<<<END_LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>/);
+    for (let index = 1; index <= 4; index += 1) {
+      assert.match(submittedHandoffRequest, new RegExp(`Happy source message ${index}`));
+    }
+    assert.equal(await providerPage.evaluate(() => window.__localChatE2E.isGeneratingHandoff()), true);
+    await assertNoCompactedChild(baseUrl, happyParent.id);
+
     await waitForCompactionPhase(providerPage, 'complete');
+    assert.equal(await providerPage.evaluate(() => window.__localChatE2E.isGeneratingHandoff()), false);
 
     const requestTurn = providerPage.locator('[data-local-chat-compaction-turn="request"]');
     const responseTurn = providerPage.locator('[data-local-chat-compaction-turn="response"]');

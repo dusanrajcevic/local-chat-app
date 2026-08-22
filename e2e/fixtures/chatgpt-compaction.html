@@ -131,10 +131,14 @@
         const sendButton = document.querySelector('#send-button');
         let turn = 2;
         let mode = 'valid';
+        let lastHandoffRequest = '';
+        let generatingHandoff = false;
 
         const REQUEST_START = '<<<LOCAL_CHAT_HANDOFF_REQUEST_V1>>>';
         const RESPONSE_START = '<<<LOCAL_CHAT_HANDOFF_RESPONSE_V1>>>';
         const RESPONSE_END = '<<<END_LOCAL_CHAT_HANDOFF_RESPONSE_V1>>>';
+        const SOURCE_START = '<<<LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>';
+        const SOURCE_END = '<<<END_LOCAL_CHAT_SOURCE_CONVERSATION_V1>>>';
 
         function appendTurn(sender, text) {
           turn += 1;
@@ -162,6 +166,11 @@
           return wrapper;
         }
 
+        function setTurnText(wrapper, text) {
+          const content = wrapper?.querySelector?.('[data-message-author-role="assistant"] .markdown');
+          if (content) content.textContent = text;
+        }
+
         function requestIdFrom(text) {
           return String(text || '').match(/(?:handoff|compact):req:[a-zA-Z0-9._:-]+/)?.[0] || '';
         }
@@ -179,6 +188,20 @@
             }),
             RESPONSE_END
           ].join('\n');
+        }
+
+        function hasCompleteSourceConversation(text) {
+          const source = String(text || '');
+          const start = source.indexOf(SOURCE_START);
+          const end = source.indexOf(SOURCE_END, start + SOURCE_START.length);
+          if (start < 0 || end < 0) return false;
+          const body = source.slice(start + SOURCE_START.length, end);
+          return [
+            'Happy source message 1',
+            'Happy source message 2',
+            'Happy source message 3',
+            'Happy source message 4'
+          ].every((message) => body.includes(message));
         }
 
         function malformedResponse(requestId) {
@@ -204,17 +227,34 @@
           appendTurn('me', text);
 
           if (text.includes(REQUEST_START)) {
+            lastHandoffRequest = text;
             const requestId = requestIdFrom(text);
             if (mode === 'hold') return;
-            setTimeout(() => {
-              const response =
-                mode === 'malformed'
-                  ? malformedResponse(requestId)
-                  : mode === 'plain'
-                    ? plainResponse()
-                    : validResponse(requestId);
-              appendTurn('bot', response);
-            }, 60);
+            if (mode === 'valid' && !hasCompleteSourceConversation(text)) {
+              setTimeout(() => appendTurn('bot', malformedResponse(requestId)), 60);
+              return;
+            }
+
+            const response =
+              mode === 'malformed'
+                ? malformedResponse(requestId)
+                : mode === 'plain'
+                  ? plainResponse()
+                  : validResponse(requestId);
+
+            if (mode === 'valid') {
+              generatingHandoff = true;
+              const wrapper = appendTurn('bot', response.slice(0, Math.max(1, Math.floor(response.length / 3))));
+              wrapper.setAttribute('data-streaming', 'true');
+              setTimeout(() => {
+                setTurnText(wrapper, response);
+                wrapper.removeAttribute('data-streaming');
+                generatingHandoff = false;
+              }, 1000);
+              return;
+            }
+
+            setTimeout(() => appendTurn('bot', response), 60);
             return;
           }
 
@@ -227,6 +267,12 @@
           },
           mode() {
             return mode;
+          },
+          lastHandoffRequest() {
+            return lastHandoffRequest;
+          },
+          isGeneratingHandoff() {
+            return generatingHandoff;
           }
         };
       })();

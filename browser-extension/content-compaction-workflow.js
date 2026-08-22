@@ -5,9 +5,16 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createLocalChatContentCompactionWorkflow() {
   'use strict';
 
-  const RUNNING_PHASES = new Set(['sending-request', 'waiting-response', 'cancelling', 'persisting', 'activating']);
+  const RUNNING_PHASES = new Set([
+    'loading-source',
+    'sending-request',
+    'waiting-response',
+    'cancelling',
+    'persisting',
+    'activating'
+  ]);
 
-  const CANCELLABLE_PHASES = new Set(['sending-request', 'waiting-response']);
+  const CANCELLABLE_PHASES = new Set(['loading-source', 'sending-request', 'waiting-response']);
 
   const DEFAULTS = Object.freeze({
     sendButtonTimeoutMs: 5000,
@@ -239,8 +246,9 @@
         }
 
         const streaming = Boolean(hasStreamingMarker(candidate.container));
+        const providerStillGenerating = hasGeneratingAssistant();
         const stable = stableSince > 0 && Date.now() - stableSince >= config.responseStableMs;
-        if (!streaming && stable) {
+        if (!streaming && !providerStillGenerating && stable) {
           const parseResponse = protocol.parseCompactionResponseOrPlainText || protocol.parseCompactionResponse;
           const parsed = parseResponse(candidate.text, {
             expectedRequestId: expected.requestId
@@ -254,8 +262,47 @@
       throw new Error('Timed out waiting for the provider compaction response.');
     }
 
+    async function loadSourceConversation(expected, run) {
+      let source = await sendCheckedRuntimeMessage('LOAD_LOCAL_CHAT_EXPORT', {
+        sessionId: expected.sessionId,
+        activate: false
+      });
+      assertNotCancelled(run);
+      assertConversationUnchanged(expected);
+
+      const sourceSessionId = String(source.session?.id || source.sessionId || '').trim();
+      if (sourceSessionId && sourceSessionId !== expected.sessionId) {
+        throw new Error('Local Chat returned a different source conversation for compaction.');
+      }
+
+      // Compacted child messages are mirrored into the normal parent, which is
+      // the canonical full archive. Re-compaction must summarize that complete
+      // archive rather than only the child's previous handoff + continuation.
+      if (source.session?.kind === 'compacted' && source.session.parentSessionId) {
+        const parentSessionId = String(source.session.parentSessionId).trim();
+        source = await sendCheckedRuntimeMessage('LOAD_LOCAL_CHAT_EXPORT', {
+          sessionId: parentSessionId,
+          activate: false
+        });
+        assertNotCancelled(run);
+        assertConversationUnchanged(expected);
+
+        const returnedParentId = String(source.session?.id || source.sessionId || '').trim();
+        if (returnedParentId && returnedParentId !== parentSessionId) {
+          throw new Error('Local Chat returned a different parent conversation for compaction.');
+        }
+      }
+
+      const sourceConversation = String(source.text || '').trim();
+      if (!sourceConversation) throw new Error('The active Local Chat conversation is empty.');
+      return sourceConversation;
+    }
+
     async function sendCompactionRequest(expected, run) {
-      const prompt = protocol.buildCompactionPrompt({ requestId: expected.requestId });
+      const prompt = protocol.buildCompactionPrompt({
+        requestId: expected.requestId,
+        sourceConversation: expected.sourceConversation
+      });
       await replaceComposerWithText(prompt);
       assertNotCancelled(run);
       assertConversationUnchanged(expected);
@@ -288,6 +335,10 @@
         )
       };
 
+      setState('loading-source', expected);
+      expected.sourceConversation = await loadSourceConversation(expected, run);
+
+      assertNotCancelled(run);
       setState('sending-request', expected);
       await sendCompactionRequest(expected, run);
 

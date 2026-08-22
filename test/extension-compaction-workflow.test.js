@@ -5,6 +5,20 @@ const protocol = require('../browser-extension/content-compaction');
 const { createCompactionWorkflow } = require('../browser-extension/content-compaction-workflow');
 const { createAutosaveController } = require('../browser-extension/content-autosave');
 
+const SOURCE_EXPORT_TEXT = [
+  'Below is the context from a previous conversation.',
+  '',
+  'Chat title: Source chat',
+  '',
+  'Messages:',
+  '',
+  '[1] Me',
+  'Source user message that must be sent to the provider.',
+  '',
+  '[2] ChatGPT',
+  'Source assistant response that must also be sent.'
+].join('\n');
+
 function responseText(requestId, compactedMessage = 'Local Chat handoff snapshot.') {
   return [
     protocol.RESPONSE_START,
@@ -94,9 +108,21 @@ function createHarness(options = {}) {
         ),
       inferSender: (container) => container.sender,
       extractMessageTextFallback: (container) => container.text,
-      hasStreamingMarker: () => false,
+      hasStreamingMarker: (container) => Boolean(options.hasStreamingMarker?.(container)),
       sendRuntimeMessage: async (message) => {
         runtimeMessages.push(message);
+        options.onRuntimeMessage?.(message);
+        if (message.type === 'LOAD_LOCAL_CHAT_EXPORT') {
+          if (typeof options.loadExportResponse === 'function') {
+            return options.loadExportResponse(message, target);
+          }
+          return {
+            ok: true,
+            sessionId: target.sessionId,
+            text: options.sourceConversation || SOURCE_EXPORT_TEXT,
+            session: { id: target.sessionId, title: target.sessionTitle || 'Source chat' }
+          };
+        }
         if (message.type === 'UPSERT_LOCAL_CHAT_COMPACTION') {
           options.afterPersist?.({
             setPageIdentity(value) {
@@ -176,21 +202,28 @@ test('Compact workflow sends the protocol prompt, persists the response, and act
   assert.equal(harness.sent, true);
   assert.equal(protocol.isCompactionRequestText(harness.composerText), true);
   assert.match(harness.composerText, new RegExp(harness.requestId.replaceAll(':', '\\:')));
+  assert.match(harness.composerText, /Source user message that must be sent to the provider\./);
+  assert.match(harness.composerText, /Source assistant response that must also be sent\./);
   assert.deepEqual(
     harness.runtimeMessages.map((message) => message.type),
-    ['UPSERT_LOCAL_CHAT_COMPACTION', 'SET_ACTIVE_LOCAL_CHAT_SESSION']
+    ['LOAD_LOCAL_CHAT_EXPORT', 'UPSERT_LOCAL_CHAT_COMPACTION', 'SET_ACTIVE_LOCAL_CHAT_SESSION']
   );
   assert.deepEqual(harness.runtimeMessages[0].payload, {
+    sessionId: 'chat_1700000000000_11111111',
+    activate: false
+  });
+  assert.deepEqual(harness.runtimeMessages[1].payload, {
     sessionId: 'chat_1700000000000_11111111',
     requestId: harness.requestId,
     compactedMessage: 'Local Chat handoff snapshot.',
     providerKey: 'chatgpt'
   });
-  assert.equal(harness.runtimeMessages[1].payload.sessionId, 'chat_1700000000000_22222222');
+  assert.equal(harness.runtimeMessages[2].payload.sessionId, 'chat_1700000000000_22222222');
   assert.equal(result.sessionId, 'chat_1700000000000_22222222');
   assert.equal(harness.activeSessionUpdate.sessionId, result.sessionId);
   assert.equal(harness.refreshCount, 1);
   assert.deepEqual(harness.stateChanges, [
+    'loading-source',
     'sending-request',
     'waiting-response',
     'persisting',
@@ -214,9 +247,9 @@ test('Compact workflow associates a plain ChatGPT-style reply with the exact req
   const result = await harness.workflow.startCompaction();
 
   assert.equal(result.ok, true);
-  assert.equal(harness.runtimeMessages[0].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
-  assert.equal(harness.runtimeMessages[0].payload.compactedMessage, plainReply);
-  assert.notEqual(harness.runtimeMessages[0].payload.compactedMessage, oldAssistant.text);
+  assert.equal(harness.runtimeMessages[1].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
+  assert.equal(harness.runtimeMessages[1].payload.compactedMessage, plainReply);
+  assert.notEqual(harness.runtimeMessages[1].payload.compactedMessage, oldAssistant.text);
   assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
   assert.equal(oldAssistant.attributes.has('data-local-chat-compaction-turn'), false);
 });
@@ -235,7 +268,7 @@ test('Compact workflow keeps tracking an associated response after hiding it fro
   const result = await harness.workflow.startCompaction();
 
   assert.equal(result.ok, true);
-  assert.equal(harness.runtimeMessages[0].payload.compactedMessage, plainReply);
+  assert.equal(harness.runtimeMessages[1].payload.compactedMessage, plainReply);
   assert.equal(harness.responseContainer.attributes.get('data-local-chat-compaction-turn'), 'response');
 });
 
@@ -247,7 +280,10 @@ test('Compact workflow rejects malformed matching provider responses without per
   });
 
   await assert.rejects(() => harness.workflow.startCompaction(), /text outside|invalid json/i);
-  assert.equal(harness.runtimeMessages.length, 0);
+  assert.deepEqual(
+    harness.runtimeMessages.map((message) => message.type),
+    ['LOAD_LOCAL_CHAT_EXPORT']
+  );
   assert.equal(harness.workflow.getState().phase, 'error');
   assert.equal(harness.toasts.at(-1).isError, true);
 });
@@ -261,7 +297,10 @@ test('Compact workflow stops if the provider conversation changes while waiting'
   });
 
   await assert.rejects(() => harness.workflow.startCompaction(), /provider conversation changed/i);
-  assert.equal(harness.runtimeMessages.length, 0);
+  assert.deepEqual(
+    harness.runtimeMessages.map((message) => message.type),
+    ['LOAD_LOCAL_CHAT_EXPORT']
+  );
 });
 
 test('Compact workflow does not steal activation if the user switches local sessions during persistence', async () => {
@@ -274,8 +313,74 @@ test('Compact workflow does not steal activation if the user switches local sess
   await assert.rejects(() => harness.workflow.startCompaction(), /active Local Chat session changed/i);
   assert.deepEqual(
     harness.runtimeMessages.map((message) => message.type),
-    ['UPSERT_LOCAL_CHAT_COMPACTION']
+    ['LOAD_LOCAL_CHAT_EXPORT', 'UPSERT_LOCAL_CHAT_COMPACTION']
   );
+});
+
+test('Compact workflow uses the normal parent export when re-compacting an existing compacted child', async () => {
+  const childId = 'chat_1700000000000_11111111';
+  const parentId = 'chat_1700000000000_00000000';
+  const parentExport = `${SOURCE_EXPORT_TEXT}\nParent archive continuation message.`;
+  const harness = createHarness({
+    loadExportResponse(message) {
+      if (message.payload.sessionId === childId) {
+        return {
+          ok: true,
+          sessionId: childId,
+          text: 'Compacted child export that must not be used as the source.',
+          session: {
+            id: childId,
+            title: 'Source chat (compacted)',
+            kind: 'compacted',
+            parentSessionId: parentId
+          }
+        };
+      }
+      if (message.payload.sessionId === parentId) {
+        return {
+          ok: true,
+          sessionId: parentId,
+          text: parentExport,
+          session: { id: parentId, title: 'Source chat', kind: 'normal' }
+        };
+      }
+      throw new Error(`Unexpected source export: ${message.payload.sessionId}`);
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    harness.runtimeMessages.slice(0, 2).map((message) => message.payload.sessionId),
+    [childId, parentId]
+  );
+  assert.match(harness.composerText, /Parent archive continuation message\./);
+  assert.doesNotMatch(harness.composerText, /Compacted child export that must not be used as the source\./);
+});
+
+test('Compact workflow does not persist while the provider response is still streaming', async () => {
+  let streaming = true;
+  let persistedWhileStreaming = false;
+  let responsePolls = 0;
+  const harness = createHarness({
+    hasStreamingMarker: (container) => container.sender === 'bot' && streaming,
+    responseStableMs: 0,
+    responsePollMs: 0,
+    sleep: async () => {
+      responsePolls += 1;
+      if (responsePolls >= 1) streaming = false;
+    },
+    onRuntimeMessage(message) {
+      if (message.type === 'UPSERT_LOCAL_CHAT_COMPACTION' && streaming) persistedWhileStreaming = true;
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.equal(persistedWhileStreaming, false);
+  assert.equal(streaming, false);
 });
 
 test('Compact workflow refuses a second concurrent compaction request', async () => {
@@ -295,7 +400,17 @@ test('Compact workflow refuses a second concurrent compaction request', async ()
       replaceComposerWithText: async () => composerGate,
       findComposerContainer: () => null,
       visibleMessageContainers: () => [],
-      sendRuntimeMessage: async () => ({ ok: true }),
+      sendRuntimeMessage: async (message) => {
+        if (message.type === 'LOAD_LOCAL_CHAT_EXPORT') {
+          return {
+            ok: true,
+            sessionId: 'chat_1700000000000_11111111',
+            text: SOURCE_EXPORT_TEXT,
+            session: { id: 'chat_1700000000000_11111111', title: 'Source' }
+          };
+        }
+        return { ok: true };
+      },
       showToast: () => {},
       sleep: async () => {}
     },
@@ -313,7 +428,7 @@ test('Compact workflow refuses a second concurrent compaction request', async ()
 test('autosave skips structured compaction request and response turns', async () => {
   let sendCount = 0;
   const requestId = 'compact:req:autosave-001';
-  const requestText = protocol.buildCompactionPrompt({ requestId });
+  const requestText = protocol.buildCompactionPrompt({ requestId, sourceConversation: SOURCE_EXPORT_TEXT });
   const response = responseText(requestId);
   const button = { textContent: 'Save local', disabled: false, dataset: {} };
   let extracted = requestText;
@@ -370,7 +485,10 @@ test('extension wiring exposes Compact and hides protocol turns from extension c
 test('outgoing autosave queue ignores a compaction protocol prompt before arming assistant capture', async () => {
   let sendCount = 0;
   let removedEmptyButtons = 0;
-  const requestText = protocol.buildCompactionPrompt({ requestId: 'compact:req:queue-001' });
+  const requestText = protocol.buildCompactionPrompt({
+    requestId: 'compact:req:queue-001',
+    sourceConversation: SOURCE_EXPORT_TEXT
+  });
   const controller = createAutosaveController(
     {
       normalizeText: (value) => String(value || '').trim(),
@@ -414,7 +532,15 @@ test('Compact workflow can be cancelled before persistence and reports a termina
       findComposerContainer: () => ({ id: 'composer' }),
       findSendButtonNear: () => ({ click() {} }),
       visibleMessageContainers: () => [],
-      sendRuntimeMessage: async () => {
+      sendRuntimeMessage: async (message) => {
+        if (message.type === 'LOAD_LOCAL_CHAT_EXPORT') {
+          return {
+            ok: true,
+            sessionId: 'chat_1700000000000_11111111',
+            text: SOURCE_EXPORT_TEXT,
+            session: { id: 'chat_1700000000000_11111111', title: 'Source' }
+          };
+        }
         throw new Error('persistence should not run after cancellation');
       },
       showToast: (message, isError) => toasts.push({ message, isError: Boolean(isError) }),
@@ -425,6 +551,7 @@ test('Compact workflow can be cancelled before persistence and reports a termina
   );
 
   const pending = workflow.startCompaction();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(workflow.getState().phase, 'sending-request');
   assert.equal(workflow.getState().cancellable, true);
   assert.equal(workflow.cancelCompaction(), true);
@@ -443,7 +570,7 @@ test('Compact workflow can be cancelled before persistence and reports a termina
   assert.equal(workflow.getState().phase, 'cancelled');
   assert.equal(workflow.getState().running, false);
   assert.equal(workflow.getState().cancellable, false);
-  assert.deepEqual(stateChanges, ['sending-request', 'cancelling', 'cancelled']);
+  assert.deepEqual(stateChanges, ['loading-source', 'sending-request', 'cancelling', 'cancelled']);
   assert.deepEqual(toasts, [{ message: 'Compaction cancelled.', isError: false }]);
 });
 
