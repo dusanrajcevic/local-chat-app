@@ -18,7 +18,12 @@
 
   const DEFAULTS = Object.freeze({
     sendButtonTimeoutMs: 5000,
+    // Inactivity timeout: reset whenever the provider is visibly generating or
+    // the assistant response text changes. Long conversations can legitimately
+    // take several minutes, so active generation must not hit a fixed 2-minute wall.
     responseTimeoutMs: 2 * 60 * 1000,
+    // Absolute safety cap so a broken provider UI cannot leave Compact running forever.
+    responseHardTimeoutMs: 15 * 60 * 1000,
     responsePollMs: 250,
     responseStableMs: 600
   });
@@ -228,14 +233,21 @@
 
     async function waitForResponse(expected, run) {
       const startedAt = Date.now();
+      let lastActivityAt = startedAt;
       let lastText = '';
       let stableSince = 0;
       let activeCandidate = null;
 
-      while (Date.now() - startedAt < config.responseTimeoutMs) {
+      while (Date.now() - startedAt < config.responseHardTimeoutMs) {
         assertNotCancelled(run);
         assertConversationUnchanged(expected);
         hideMatchingRequestTurn(expected.requestId);
+
+        // A visible Stop control (or another provider streaming marker) is positive
+        // evidence that generation is still progressing. Refresh the inactivity
+        // deadline even before a real assistant message container exists.
+        const providerStillGenerating = hasGeneratingAssistant();
+        if (providerStillGenerating) lastActivityAt = Date.now();
 
         const discoveredCandidate = responseCandidate(expected);
         if (discoveredCandidate) activeCandidate = discoveredCandidate;
@@ -251,6 +263,9 @@
         if (!candidate) {
           lastText = '';
           stableSince = 0;
+          if (Date.now() - lastActivityAt >= config.responseTimeoutMs) {
+            throw new Error('Timed out waiting for provider activity during compaction.');
+          }
           await sleep(config.responsePollMs);
           continue;
         }
@@ -262,6 +277,9 @@
         if (!candidate.text.trim()) {
           lastText = '';
           stableSince = 0;
+          if (Date.now() - lastActivityAt >= config.responseTimeoutMs) {
+            throw new Error('Timed out waiting for provider activity during compaction.');
+          }
           await sleep(config.responsePollMs);
           continue;
         }
@@ -269,10 +287,11 @@
         if (candidate.text !== lastText) {
           lastText = candidate.text;
           stableSince = Date.now();
+          lastActivityAt = stableSince;
         }
 
         const streaming = Boolean(hasStreamingMarker(candidate.container));
-        const providerStillGenerating = hasGeneratingAssistant();
+        if (streaming) lastActivityAt = Date.now();
         const copyControlReady = Boolean(hasMessageCompletionCopyControl(candidate.container));
         const stable = stableSince > 0 && Date.now() - stableSince >= config.responseStableMs;
         if (!streaming && !providerStillGenerating && copyControlReady && stable) {
@@ -283,10 +302,14 @@
           return { response: parsed, container: candidate.container };
         }
 
+        if (Date.now() - lastActivityAt >= config.responseTimeoutMs) {
+          throw new Error('Timed out waiting for provider activity during compaction.');
+        }
+
         await sleep(config.responsePollMs);
       }
 
-      throw new Error('Timed out waiting for the provider compaction response.');
+      throw new Error('Compaction exceeded the maximum provider wait time.');
     }
 
     async function loadSourceConversation(expected, run) {

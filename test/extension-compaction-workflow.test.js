@@ -180,6 +180,7 @@ function createHarness(options = {}) {
     {
       sendButtonTimeoutMs: options.sendButtonTimeoutMs ?? 50,
       responseTimeoutMs: options.responseTimeoutMs ?? 50,
+      responseHardTimeoutMs: options.responseHardTimeoutMs ?? 500,
       responsePollMs: options.responsePollMs ?? 0,
       responseStableMs: options.responseStableMs ?? 0
     }
@@ -419,6 +420,32 @@ test('Compact workflow ignores ChatGPT Thinking status until the real assistant 
   assert.equal(harness.runtimeMessages[1].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
   assert.equal(harness.runtimeMessages[1].payload.compactedMessage, 'Finished handoff after thinking status.');
   assert.notEqual(harness.runtimeMessages[1].payload.compactedMessage, 'Thinking');
+});
+
+test('Compact workflow refreshes the inactivity deadline while a long provider generation is active', async () => {
+  let generating = false;
+  let sleepCount = 0;
+  const harness = createHarness({
+    hasVisibleGenerationStopControl: () => generating,
+    afterSend() {
+      generating = true;
+    },
+    responseStableMs: 0,
+    responsePollMs: 1,
+    responseTimeoutMs: 5,
+    responseHardTimeoutMs: 200,
+    sleep: async () => {
+      sleepCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 6));
+      if (sleepCount >= 3) generating = false;
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.ok(sleepCount >= 3);
+  assert.equal(harness.runtimeMessages[1].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
 });
 
 test('Compact workflow waits while the provider exposes a generation stop control', async () => {
