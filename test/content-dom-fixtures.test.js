@@ -361,6 +361,13 @@ test('provider transcript and transient assistant status text are rejected befor
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
   assert.equal(content.isProviderTranscriptText('You said:\nHello\n\nChatGPT said:\nThinking'), true);
+  assert.equal(contentDom.isTransientAssistantStatusText('ChatGPT said: Thinking'), true);
+  assert.equal(contentDom.isTransientAssistantStatusText('ChatGPT said:\nThinking'), true);
+  assert.equal(contentDom.cleanExtractedMessageText('ChatGPT said:\nThinking', 'bot'), '');
+  assert.equal(
+    contentDom.cleanExtractedMessageText('ChatGPT said:\nFinished assistant response.', 'bot'),
+    'Finished assistant response.'
+  );
   assert.equal(content.shouldSkipExtractedMessageText('Thinking...', 'bot', 'assistant'), true);
   assert.equal(
     content.shouldSkipExtractedMessageText('You said:\nHello\n\nChatGPT said:\nDone', 'me', 'dom-user-message'),

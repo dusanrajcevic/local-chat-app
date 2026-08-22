@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const protocol = require('../browser-extension/content-compaction');
+const contentDom = require('../browser-extension/content-dom');
 const { createCompactionWorkflow } = require('../browser-extension/content-compaction-workflow');
 const { createAutosaveController } = require('../browser-extension/content-autosave');
 
@@ -108,7 +109,10 @@ function createHarness(options = {}) {
         ),
       inferSender: (container) => container.sender,
       extractMessageTextFallback: (container) => container.text,
+      cleanExtractedMessageText: contentDom.cleanExtractedMessageText,
+      shouldSkipExtractedMessageText: contentDom.shouldSkipExtractedMessageText,
       hasStreamingMarker: (container) => Boolean(options.hasStreamingMarker?.(container)),
+      hasVisibleGenerationStopControl: () => Boolean(options.hasVisibleGenerationStopControl?.()),
       sendRuntimeMessage: async (message) => {
         runtimeMessages.push(message);
         options.onRuntimeMessage?.(message);
@@ -161,7 +165,9 @@ function createHarness(options = {}) {
         refreshCount += 1;
       },
       showToast: (message, isError) => toasts.push({ message, isError: Boolean(isError) }),
-      sleep: options.sleep || (async () => {}),
+      sleep: options.sleep
+        ? (ms) => options.sleep(ms, { requestContainer, responseContainer, containers })
+        : async () => {},
       onStateChange: (value) => stateChanges.push(value.phase)
     },
     {
@@ -381,6 +387,59 @@ test('Compact workflow does not persist while the provider response is still str
   assert.equal(result.ok, true);
   assert.equal(persistedWhileStreaming, false);
   assert.equal(streaming, false);
+});
+
+test('Compact workflow ignores ChatGPT Thinking status until the real assistant response arrives', async () => {
+  const requestId = 'compact:req:workflow-thinking';
+  let sleepCount = 0;
+  const finalResponse = responseText(requestId, 'Finished handoff after thinking status.');
+  const harness = createHarness({
+    requestId,
+    responseText: 'ChatGPT said:\nThinking',
+    responseStableMs: 0,
+    responsePollMs: 0,
+    responseTimeoutMs: 100,
+    sleep: async (_ms, { responseContainer }) => {
+      sleepCount += 1;
+      if (sleepCount >= 1) responseContainer.text = finalResponse;
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.ok(sleepCount >= 1);
+  assert.equal(harness.runtimeMessages[1].type, 'UPSERT_LOCAL_CHAT_COMPACTION');
+  assert.equal(harness.runtimeMessages[1].payload.compactedMessage, 'Finished handoff after thinking status.');
+  assert.notEqual(harness.runtimeMessages[1].payload.compactedMessage, 'Thinking');
+});
+
+test('Compact workflow waits while the provider exposes a generation stop control', async () => {
+  let generating = false;
+  let persistedWhileGenerating = false;
+  let sleepCount = 0;
+  const harness = createHarness({
+    hasVisibleGenerationStopControl: () => generating,
+    afterSend() {
+      generating = true;
+    },
+    responseStableMs: 0,
+    responsePollMs: 0,
+    responseTimeoutMs: 100,
+    sleep: async () => {
+      sleepCount += 1;
+      if (sleepCount >= 1) generating = false;
+    },
+    onRuntimeMessage(message) {
+      if (message.type === 'UPSERT_LOCAL_CHAT_COMPACTION' && generating) persistedWhileGenerating = true;
+    }
+  });
+
+  const result = await harness.workflow.startCompaction();
+
+  assert.equal(result.ok, true);
+  assert.equal(persistedWhileGenerating, false);
+  assert.equal(generating, false);
 });
 
 test('Compact workflow refuses a second concurrent compaction request', async () => {

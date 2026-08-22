@@ -586,7 +586,12 @@
   }
 
   function isTransientAssistantStatusText(value) {
-    const text = normalizeText(value).replace(/[.…]+/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const text = normalizeText(value)
+      .replace(/^\s*#{0,6}\s*(?:chatgpt|assistant|ai)\s+said\s*:?\s*/i, '')
+      .replace(/[.…]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
 
     if (!text) return true;
     return /^(thinking|reasoning|analyzing|working|searching|loading|generating|starting|one moment|just a moment)$/.test(

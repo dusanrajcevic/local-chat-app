@@ -718,6 +718,7 @@
       queueOutgoingPromptSave,
       scheduleOutgoingDomSaveIfNeeded,
       installOutgoingPromptAutoSave,
+      hasVisibleGenerationStopControl,
       markAssistantContainerReadyForTest,
       resetForTest
     };

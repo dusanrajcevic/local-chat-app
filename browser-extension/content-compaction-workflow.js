@@ -42,7 +42,11 @@
     const visibleMessageContainers = deps.visibleMessageContainers || (() => []);
     const inferSender = deps.inferSender || (() => 'bot');
     const extractMessageTextFallback = deps.extractMessageTextFallback || (() => '');
+    const cleanExtractedMessageText = deps.cleanExtractedMessageText || ((value) => String(value || '').trim());
+    const shouldSkipExtractedMessageText =
+      deps.shouldSkipExtractedMessageText || ((value) => !String(value || '').trim());
     const hasStreamingMarker = deps.hasStreamingMarker || (() => false);
+    const hasVisibleGenerationStopControl = deps.hasVisibleGenerationStopControl || (() => false);
     const sendRuntimeMessage = deps.sendRuntimeMessage || createNoopDependency('sendRuntimeMessage');
     const setActiveSession = deps.setActiveSession || (() => {});
     const refreshSidebar = deps.refreshSidebar || (() => {});
@@ -123,6 +127,13 @@
       return container;
     }
 
+    function assistantResponseText(container) {
+      const raw = String(extractMessageTextFallback(container, 'bot') || '');
+      const cleaned = String(cleanExtractedMessageText(raw, 'bot') || '').trim();
+      if (shouldSkipExtractedMessageText(cleaned, 'bot', 'compaction-response')) return '';
+      return cleaned;
+    }
+
     function responseCandidate(expected) {
       const requestId = typeof expected === 'string' ? expected : expected?.requestId;
       if (!requestId) return null;
@@ -137,9 +148,11 @@
         for (let index = requestIndex + 1; index < containers.length; index += 1) {
           const container = containers[index];
           if (inferSender(container) !== 'bot') continue;
+          const text = assistantResponseText(container);
+          if (!text) continue;
           return {
             container,
-            text: String(extractMessageTextFallback(container, 'bot') || ''),
+            text,
             association: 'after-request'
           };
         }
@@ -150,8 +163,8 @@
       for (let index = containers.length - 1; index >= 0; index -= 1) {
         const container = containers[index];
         if (inferSender(container) !== 'bot') continue;
-        const text = String(extractMessageTextFallback(container, 'bot') || '');
-        if (!protocol.isCompactionResponseText(text) || !text.includes(requestId)) continue;
+        const text = assistantResponseText(container);
+        if (!text || !protocol.isCompactionResponseText(text) || !text.includes(requestId)) continue;
         return { container, text, association: 'structured-request-id' };
       }
 
@@ -161,9 +174,11 @@
       if (before instanceof Set) {
         for (const container of containers) {
           if (inferSender(container) !== 'bot' || before.has(container)) continue;
+          const text = assistantResponseText(container);
+          if (!text) continue;
           return {
             container,
-            text: String(extractMessageTextFallback(container, 'bot') || ''),
+            text,
             association: 'new-assistant-container'
           };
         }
@@ -173,6 +188,7 @@
     }
 
     function hasGeneratingAssistant() {
+      if (hasVisibleGenerationStopControl()) return true;
       return visibleMessageContainers().some(
         (container) => inferSender(container) === 'bot' && Boolean(hasStreamingMarker(container))
       );
@@ -218,7 +234,7 @@
         const candidate = activeCandidate
           ? {
               ...activeCandidate,
-              text: String(extractMessageTextFallback(activeCandidate.container, 'bot') || '')
+              text: assistantResponseText(activeCandidate.container)
             }
           : null;
 

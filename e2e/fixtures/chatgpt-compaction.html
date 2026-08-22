@@ -244,13 +244,19 @@
 
             if (mode === 'valid') {
               generatingHandoff = true;
-              const wrapper = appendTurn('bot', response.slice(0, Math.max(1, Math.floor(response.length / 3))));
-              wrapper.setAttribute('data-streaming', 'true');
+              // ChatGPT can expose a transient accessibility/status turn before
+              // the actual assistant response. Compact must not treat this as
+              // the completed handoff merely because it is stable DOM text.
+              appendTurn('bot', 'ChatGPT said:\nThinking');
               setTimeout(() => {
-                setTurnText(wrapper, response);
-                wrapper.removeAttribute('data-streaming');
-                generatingHandoff = false;
-              }, 1000);
+                const wrapper = appendTurn('bot', response.slice(0, Math.max(1, Math.floor(response.length / 3))));
+                wrapper.setAttribute('data-streaming', 'true');
+                setTimeout(() => {
+                  setTurnText(wrapper, response);
+                  wrapper.removeAttribute('data-streaming');
+                  generatingHandoff = false;
+                }, 1000);
+              }, 150);
               return;
             }
 
