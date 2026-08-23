@@ -13,6 +13,7 @@
   const AUTO_SEND_TOGGLE_MOUNT_MARKER = 'data-local-chat-auto-send-toggle-mount';
   const AUTO_SEND_COMPOSER_MARKER = 'data-local-chat-auto-send-composer';
   const AUTO_SEND_LAYOUT_MARKER = 'data-local-chat-auto-send-layout';
+  const ACTION_BAR_VISIBLE_MARKER = 'data-local-chat-action-bar-visible';
   const LOCAL_SIDEBAR_MARKER = 'data-local-chat-sidebar';
   const LOCAL_SIDEBAR_NATIVE_HIDDEN_MARKER = 'data-local-chat-native-sidebar-hidden';
   const LOAD_PAST_MODAL_ID = 'local-chat-load-past-modal';
@@ -176,8 +177,205 @@
     return false;
   }
 
+  function closestMatching(element, selectors = []) {
+    for (const selector of selectors) {
+      try {
+        const match = element?.closest?.(selector);
+        if (match) return match;
+      } catch {
+        // Provider DOM changes should not break the whole content script.
+      }
+    }
+    return null;
+  }
+
+  function nearbyMessageContainer(subtree, adapter, options = {}) {
+    if (!subtree || subtree.nodeType !== Node.ELEMENT_NODE) return null;
+
+    const allowTurnWithoutContentRoot = Boolean(options.allowTurnWithoutContentRoot);
+    const allowShortText = Boolean(options.allowShortText);
+    const hasEnoughText = allowShortText || normalizeText(subtree.innerText || subtree.textContent || '').length > 20;
+    const hasContentRoot =
+      matchesAny(subtree, adapter.contentSelectors) || hasDescendantMatching(subtree, adapter.contentSelectors);
+    if (
+      matchesAny(subtree, adapter.turnContainerSelectors) &&
+      hasEnoughText &&
+      (hasContentRoot || allowTurnWithoutContentRoot)
+    )
+      return subtree;
+
+    for (const selector of adapter.turnContainerSelectors || []) {
+      try {
+        const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
+          const text = normalizeText(element.innerText || element.textContent || '');
+          return (
+            (allowShortText || text.length > 20) &&
+            (allowTurnWithoutContentRoot ||
+              matchesAny(element, adapter.contentSelectors) ||
+              hasDescendantMatching(element, adapter.contentSelectors))
+          );
+        });
+        if (turns.length) return turns[turns.length - 1];
+      } catch {
+        // Ignore invalid selectors from stale provider adapters.
+      }
+    }
+
+    if (!hasContentRoot || !hasEnoughText) return null;
+
+    const content = querySelectorAny(subtree, adapter.contentSelectors);
+    if (!content) return matchesAny(subtree, adapter.contentSelectors) ? subtree : null;
+
+    for (const selector of adapter.turnContainerSelectors || []) {
+      try {
+        const turn = content.closest?.(selector);
+        if (turn && subtree.contains(turn)) return turn;
+      } catch {
+        // Ignore invalid selectors from stale provider adapters.
+      }
+    }
+
+    return content;
+  }
+
+  function precedingTurnContainer(actionBar, adapter, options = {}) {
+    if (!actionBar || !adapter.turnContainerSelectors?.length) return null;
+
+    const allowShortText = Boolean(options.allowShortText);
+
+    const selectors = adapter.turnContainerSelectors.join(',');
+    let turns;
+    try {
+      turns = Array.from(document.querySelectorAll(selectors));
+    } catch {
+      return null;
+    }
+
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      const turn = turns[index];
+      if (!turn || turn.contains?.(actionBar)) continue;
+
+      const position = turn.compareDocumentPosition?.(actionBar) || 0;
+      if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+
+      const text = normalizeText(turn.innerText || turn.textContent || '');
+      if ((allowShortText && text.length > 0) || text.length > 20) return turn;
+    }
+
+    return null;
+  }
+
+  function findMessageContainerForActionBar(startNode, adapter) {
+    const actionBar = closestMatching(startNode, adapter.actionBarSelectors || []);
+    if (!actionBar) return null;
+
+    const allowShortText = Boolean(adapter.actionBarAllowShortTurnText);
+    const containingTurn = closestMatching(actionBar, adapter.turnContainerSelectors || []);
+    const containingText = normalizeText(containingTurn?.innerText || containingTurn?.textContent || '');
+    if (containingTurn && ((allowShortText && containingText.length > 0) || containingText.length > 20)) {
+      return containingTurn;
+    }
+
+    let branch = actionBar;
+    let parent = actionBar.parentElement;
+    let depth = 0;
+
+    while (parent && parent !== document.body && depth < 8) {
+      let sibling = branch.previousElementSibling;
+      while (sibling) {
+        const candidate = nearbyMessageContainer(sibling, adapter, {
+          allowTurnWithoutContentRoot: true,
+          allowShortText
+        });
+        if (candidate) return candidate;
+        sibling = sibling.previousElementSibling;
+      }
+
+      branch = parent;
+      parent = parent.parentElement;
+      depth += 1;
+    }
+
+    return precedingTurnContainer(actionBar, adapter, { allowShortText });
+  }
+
+  function providerActionBarForControl(startNode) {
+    const adapter = currentProviderAdapter();
+    return closestMatching(startNode, adapter.actionBarSelectors || []);
+  }
+
+  function isProviderActionBarControl(startNode) {
+    const adapter = currentProviderAdapter();
+    if (!adapter.actionBarCompletionSignal) return false;
+    return Boolean(providerActionBarForControl(startNode));
+  }
+
+  function providerActionBarSaveTargets() {
+    const adapter = currentProviderAdapter();
+    const actionBarSelectors = adapter.actionBarSelectors || [];
+    const copySelectors = adapter.actionBarCopySelectors || [];
+    if (!actionBarSelectors.length || !copySelectors.length) return [];
+
+    const actionBars = uniqueElements(
+      actionBarSelectors.flatMap((selector) => {
+        try {
+          return Array.from(document.querySelectorAll?.(selector) || []);
+        } catch {
+          return [];
+        }
+      })
+    ).sort((left, right) => {
+      if (left === right) return 0;
+      const position = left.compareDocumentPosition?.(right) || 0;
+      if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
+
+    return actionBars
+      .map((actionBar) => {
+        const copyButton = querySelectorAny(actionBar, copySelectors);
+        if (!copyButton) return null;
+
+        const container = findMessageContainerForActionBar(copyButton, adapter);
+        if (!container) return null;
+
+        return {
+          container,
+          copyButton,
+          sender: inferSender(container)
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function hasMessageCompletionCopyControl(container) {
+    if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
+
+    // Some providers (for example Claude/DeepSeek) render the completed-message
+    // action bar outside the message body. Reuse the provider-specific action-bar
+    // resolver first so those Copy controls still count as completion signals.
+    if (
+      providerActionBarSaveTargets().some(
+        (target) =>
+          target?.container === container &&
+          target.copyButton &&
+          (isCopyButton(target.copyButton) || isProviderActionBarControl(target.copyButton))
+      )
+    )
+      return true;
+
+    // ChatGPT/Gemini normally render the final message-level Copy action inside
+    // the turn. Nested code/table copy controls are rejected by isCopyButton().
+    const candidates = Array.from(container.querySelectorAll?.('button, [role="button"]') || []);
+    return candidates.some((button) => isCopyButton(button) && findMessageContainer(button) === container);
+  }
+
   function findMessageContainer(startNode) {
     const adapter = currentProviderAdapter();
+    const actionBarContainer = findMessageContainerForActionBar(startNode, adapter);
+    if (actionBarContainer) return actionBarContainer;
+
     let node = startNode;
     let depth = 0;
     const candidates = [];
@@ -410,7 +608,12 @@
   }
 
   function isTransientAssistantStatusText(value) {
-    const text = normalizeText(value).replace(/[.…]+/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const text = normalizeText(value)
+      .replace(/^\s*#{0,6}\s*(?:chatgpt|assistant|ai)\s+said\s*:?\s*/i, '')
+      .replace(/[.…]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
 
     if (!text) return true;
     return /^(thinking|reasoning|analyzing|working|searching|loading|generating|starting|one moment|just a moment)$/.test(
@@ -552,6 +755,15 @@
 
   function inferSender(container) {
     const adapter = currentProviderAdapter();
+    if (typeof adapter.senderFromContainer === 'function') {
+      try {
+        const sender = adapter.senderFromContainer(container);
+        if (sender === 'me' || sender === 'bot') return sender;
+      } catch {
+        // Fall through to generic sender inference when a provider hook becomes stale.
+      }
+    }
+
     const roleSelectors = adapter.roleContainerSelectors || [];
     const closestRole =
       roleSelectors.length && matchesAny(container, roleSelectors)
@@ -589,8 +801,14 @@
   function hasStreamingMarker(container) {
     if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
 
-    const selectors = currentProviderAdapter().streamingSelectors || [];
-    return matchesAny(container, selectors) || hasDescendantMatching(container, selectors);
+    const adapter = currentProviderAdapter();
+    const selectors = adapter.streamingSelectors || [];
+    const ancestorSelectors = adapter.streamingAncestorSelectors || [];
+    return (
+      matchesAny(container, selectors) ||
+      hasDescendantMatching(container, selectors) ||
+      Boolean(closestMatching(container, ancestorSelectors))
+    );
   }
 
   return {
@@ -603,6 +821,7 @@
       AUTO_SEND_TOGGLE_MOUNT_MARKER,
       AUTO_SEND_COMPOSER_MARKER,
       AUTO_SEND_LAYOUT_MARKER,
+      ACTION_BAR_VISIBLE_MARKER,
       LOCAL_SIDEBAR_MARKER,
       LOCAL_SIDEBAR_NATIVE_HIDDEN_MARKER,
       LOAD_PAST_MODAL_ID
@@ -613,6 +832,10 @@
     hashText,
     isCopyButton,
     isNestedContentCopyButton,
+    isProviderActionBarControl,
+    providerActionBarForControl,
+    providerActionBarSaveTargets,
+    hasMessageCompletionCopyControl,
     findMessageContainer,
     selectionInside,
     removeUiNoise,

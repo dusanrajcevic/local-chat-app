@@ -15,7 +15,7 @@ const { listDateDirs, readJson, writeJson, withLock, inspectDataFile } = require
 const { readSessionRecord, storedDataError } = require('./record-validation');
 const { subscribeStorageChanges } = require('./storage-events');
 
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 const SEARCH_BLOOM_BYTES = 2048;
 const SEARCH_BLOOM_BITS = SEARCH_BLOOM_BYTES * 8;
 const FULL_RECONCILE_INTERVAL_MS = 30_000;
@@ -73,6 +73,15 @@ function validSummary(summary, id, dateFolder) {
     summary.dateFolder === dateFolder &&
     (summary.pinnedFolderId === null ||
       (typeof summary.pinnedFolderId === 'string' && FOLDER_ID_PATTERN.test(summary.pinnedFolderId))) &&
+    (summary.kind === 'normal' || summary.kind === 'compacted') &&
+    ((summary.kind === 'normal' &&
+      summary.parentSessionId === null &&
+      (summary.compactedSessionId === null ||
+        (typeof summary.compactedSessionId === 'string' && SESSION_ID_PATTERN.test(summary.compactedSessionId)))) ||
+      (summary.kind === 'compacted' &&
+        summary.compactedSessionId === null &&
+        typeof summary.parentSessionId === 'string' &&
+        SESSION_ID_PATTERN.test(summary.parentSessionId))) &&
     Number.isInteger(summary.messageCount) &&
     summary.messageCount >= 0 &&
     summary.trashed === false
@@ -164,7 +173,13 @@ function hasBloomBit(buffer, position) {
 function searchProjection(session, dateFolder) {
   const messages = Array.isArray(session.messages) ? session.messages : [];
   return normalizeSearchText(
-    [session.title, session.aiName, dateFolder, ...messages.map((message) => message.text)].join(' ')
+    [
+      session.title,
+      session.aiName,
+      dateFolder,
+      session.compaction?.text || '',
+      ...messages.map((message) => message.text)
+    ].join(' ')
   );
 }
 

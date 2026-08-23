@@ -107,6 +107,7 @@ test('only routes that consume bodies install the JSON-object middleware', () =>
     'POST /api/folders',
     'PATCH /api/folders/:folderId',
     'POST /api/sessions',
+    'PUT /api/sessions/:sessionId/compaction',
     'PATCH /api/sessions/:sessionId',
     'PATCH /api/sessions/:sessionId/bot-name',
     'POST /api/sessions/:sessionId/messages',

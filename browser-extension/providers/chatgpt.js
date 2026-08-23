@@ -34,8 +34,8 @@
       '[aria-busy="true"]',
       '[data-is-streaming="true"]',
       '[data-streaming="true"]',
-      '[class*="streaming" i]',
-      '[class*="generating" i]'
+      '.result-streaming',
+      '.result-thinking'
     ]
   };
 });

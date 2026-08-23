@@ -114,6 +114,7 @@ test('body-bearing routes require a JSON object with a supported content type', 
     ['PATCH', '/api/folders/folder_1700000000000_deadbeef'],
     ['PUT', '/api/active-session'],
     ['POST', '/api/sessions'],
+    ['PUT', '/api/sessions/chat_1700000000000_deadbeef/compaction'],
     ['PATCH', '/api/sessions/chat_1700000000000_deadbeef'],
     ['PATCH', '/api/sessions/chat_1700000000000_deadbeef/bot-name'],
     ['POST', '/api/sessions/chat_1700000000000_deadbeef/messages'],
@@ -275,6 +276,55 @@ test('creates, trims, lists, and updates session metadata', async () => {
   const sessions = await json('/api/sessions');
   assert.equal(sessions.res.status, 200);
   assert.ok(sessions.data.some((item) => item.id === session.id));
+});
+
+test('upserts one compacted child and reuses it for retries and later compactions', async () => {
+  const parent = await createSession({ title: 'Compaction API', aiName: 'ChatGPT' });
+  const firstMessage = await postLocalMessage(parent.id, { text: 'Original prompt', sender: 'me' });
+  const secondMessage = await postLocalMessage(parent.id, { text: 'Original response', sender: 'bot' });
+  assert.ok(firstMessage.id);
+
+  const firstBody = {
+    requestId: 'compact:req:api-001',
+    compactedMessage: 'Compact representation of the original exchange.',
+    providerKey: 'chatgpt'
+  };
+  const first = await json(`/api/sessions/${parent.id}/compaction`, {
+    method: 'PUT',
+    body: JSON.stringify(firstBody)
+  });
+  assert.equal(first.res.status, 201);
+  assert.equal(first.data.kind, 'compacted');
+  assert.equal(first.data.parentSessionId, parent.id);
+  assert.equal(first.data.title, 'Compaction API (compacted)');
+
+  const retry = await json(`/api/sessions/${parent.id}/compaction`, {
+    method: 'PUT',
+    body: JSON.stringify(firstBody)
+  });
+  assert.equal(retry.res.status, 200);
+  assert.equal(retry.data.id, first.data.id);
+
+  const replacement = await json(`/api/sessions/${first.data.id}/compaction`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      requestId: 'compact:req:api-002',
+      compactedMessage: 'Replacement compacted representation.',
+      providerKey: 'chatgpt'
+    })
+  });
+  assert.equal(replacement.res.status, 200);
+  assert.equal(replacement.data.id, first.data.id);
+
+  const storedParent = await json(`/api/sessions/${parent.id}`);
+  const storedChild = await json(`/api/sessions/${first.data.id}`);
+  assert.equal(storedParent.data.compactedSessionId, first.data.id);
+  assert.equal(storedChild.data.parentSessionId, parent.id);
+  assert.equal(storedChild.data.compaction.requestId, 'compact:req:api-002');
+  assert.equal(storedChild.data.compaction.text, 'Replacement compacted representation.');
+  assert.equal(storedChild.data.compaction.sourceMessageCount, 2);
+  assert.equal(storedChild.data.compaction.throughMessageId, secondMessage.id);
+  assert.deepEqual(storedChild.data.messages, []);
 });
 
 test('rejects empty titles and no-op metadata updates', async () => {

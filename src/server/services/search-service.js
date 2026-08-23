@@ -25,7 +25,14 @@ function compactSnippet(value, query, maxLength = 220) {
 function buildSearchResult(session, dateDir, normalizedQuery) {
   const summary = summarizeSession(session, dateDir);
   const messages = Array.isArray(session.messages) ? session.messages : [];
-  const searchParts = [session.title, session.aiName, dateDir, ...messages.map((message) => message.text)];
+  const compactionText = session.compaction?.text || '';
+  const searchParts = [
+    session.title,
+    session.aiName,
+    dateDir,
+    compactionText,
+    ...messages.map((message) => message.text)
+  ];
   const haystack = normalizeSearchText(searchParts.join(' '));
 
   if (normalizedQuery && !haystack.includes(normalizedQuery)) return null;
@@ -50,11 +57,14 @@ function buildSearchResult(session, dateDir, normalizedQuery) {
     match: {
       title: Boolean(normalizedQuery && normalizeSearchText(session.title).includes(normalizedQuery)),
       aiName: Boolean(normalizedQuery && normalizeSearchText(session.aiName).includes(normalizedQuery)),
+      compaction: Boolean(normalizedQuery && normalizeSearchText(compactionText).includes(normalizedQuery)),
       messageCount: matchedMessages.length,
       snippets: matchedMessages,
       preview:
         matchedMessages[0]?.snippet ||
-        compactSnippet(messages[messages.length - 1]?.text || session.title || '', normalizedQuery)
+        (normalizedQuery && normalizeSearchText(compactionText).includes(normalizedQuery)
+          ? compactSnippet(compactionText, normalizedQuery)
+          : compactSnippet(messages[messages.length - 1]?.text || session.title || '', normalizedQuery))
     }
   };
 }
@@ -113,7 +123,7 @@ async function searchResponse(rawQuery, rawLimit, rawOffset = 0) {
     const summaries = await collectSessionSummaries();
     const results = summaries.slice(offset, offset + limit).map((session) => ({
       ...session,
-      match: { title: false, aiName: false, messageCount: 0, snippets: [], preview: '' }
+      match: { title: false, aiName: false, compaction: false, messageCount: 0, snippets: [], preview: '' }
     }));
     const hasMore = offset + results.length < summaries.length;
     page = {

@@ -1,6 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { DATA_DIR, TRASH_DIR, SESSION_ID_PATTERN, MESSAGE_ID_PATTERN } = require('../config');
+const {
+  DATA_DIR,
+  TRASH_DIR,
+  SESSION_ID_PATTERN,
+  MESSAGE_ID_PATTERN,
+  COMPACTION_REQUEST_ID_PATTERN
+} = require('../config');
 const { appError } = require('../errors');
 const { id, dateFolderName } = require('../ids');
 const {
@@ -18,9 +24,12 @@ const {
   withMutationConsistency,
   moveSessionToTrashRecoverably,
   restoreSessionRecoverably,
-  permanentlyDeleteTrashRecoverably
+  permanentlyDeleteTrashRecoverably,
+  syncSessionMetadataRecoverably,
+  upsertCompactedSessionRecoverably,
+  addCompactedSessionMessageRecoverably
 } = require('../storage/mutation-coordinator');
-const { CURRENT_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
+const { CURRENT_SESSION_SCHEMA_VERSION, readSessionRecord } = require('../storage/record-validation');
 const { botNameForSession, summarizeSession } = require('./session-format');
 const { buildSessionExportResponse } = require('./export-service');
 const {
@@ -41,6 +50,30 @@ function readFoundSession(found, expectedId) {
   return readSessionRecord(found.filePath, { expectedId, trashed: found.trashed });
 }
 
+function normalizeCompactionRequest(body) {
+  const text = cleanText(body.compactedMessage, 'Compacted message');
+  if (!text) throw appError(400, 'Compacted message is required.');
+  if (text.length > 2_000_000) throw appError(400, 'Compacted message is too long.');
+
+  const requestId = validateId(body.requestId, COMPACTION_REQUEST_ID_PATTERN, 'Compaction request ID');
+  const providerKey = Object.prototype.hasOwnProperty.call(body, 'providerKey')
+    ? cleanName(body.providerKey, 80, 'Provider key')
+    : '';
+
+  return { text, requestId, providerKey };
+}
+
+async function upsertCompactedSession(sessionId, body) {
+  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+  const request = normalizeCompactionRequest(body);
+  const result = await upsertCompactedSessionRecoverably(safeSessionId, request);
+  return {
+    session: summarizeSession(result.session, result.dateDir),
+    created: result.created,
+    replaced: result.replaced
+  };
+}
+
 async function createSession(body) {
   const title = cleanName(body.title, 160, 'Session title');
   if (!title) throw appError(400, 'Session title is required.');
@@ -49,13 +82,15 @@ async function createSession(body) {
     const pinnedFolderId = await requireExistingFolderId(optionalFolderId(body.pinnedFolderId));
     const now = new Date().toISOString();
     const session = {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: CURRENT_SESSION_SCHEMA_VERSION,
       id: id('chat'),
       title,
       aiName: cleanName(body.aiName, 80, 'AI bot name') || 'AI Bot',
       createdAt: now,
       updatedAt: now,
       pinnedFolderId,
+      kind: 'normal',
+      compactedSessionId: null,
       messages: []
     };
 
@@ -78,17 +113,15 @@ async function updateSessionMetadata(sessionId, body) {
   if (hasTitle && !title) throw appError(400, 'Session title is required.');
   if (hasAiName && !aiName) throw appError(400, 'AI bot name is required.');
 
-  const found = await findSessionFile(safeSessionId, true);
-  if (!found) throw appError(404, 'Session not found.');
+  const updates = {};
+  if (hasTitle) updates.title = title;
+  if (hasAiName) updates.aiName = aiName;
 
-  return withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    if (hasTitle) session.title = title;
-    if (hasAiName) session.aiName = aiName;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(found.filePath, session);
-    return { ...summarizeSession(session, found.dateDir, found.trashed), aiName: botNameForSession(session) };
-  });
+  const result = await syncSessionMetadataRecoverably(safeSessionId, updates);
+  return {
+    ...summarizeSession(result.session, result.dateDir, result.trashed),
+    aiName: botNameForSession(result.session)
+  };
 }
 
 async function updateBotName(sessionId, body) {
@@ -96,16 +129,11 @@ async function updateBotName(sessionId, body) {
   const aiName = cleanName(body.aiName, 80, 'AI bot name');
   if (!aiName) throw appError(400, 'AI bot name is required.');
 
-  const found = await findSessionFile(safeSessionId, true);
-  if (!found) throw appError(404, 'Session not found.');
-
-  return withLock(found.filePath, async () => {
-    const session = await readFoundSession(found, safeSessionId);
-    session.aiName = aiName;
-    session.updatedAt = new Date().toISOString();
-    await writeJson(found.filePath, session);
-    return { ...summarizeSession(session, found.dateDir, found.trashed), aiName: session.aiName };
-  });
+  const result = await syncSessionMetadataRecoverably(safeSessionId, { aiName });
+  return {
+    ...summarizeSession(result.session, result.dateDir, result.trashed),
+    aiName: result.session.aiName
+  };
 }
 
 async function getSessionExport(sessionId) {
@@ -132,12 +160,11 @@ function nextMessageSender(messages) {
   return 'me';
 }
 
-async function addMessage(sessionId, body, rawIdempotencyKey) {
-  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+function normalizeMessageRequest(body, rawIdempotencyKey) {
   const text = cleanText(body.text, 'Message text');
   if (!text) throw appError(400, 'Message text is required.');
 
-  const requestedSender = optionalMessageSender(body.sender);
+  const sender = optionalMessageSender(body.sender);
   const source = Object.prototype.hasOwnProperty.call(body, 'source')
     ? cleanName(body.source, 80, 'Message source')
     : '';
@@ -145,43 +172,60 @@ async function addMessage(sessionId, body, rawIdempotencyKey) {
     ? cleanName(body.providerKey, 80, 'Provider key')
     : '';
   const idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey || body.idempotencyKey);
-  const idempotencyPayload = createMessageRequestPayload({
-    text,
-    sender: requestedSender,
-    source,
-    providerKey
-  });
+  const idempotencyPayload = createMessageRequestPayload({ text, sender, source, providerKey });
   const idempotencyFingerprint = idempotencyKey ? fingerprintMessageRequest(idempotencyPayload) : '';
 
+  return {
+    text,
+    sender,
+    source,
+    providerKey,
+    idempotencyKey,
+    idempotencyPayload,
+    idempotencyFingerprint
+  };
+}
+
+async function addMessage(sessionId, body, rawIdempotencyKey) {
+  const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
+  const request = normalizeMessageRequest(body, rawIdempotencyKey);
   const found = await findSessionFile(safeSessionId);
   if (!found) throw appError(404, 'Session not found.');
 
+  const target = await readFoundSession(found, safeSessionId);
+  if (target.kind === 'compacted') {
+    return addCompactedSessionMessageRecoverably(safeSessionId, request);
+  }
+
   return withLock(found.filePath, async () => {
     const session = await readFoundSession(found, safeSessionId);
-    if (idempotencyKey) {
-      const existing = session.messages.find((item) => item.clientIdempotencyKey === idempotencyKey);
+    if (request.idempotencyKey) {
+      const existing = session.messages.find((item) => item.clientIdempotencyKey === request.idempotencyKey);
       if (existing) {
-        const fingerprintAdded = bindExistingMessageToPayload(existing, idempotencyPayload, idempotencyFingerprint);
+        const fingerprintAdded = bindExistingMessageToPayload(
+          existing,
+          request.idempotencyPayload,
+          request.idempotencyFingerprint
+        );
         if (fingerprintAdded) await writeJson(found.filePath, session);
         return { message: existing, created: false };
       }
     }
 
-    const sender = requestedSender || nextMessageSender(session.messages);
     const now = new Date().toISOString();
     const nextMessage = {
       id: id('msg'),
-      sender,
-      text,
+      sender: request.sender || nextMessageSender(session.messages),
+      text: request.text,
       createdAt: now
     };
 
-    if (idempotencyKey) {
-      nextMessage.clientIdempotencyKey = idempotencyKey;
-      nextMessage.clientIdempotencyFingerprint = idempotencyFingerprint;
+    if (request.idempotencyKey) {
+      nextMessage.clientIdempotencyKey = request.idempotencyKey;
+      nextMessage.clientIdempotencyFingerprint = request.idempotencyFingerprint;
     }
-    if (source) nextMessage.source = source;
-    if (providerKey) nextMessage.providerKey = providerKey;
+    if (request.source) nextMessage.source = request.source;
+    if (request.providerKey) nextMessage.providerKey = request.providerKey;
 
     session.messages.push(nextMessage);
     session.updatedAt = now;
@@ -235,21 +279,9 @@ async function deleteMessage(sessionId, messageId) {
 
 async function pinSession(sessionId, body) {
   const safeSessionId = validateId(sessionId, SESSION_ID_PATTERN, 'Session ID');
-  const requestedFolderId = optionalFolderId(body.pinnedFolderId);
-
-  return withMutationConsistency(async () => {
-    const pinnedFolderId = await requireExistingFolderId(requestedFolderId);
-    const found = await findSessionFile(safeSessionId);
-    if (!found) throw appError(404, 'Session not found.');
-
-    return withLock(found.filePath, async () => {
-      const session = await readFoundSession(found, safeSessionId);
-      session.pinnedFolderId = pinnedFolderId;
-      session.updatedAt = new Date().toISOString();
-      await writeJson(found.filePath, session);
-      return summarizeSession(session, found.dateDir);
-    });
-  });
+  const pinnedFolderId = optionalFolderId(body.pinnedFolderId);
+  const result = await syncSessionMetadataRecoverably(safeSessionId, { pinnedFolderId });
+  return summarizeSession(result.session, result.dateDir, result.trashed);
 }
 
 async function moveSessionToTrash(sessionId) {
@@ -287,6 +319,7 @@ module.exports = {
   listSessions,
   recentChats,
   createSession,
+  upsertCompactedSession,
   updateSessionMetadata,
   updateBotName,
   getSessionExport,

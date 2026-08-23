@@ -29,6 +29,7 @@
     const AUTO_SEND_TOGGLE_MOUNT_MARKER = markers.AUTO_SEND_TOGGLE_MOUNT_MARKER || 'data-local-chat-auto-send-mount';
     const AUTO_SEND_COMPOSER_MARKER = markers.AUTO_SEND_COMPOSER_MARKER || 'data-local-chat-auto-send-composer';
     const AUTO_SEND_LAYOUT_MARKER = markers.AUTO_SEND_LAYOUT_MARKER || 'data-local-chat-auto-send-layout';
+    const ACTION_BAR_VISIBLE_MARKER = markers.ACTION_BAR_VISIBLE_MARKER || 'data-local-chat-action-bar-visible';
     const LOCAL_SIDEBAR_MARKER = markers.LOCAL_SIDEBAR_MARKER || 'data-local-chat-sidebar';
     const LOAD_PAST_MODAL_ID = markers.LOAD_PAST_MODAL_ID || 'local-chat-load-past-modal';
     const RELEVANT_MUTATION_SELECTOR = [
@@ -63,6 +64,9 @@
     const inferSender = deps.inferSender || (() => 'bot');
     const isCopyButton = deps.isCopyButton || (() => false);
     const isNestedContentCopyButton = deps.isNestedContentCopyButton || (() => false);
+    const isProviderActionBarControl = deps.isProviderActionBarControl || (() => false);
+    const providerActionBarForControl = deps.providerActionBarForControl || (() => null);
+    const providerActionBarSaveTargets = deps.providerActionBarSaveTargets || (() => []);
     const buttonLabel =
       deps.buttonLabel ||
       ((button) =>
@@ -79,6 +83,7 @@
           .toLowerCase());
     const findComposerContainer = deps.findComposerContainer || (() => null);
     const composerInputs = deps.composerInputs || (() => []);
+    const shouldHideMessageSaveTarget = deps.shouldHideMessageSaveTarget || (() => false);
     const showToast = deps.showToast || (() => {});
     const removeLoadPastButtons = deps.removeLoadPastButtons || (() => {});
     const injectLoadPastButton = deps.injectLoadPastButton || (() => {});
@@ -213,6 +218,9 @@
     }
 
     function removeSaveLocalButtons() {
+      document.querySelectorAll?.(`[${ACTION_BAR_VISIBLE_MARKER}]`).forEach((actionBar) => {
+        actionBar.removeAttribute(ACTION_BAR_VISIBLE_MARKER);
+      });
       document.querySelectorAll?.(`[${EXT_MARKER}]`).forEach((button) => button.remove());
     }
 
@@ -485,8 +493,20 @@
       return providerInfo().key === 'chatgpt';
     }
 
+    function chatGptComposerSurface(composer) {
+      if (!isChatGptProvider() || !composer) return null;
+      if (composer.matches?.('[data-composer-surface="true"]')) return composer;
+      return composer.closest?.('[data-composer-surface="true"]') || null;
+    }
+
     function canUseAutoSendSiblingLayout(composer) {
       if (!isChatGptProvider()) return false;
+
+      // ChatGPT's current composer body sits inside the rounded surface. Making that
+      // surface a flex layout causes the Local toggle to render inside the native
+      // composer background. Keep the native surface untouched and use the floating
+      // placement path so the toggle can sit just outside its right edge instead.
+      if (chatGptComposerSurface(composer)) return false;
 
       const parent = composer?.parentElement;
       if (!parent || parent === document.body || parent === document.documentElement) return false;
@@ -589,7 +609,8 @@
     function positionFloatingAutoSendMount(mount, composer) {
       if (!mount || !composer) return;
 
-      const rect = composer.getBoundingClientRect?.();
+      const anchor = chatGptComposerSurface(composer) || composer;
+      const rect = anchor.getBoundingClientRect?.();
       if (!rect || rect.width <= 0 || rect.height <= 0) return;
 
       const width = mount.offsetWidth || 96;
@@ -620,6 +641,7 @@
       button.textContent = 'Save local';
       button.title = 'Save this whole message to your local chat app using the original copy button when possible';
       button.setAttribute(EXT_MARKER, 'true');
+      button.dataset.localChatProvider = providerInfo().key || 'unknown';
       button.__localChatContainer = container || null;
       button.__localChatCopyButton = copyButton || null;
 
@@ -649,12 +671,49 @@
       return button;
     }
 
+    function saveButtonInsertionAnchor(copyButton) {
+      if (!copyButton) return null;
+
+      // Gemini wraps its real Copy <button> in copy-button > gem-icon-button.
+      // Inserting our button next to the inner <button> makes Angular Material
+      // lay it out inside the icon control, which drops the pill underneath the
+      // Copy icon. Place it beside the whole copy-button component instead.
+      if (providerInfo().key === 'gemini') {
+        const copyHost = copyButton.closest?.('copy-button');
+        if (copyHost?.parentElement) return copyHost;
+      }
+
+      return copyButton;
+    }
+
     function saveButtonForCopyButton(copyButton) {
-      const next = copyButton?.nextElementSibling;
-      const prev = copyButton?.previousElementSibling;
-      if (next?.hasAttribute?.(EXT_MARKER)) return next;
-      if (prev?.hasAttribute?.(EXT_MARKER)) return prev;
-      return null;
+      const anchor = saveButtonInsertionAnchor(copyButton);
+      const candidates = [
+        anchor?.nextElementSibling,
+        anchor?.previousElementSibling,
+        copyButton?.nextElementSibling,
+        copyButton?.previousElementSibling
+      ];
+      return candidates.find((candidate) => candidate?.hasAttribute?.(EXT_MARKER)) || null;
+    }
+
+    function keepProviderActionBarVisible(copyButton) {
+      if (!isProviderActionBarControl(copyButton)) return null;
+      const actionBar = providerActionBarForControl(copyButton);
+      if (!actionBar) return null;
+      actionBar.setAttribute(ACTION_BAR_VISIBLE_MARKER, 'true');
+      return actionBar;
+    }
+
+    function releaseProviderActionBar(saveButton) {
+      const copyButton = saveButton?.__localChatCopyButton || saveButton?.previousElementSibling || null;
+      const actionBar = providerActionBarForControl(copyButton || saveButton);
+      if (!actionBar) return;
+
+      const hasOtherSaveButton = Array.from(actionBar.querySelectorAll?.(`[${EXT_MARKER}]`) || []).some(
+        (button) => button !== saveButton
+      );
+      if (!hasOtherSaveButton) actionBar.removeAttribute(ACTION_BAR_VISIBLE_MARKER);
     }
 
     function scoreMessageCopyButton(button, container) {
@@ -690,8 +749,17 @@
 
     function collectMessageSaveTargets() {
       const grouped = new Map();
-      const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const senderHints = new Map();
 
+      for (const target of providerActionBarSaveTargets()) {
+        const { container, copyButton, sender } = target || {};
+        if (!container || !copyButton) continue;
+        if (!grouped.has(container)) grouped.set(container, []);
+        grouped.get(container).push(copyButton);
+        if (sender === 'me' || sender === 'bot') senderHints.set(container, sender);
+      }
+
+      const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
       for (const copyButton of buttons) {
         if (!isCopyButton(copyButton)) continue;
 
@@ -699,23 +767,36 @@
         if (!container) continue;
 
         if (!grouped.has(container)) grouped.set(container, []);
-        grouped.get(container).push(copyButton);
+        if (!grouped.get(container).includes(copyButton)) grouped.get(container).push(copyButton);
       }
 
       const targets = Array.from(grouped.entries())
         .map(([container, copyButtons]) => ({
           container,
           copyButton: chooseMessageCopyButton(container, copyButtons),
-          sender: inferSender(container)
+          sender: senderHints.get(container) || inferSender(container)
         }))
-        .filter((target) => target.copyButton);
+        .filter((target) => target.copyButton)
+        .filter((target) => !shouldHideMessageSaveTarget(target.container, target.sender));
 
       const newestAssistantTarget = [...targets].reverse().find((target) => target.sender === 'bot') || null;
+
+      function hasNewerUserTurn(target) {
+        if (!target?.container || target.sender !== 'bot') return false;
+
+        return targets.some((candidate) => {
+          if (candidate.sender !== 'me' || !candidate.container || candidate.container === target.container)
+            return false;
+          const position = target.container.compareDocumentPosition?.(candidate.container) || 0;
+          return Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+      }
 
       return targets
         .map((target) => ({
           ...target,
-          isNewestAssistant: target === newestAssistantTarget
+          isNewestAssistant: target === newestAssistantTarget,
+          hasNewerUserTurn: hasNewerUserTurn(target)
         }))
         .filter((target) => {
           if (target.sender !== 'bot') return true;
@@ -728,6 +809,13 @@
           // their controls immediately; only the newest one needs stability checks.
           if (!target.isNewestAssistant) return true;
 
+          // Some providers expose their message action toolbar only once the
+          // response is complete. Treat that provider-declared toolbar as a
+          // completion signal so the manual Save local control appears with
+          // the native Copy action instead of waiting for a second stability
+          // polling cycle.
+          if (isProviderActionBarControl(target.copyButton)) return true;
+
           return Boolean(
             autosaveController()?.isAssistantMessageReadyForButton?.(target.container, { assumeNewest: true })
           );
@@ -738,7 +826,14 @@
       document.querySelectorAll(`[${EXT_MARKER}]`).forEach((saveButton) => {
         const copyButton =
           saveButton.__localChatCopyButton || saveButton.previousElementSibling || saveButton.nextElementSibling;
-        if (!copyButton || !validCopyButtons.has(copyButton) || !isCopyButton(copyButton)) saveButton.remove();
+        if (
+          !copyButton ||
+          !validCopyButtons.has(copyButton) ||
+          (!isCopyButton(copyButton) && !isProviderActionBarControl(copyButton))
+        ) {
+          releaseProviderActionBar(saveButton);
+          saveButton.remove();
+        }
       });
     }
 
@@ -763,20 +858,32 @@
       const validCopyButtons = new Set(targets.map((target) => target.copyButton));
       removeInvalidSaveButtons(validCopyButtons);
 
-      for (const { container, copyButton, sender, isNewestAssistant } of targets) {
+      for (const { container, copyButton, sender, isNewestAssistant, hasNewerUserTurn } of targets) {
         let saveButton = saveButtonForCopyButton(copyButton);
+        const insertionAnchor = saveButtonInsertionAnchor(copyButton);
 
         if (!saveButton) {
           saveButton = createSaveButton(container, copyButton);
-          copyButton.insertAdjacentElement('afterend', saveButton);
         } else {
           saveButton.__localChatContainer = container;
           saveButton.__localChatCopyButton = copyButton;
+          saveButton.dataset.localChatProvider = providerInfo().key || 'unknown';
         }
 
-        if (sender === 'bot' && isNewestAssistant) {
+        if (
+          insertionAnchor &&
+          (saveButton.parentElement !== insertionAnchor.parentElement ||
+            saveButton.previousElementSibling !== insertionAnchor)
+        ) {
+          insertionAnchor.insertAdjacentElement('afterend', saveButton);
+        }
+
+        const providerCompletionSignal = Boolean(keepProviderActionBarVisible(copyButton));
+
+        if (sender === 'bot' && isNewestAssistant && !hasNewerUserTurn) {
           autosaveController()?.scheduleAssistantAutoSave?.(container, saveButton, copyButton, {
-            assumeNewest: true
+            assumeNewest: true,
+            providerCompletionSignal
           });
         }
       }

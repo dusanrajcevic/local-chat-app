@@ -195,6 +195,57 @@ test('content runtime injects the auto-save toggle and persists toggle changes',
   assert.ok(autosaveCalls.some((call) => call[0] === 'clear'));
 });
 
+test('content runtime keeps the ChatGPT Local toggle outside the native composer surface', () => {
+  installRuntimeDom(`
+    <main>
+      <form id="composer-form">
+        <div class="relative">
+          <div data-composer-surface="true">
+            <div data-composer-body>
+              <textarea aria-label="Message ChatGPT"></textarea>
+              <button type="button">Send</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </main>
+  `);
+
+  const surface = document.querySelector('[data-composer-surface="true"]');
+  surface.getBoundingClientRect = () => ({
+    x: 100,
+    y: 640,
+    top: 640,
+    left: 100,
+    right: 600,
+    bottom: 720,
+    width: 500,
+    height: 80
+  });
+
+  const { controller } = createController({
+    deps: {
+      findComposerContainer: () => document.querySelector('[data-composer-body]')
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectAutoSendToggle();
+
+  const mount = document.querySelector(`[${contentDom.markers.AUTO_SEND_TOGGLE_MOUNT_MARKER}]`);
+  assert.equal(mount.parentElement, document.documentElement);
+  assert.equal(mount.classList.contains('is-floating'), true);
+  assert.equal(surface.hasAttribute(contentDom.markers.AUTO_SEND_LAYOUT_MARKER), false);
+  assert.equal(document.querySelector('[data-composer-body]').contains(mount), false);
+  assert.equal(surface.contains(mount), false);
+  assert.equal(mount.style.left, '608px');
+});
+
 test('content runtime hides local UI when the local app becomes unavailable', () => {
   installRuntimeDom(`
     <main>
@@ -243,6 +294,116 @@ test('content runtime injects Save local buttons and delegates clicks to autosav
 
   saveButton.click();
   assert.ok(autosaveCalls.some((call) => call[0] === 'save-container'));
+});
+
+test('content runtime places Gemini Save local beside the copy component instead of inside its icon control', () => {
+  installRuntimeDom(
+    `
+    <main>
+      <article>
+        <div data-testid="message-content">Gemini response</div>
+        <div class="actions-container-v2">
+          <div class="buttons-container-v2">
+            <copy-button>
+              <gem-icon-button>
+                <button type="button" aria-label="Copy">Copy</button>
+              </gem-icon-button>
+            </copy-button>
+            <div class="menu-button-wrapper"><button aria-label="Show more options">More</button></div>
+          </div>
+        </div>
+      </article>
+    </main>
+  `,
+    'https://gemini.google.com/app/test'
+  );
+
+  const { controller } = createController({
+    deps: {
+      providerInfo: () => ({ name: 'Gemini', key: 'gemini' }),
+      findMessageContainer: (node) => node?.closest?.('article') || null,
+      inferSender: () => 'bot',
+      isCopyButton: (button) => button?.matches?.('button[aria-label="Copy"]') || false,
+      isNestedContentCopyButton: () => false
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: false,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectButtons();
+  controller.injectButtons();
+
+  const copyButton = document.querySelector('copy-button button[aria-label="Copy"]');
+  const copyHost = document.querySelector('copy-button');
+  const saveButtons = Array.from(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`));
+  assert.equal(saveButtons.length, 1);
+
+  const saveButton = saveButtons[0];
+  assert.equal(saveButton.dataset.localChatProvider, 'gemini');
+  assert.equal(saveButton.parentElement, copyHost.parentElement);
+  assert.equal(saveButton.previousElementSibling, copyHost);
+  assert.equal(copyHost.contains(saveButton), false);
+  assert.equal(document.querySelector('gem-icon-button').contains(saveButton), false);
+  assert.equal(controller.saveButtonForCopyButton(copyButton), saveButton);
+});
+
+test('content runtime keeps provider completion toolbars visible and forwards completion to autosave', () => {
+  installRuntimeDom(
+    `
+    <main>
+      <div data-perf-row="assistant">
+        <div role="article" aria-label="Message 2 of 2">
+          <div class="standard-markdown">Completed Claude response</div>
+          <div data-cds="MessageActions" role="toolbar" aria-label="Message actions">
+            <button aria-label="Copy">Copy</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  `,
+    'https://claude.ai/chat/test'
+  );
+
+  const assistantScheduleCalls = [];
+  const { controller } = createController({
+    deps: {
+      providerInfo: () => ({ name: 'Claude', key: 'claude' }),
+      findMessageContainer: contentDom.findMessageContainer,
+      inferSender: contentDom.inferSender,
+      isCopyButton: contentDom.isCopyButton,
+      isNestedContentCopyButton: contentDom.isNestedContentCopyButton,
+      isProviderActionBarControl: contentDom.isProviderActionBarControl,
+      providerActionBarForControl: contentDom.providerActionBarForControl,
+      providerActionBarSaveTargets: contentDom.providerActionBarSaveTargets
+    },
+    autosaveController: {
+      scheduleAssistantAutoSave(...args) {
+        assistantScheduleCalls.push(args);
+      }
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectButtons();
+
+  const actionBar = document.querySelector('[data-cds="MessageActions"]');
+  const saveButton = document.querySelector(`[${contentDom.markers.EXT_MARKER}]`);
+  assert.ok(saveButton);
+  assert.equal(actionBar.getAttribute(contentDom.markers.ACTION_BAR_VISIBLE_MARKER), 'true');
+  assert.equal(assistantScheduleCalls.length, 1);
+  assert.deepEqual(assistantScheduleCalls[0][3], {
+    assumeNewest: true,
+    providerCompletionSignal: true
+  });
 });
 
 test('content runtime health checks update availability and invalidate sidebar after saves', async () => {
@@ -382,4 +543,46 @@ test('content runtime only performs completion checks for the newest assistant t
     1,
     'expensive sidebar discovery should be rate-limited across rapid scans'
   );
+});
+
+test('content runtime does not autosave an older assistant while a newer user turn is awaiting a response', () => {
+  installRuntimeDom(`
+    <main>
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant"><div class="markdown">Previous assistant response</div></div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+      <article data-testid="conversation-turn-2">
+        <div data-message-author-role="user">Newest user prompt</div>
+        <button aria-label="Copy message">Copy</button>
+      </article>
+    </main>
+  `);
+
+  const assistantScheduleCalls = [];
+  const { controller } = createController({
+    autosaveController: {
+      isAssistantMessageReadyForButton: () => true,
+      scheduleAssistantAutoSave(...args) {
+        assistantScheduleCalls.push(args);
+      }
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  const targets = controller.collectMessageSaveTargets();
+  const assistantTarget = targets.find((target) => target.sender === 'bot');
+  assert.ok(assistantTarget);
+  assert.equal(assistantTarget.isNewestAssistant, true);
+  assert.equal(assistantTarget.hasNewerUserTurn, true);
+
+  controller.injectButtons();
+
+  assert.equal(assistantScheduleCalls.length, 0);
+  assert.equal(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`).length, 2);
 });

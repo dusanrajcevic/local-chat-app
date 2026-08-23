@@ -46,10 +46,12 @@
     const isSendButton = deps.isSendButton || (() => false);
     const textFromComposer = deps.textFromComposer || (() => '');
     const visibleMessageContainers = deps.visibleMessageContainers || (() => []);
+    const providerActionBarSaveTargets = deps.providerActionBarSaveTargets || (() => []);
     const extractMessageText = deps.extractMessageText || createNoopDependency('extractMessageText');
     const extractMessageTextFallback = deps.extractMessageTextFallback || (() => '');
     const cleanExtractedMessageText = deps.cleanExtractedMessageText || ((value) => normalizeText(value));
     const shouldSkipExtractedMessageText = deps.shouldSkipExtractedMessageText || (() => false);
+    const isCompactionProtocolText = deps.isCompactionProtocolText || (() => false);
     const assistantContentSignature = deps.assistantContentSignature || (() => '');
     const hasStreamingMarker = deps.hasStreamingMarker || (() => false);
     const sendLocalChatMessage = deps.sendLocalChatMessage || createNoopDependency('sendLocalChatMessage');
@@ -122,13 +124,17 @@
       markExistingAssistantContainersIgnoredForCurrentArm();
     }
 
-    function reserveAssistantAutoSaveSlot() {
+    function hasActiveAssistantAutoSaveSlot() {
       if (!assistantAutoSaveBudget) return false;
       if (Date.now() - assistantAutoSaveArmedAt > config.assistantAutoSaveArmWindowMs) {
         assistantAutoSaveBudget = 0;
         return false;
       }
+      return true;
+    }
 
+    function reserveAssistantAutoSaveSlot() {
+      if (!hasActiveAssistantAutoSaveSlot()) return false;
       assistantAutoSaveBudget -= 1;
       return true;
     }
@@ -187,34 +193,33 @@
       return Array.from(document.querySelectorAll('button, [role="button"]')).some(isGenerationStopControl);
     }
 
+    function knownMessageContainers() {
+      const seen = new Set();
+      const providerContainers = providerActionBarSaveTargets()
+        .map((target) => target?.container)
+        .filter(Boolean);
+
+      return [...visibleMessageContainers(), ...providerContainers]
+        .map((element) => findMessageContainer(element) || element)
+        .filter((element) => {
+          if (!element || element.nodeType !== Node.ELEMENT_NODE || seen.has(element)) return false;
+          if (!isVisibleElement(element)) return false;
+          seen.add(element);
+          return true;
+        });
+    }
+
     function isLikelyNewestAssistantContainer(container) {
       if (!container || container.nodeType !== Node.ELEMENT_NODE) return false;
 
-      const seen = new Set();
-      const candidates = Array.from(
-        document.querySelectorAll(
-          [
-            '[data-message-author-role="assistant"]',
-            '[data-testid^="conversation-turn"]',
-            '[data-testid="message-content"]',
-            'article'
-          ].join(',')
-        )
-      )
-        .map((element) => findMessageContainer(element) || element)
-        .filter((element) => {
-          if (!element || seen.has(element) || !isVisibleElement(element)) return false;
-          seen.add(element);
-          return inferSender(element) === 'bot';
-        });
-
+      const candidates = knownMessageContainers().filter((element) => inferSender(element) === 'bot');
       const latest = candidates[candidates.length - 1];
       if (!latest) return false;
       return latest === container || latest.contains(container) || container.contains(latest);
     }
 
     function markExistingAssistantContainersIgnoredForCurrentArm() {
-      for (const container of visibleMessageContainers()) {
+      for (const container of knownMessageContainers()) {
         if (inferSender(container) === 'bot') {
           assistantContainersIgnoredByArm.set(container, assistantAutoSaveArmId);
         }
@@ -232,6 +237,15 @@
 
       const signature = assistantContentSignature(container);
       if (!signature) return false;
+
+      // Some providers only expose their native message action toolbar after
+      // the assistant response has completed. When the runtime passes that
+      // provider-declared completion signal, trust it once no streaming marker
+      // remains instead of applying the generic stability/stop-button heuristic.
+      if (options.providerCompletionSignal && !hasStreamingMarker(container)) {
+        assistantCompletionStates.set(container, { signature, stableSince: Date.now() });
+        return true;
+      }
 
       const now = Date.now();
       let state = assistantCompletionStates.get(container);
@@ -277,6 +291,11 @@
         if (!text) {
           if (!isAuto) showToast('No message text found.', true);
           return { ok: false, skipped: true, reason: 'empty' };
+        }
+
+        if (isCompactionProtocolText(text)) {
+          button.textContent = originalText;
+          return { ok: true, skipped: true, reason: 'compaction-protocol' };
         }
 
         const source = isAuto ? 'auto-assistant-complete' : 'manual-save-button';
@@ -336,10 +355,16 @@
       if (!container || !button || !copyButton) return;
       if (inferSender(container) !== 'bot') return;
       if (!options.assumeNewest && !isLikelyNewestAssistantContainer(container)) return;
+      if (!hasActiveAssistantAutoSaveSlot()) return;
       if (assistantContainersIgnoredByArm.get(container) === assistantAutoSaveArmId) return;
       if (attemptedAssistantContainers.has(container) || pendingAssistantContainers.has(container)) return;
-      if (!reserveAssistantAutoSaveSlot()) return;
 
+      const scheduledArmId = assistantAutoSaveArmId;
+
+      // Do not consume the one-response autosave budget while the provider may
+      // still replace/re-render the assistant container. Claude can swap the
+      // completed row/action toolbar shortly after it first appears; reserving
+      // here would permanently lose the slot if that transient node disappears.
       pendingAssistantContainers.add(container);
       button.dataset.localChatAutoPending = 'true';
 
@@ -347,6 +372,7 @@
         try {
           delete button.dataset.localChatAutoPending;
           if (!isAutoSendEnabled()) return;
+          if (scheduledArmId !== assistantAutoSaveArmId) return;
           if (!document.documentElement.contains(container) || !document.documentElement.contains(button)) return;
 
           const isComplete = await waitForAssistantMessageCompletion(container, options);
@@ -358,6 +384,12 @@
           )
             return;
 
+          // Reserve only when this exact rendered response is complete, still
+          // attached, and belongs to the same outgoing-message arm that
+          // scheduled it. A stale pre-existing response must never consume a
+          // later prompt's autosave budget.
+          if (scheduledArmId !== assistantAutoSaveArmId) return;
+          if (!reserveAssistantAutoSaveSlot()) return;
           attemptedAssistantContainers.add(container);
 
           await sleep(120);
@@ -439,6 +471,9 @@
       const provider = providerInfo();
       const text = normalizeText(extractMessageTextFallback(container, 'me'));
       if (!text) return { ok: false, skipped: true, reason: 'empty' };
+      if (isCompactionProtocolText(text)) {
+        return { ok: true, skipped: true, reason: 'compaction-protocol' };
+      }
       if (shouldSkipExtractedMessageText(text, 'me', trigger)) {
         return { ok: true, skipped: true, reason: 'transient-or-transcript' };
       }
@@ -533,6 +568,10 @@
       const saveTarget = currentLocalChatTarget();
 
       if (text) removeEmptyChatOnlyButtons();
+      if (text && isCompactionProtocolText(text)) {
+        resetComposerSnapshot();
+        return;
+      }
 
       if (!isAutoSendEnabled()) return;
 
@@ -679,6 +718,7 @@
       queueOutgoingPromptSave,
       scheduleOutgoingDomSaveIfNeeded,
       installOutgoingPromptAutoSave,
+      hasVisibleGenerationStopControl,
       markAssistantContainerReadyForTest,
       resetForTest
     };

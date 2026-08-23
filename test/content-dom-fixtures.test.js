@@ -215,6 +215,110 @@ for (const providerCase of providerCases) {
   });
 }
 
+test('DeepSeek current icon-only action rows expose structural Copy controls and Save local buttons', () => {
+  installDomFixture('deepseek-current', 'https://chat.deepseek.com/a/chat/s/test');
+
+  const targets = contentDom.providerActionBarSaveTargets();
+  assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.sender),
+    ['me', 'bot']
+  );
+
+  const [userTarget, assistantTarget] = targets;
+  assert.equal(userTarget.copyButton.getAttribute('aria-label'), null);
+  assert.equal(assistantTarget.copyButton.getAttribute('aria-label'), null);
+  assert.equal(content.isProviderActionBarControl(userTarget.copyButton), true);
+  assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
+  assert.equal(content.extractMessageTextFallback(userTarget.container, 'me'), 'Hey there');
+  assert.match(content.extractMessageTextFallback(assistantTarget.container, 'bot'), /How can I help you today/i);
+
+  content.injectButtons();
+
+  for (const target of targets) {
+    const saveButton = target.copyButton.nextElementSibling;
+    assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+    assert.equal(saveButton.textContent, 'Save local');
+    assert.equal(saveButton.dataset.localChatProvider, 'deepseek');
+    assert.equal(saveButton.__localChatContainer, target.container);
+    assert.equal(content.saveButtonForCopyButton(target.copyButton), saveButton);
+  }
+});
+
+test('Claude current transcript tree resolves MessageActions toolbars by transcript-row sender', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  const targets = contentDom.providerActionBarSaveTargets();
+  assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.sender),
+    ['me', 'bot']
+  );
+
+  const assistantTarget = targets.find((target) => target.sender === 'bot');
+  assert.ok(assistantTarget);
+  assert.equal(assistantTarget.container.tagName, 'DIV');
+  assert.equal(assistantTarget.container.getAttribute('role'), 'article');
+  assert.equal(assistantTarget.container.getAttribute('aria-label'), 'Message 2 of 2');
+  assert.equal(content.isCopyButton(assistantTarget.copyButton), true);
+  assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
+  assert.match(content.extractMessageTextFallback(assistantTarget.container, 'bot'), /Start with JSON/i);
+
+  content.injectButtons();
+
+  for (const target of targets) {
+    const saveButton = target.copyButton.nextElementSibling;
+    assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+    assert.equal(saveButton.textContent, 'Save local');
+    assert.equal(saveButton.__localChatContainer, target.container);
+  }
+});
+
+test('Claude transcript-row streaming metadata participates in completion detection', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  const row = assistantContainer.closest('[data-perf-row="assistant"]');
+  assert.ok(row);
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), false);
+
+  row.setAttribute('data-perf-row-streaming', 'true');
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), true);
+});
+
+test('Claude MessageActions toolbar resolves to the nearest preceding article across unrelated wrappers', () => {
+  installDomFixture('claude', 'https://claude.ai/chat/test');
+
+  document.body.innerHTML = `
+    <article aria-label="Assistant response">
+      <div class="font-claude-response">
+        <p>This completed Claude response deliberately uses no configured prose or message-content class.</p>
+      </div>
+    </article>
+    <div data-cds="MessageActions" data-reveal="fade" role="toolbar" aria-label="Message actions" data-size="xs" tabindex="-1">
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Copy" tabindex="0"><span aria-hidden="true">Copy</span></button>
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Read aloud" tabindex="-1"><span aria-hidden="true">Read aloud</span></button>
+      <button type="button" data-cds="Button" data-size="xs" aria-label="Retry" tabindex="-1"><span aria-hidden="true">Retry</span></button>
+      <time data-cds="RelativeTime">just now</time>
+    </div>
+  `;
+
+  const copyButton = document.querySelector('button[aria-label="Copy"]');
+  const container = content.findMessageContainer(copyButton);
+
+  assert.ok(container, 'expected the external Claude toolbar to resolve to the preceding response article');
+  assert.equal(container.tagName, 'ARTICLE');
+  assert.match(content.extractMessageTextFallback(container, 'bot'), /completed Claude response/i);
+  assert.equal(content.isCopyButton(copyButton), true);
+
+  content.injectButtons();
+
+  const saveButton = copyButton.nextElementSibling;
+  assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.__localChatContainer, container);
+});
+
 test('ChatGPT fixture rejects nested code-copy controls while accepting message-level copy controls', () => {
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
@@ -226,6 +330,29 @@ test('ChatGPT fixture rejects nested code-copy controls while accepting message-
   assert.ok(
     messageCopies.every((button) => /copy/i.test(button.textContent || button.getAttribute('aria-label') || ''))
   );
+});
+
+test('ChatGPT completion detection requires the message-level Copy control, not nested code copy', () => {
+  installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  assert.equal(contentDom.hasMessageCompletionCopyControl(assistantContainer), true);
+
+  document.querySelector('[data-testid="copy-turn-action-button"]').remove();
+  assert.equal(contentDom.hasMessageCompletionCopyControl(assistantContainer), false);
+});
+
+test('ChatGPT static Tailwind streaming variants do not keep completed responses marked as streaming', () => {
+  installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
+
+  const assistantContainer = containersBySender().get('bot').container;
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), false);
+
+  const streamingMarker = document.createElement('span');
+  streamingMarker.className = 'result-streaming';
+  assistantContainer.append(streamingMarker);
+
+  assert.equal(contentDom.hasStreamingMarker(assistantContainer), true);
 });
 
 test('assistant completion signatures do not clone and re-render the whole message tree', () => {
@@ -244,6 +371,13 @@ test('provider transcript and transient assistant status text are rejected befor
   installDomFixture('chatgpt', 'https://chatgpt.com/c/test');
 
   assert.equal(content.isProviderTranscriptText('You said:\nHello\n\nChatGPT said:\nThinking'), true);
+  assert.equal(contentDom.isTransientAssistantStatusText('ChatGPT said: Thinking'), true);
+  assert.equal(contentDom.isTransientAssistantStatusText('ChatGPT said:\nThinking'), true);
+  assert.equal(contentDom.cleanExtractedMessageText('ChatGPT said:\nThinking', 'bot'), '');
+  assert.equal(
+    contentDom.cleanExtractedMessageText('ChatGPT said:\nFinished assistant response.', 'bot'),
+    'Finished assistant response.'
+  );
   assert.equal(content.shouldSkipExtractedMessageText('Thinking...', 'bot', 'assistant'), true);
   assert.equal(
     content.shouldSkipExtractedMessageText('You said:\nHello\n\nChatGPT said:\nDone', 'me', 'dom-user-message'),

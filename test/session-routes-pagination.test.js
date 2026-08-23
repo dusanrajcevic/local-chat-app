@@ -18,6 +18,7 @@ function collectGetRoutes() {
       routes.set(route, handler);
     },
     post() {},
+    put() {},
     patch() {},
     delete() {}
   };

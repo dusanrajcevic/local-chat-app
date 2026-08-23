@@ -40,7 +40,7 @@ Current hardening includes:
 - `state.mjs`: initial state, DOM element lookup, formatting helpers, and sender-name helpers;
 - `render.mjs`: folder/session/trash/message rendering and sidebar state;
 - `message-navigator.mjs`: right-side user-message markers, hover/focus previews, active-turn tracking, and jump navigation;
-- `export.mjs`: chat export text and continuation-context wrapping;
+- `export.mjs`: chat export text and continuation-context wrapping, including compacted context plus post-compaction messages for compacted sessions;
 - `modals.mjs`: shared edit/prompt/search dialog state, focus containment, and focus restoration;
 - `clipboard.mjs`: chat/message Markdown copy helpers and fenced-code copying;
 - `controllers.mjs`: small controller composition root;
@@ -59,17 +59,19 @@ Current hardening includes:
 The extension is split into:
 
 - `local-api.js`: shared loopback-only local API URL validation;
-- `background.js`: paired local API calls, protected extension storage, request timeouts, and message routing;
+- `background.js`: paired local API calls, protected extension storage, request timeouts, message routing, and the structured-compaction persistence bridge;
 - `providers/*.js`: provider-specific host matching, turn selectors, content selectors, and sender/container preferences;
 - `content-providers.js`: provider adapter registry used by Node tests and the browser runtime;
 - `content-dom.js`: shared DOM/extraction orchestration used by tests and the runtime;
 - `content-diagnostics.js`: privacy-preserving provider health reporting for selector hits, message discovery, sender inference, and extraction coverage;
+- `content-compaction.js`: versioned provider compaction prompt/response contract, request-ID generation, strict response parsing, and local API payload conversion;
+- `content-compaction-workflow.js`: Compact orchestration across provider composer send, structured response detection, persistence, active-session switching, and protocol-turn hiding;
 - `content-message-save.js`: selected-text preference, provider clipboard capture/restoration, DOM fallback, and visible-message-container filtering for manual/autosave extraction;
 - `content-autosave.js`: autosave state, assistant-readiness tracking, idempotency-key generation, prompt-capture scheduling, and outgoing/assistant save dedupe;
 - `content-sidebar.js`: local sidebar replacement, provider-sidebar hiding/restoration, folder/session rendering, refresh, and session-selection behavior;
 - `content-composer.js`: composer detection, transcript insertion, pasted-text attachment fallbacks, Load past conversations modal/search behavior, and top active-folder controls;
 - `content-runtime.js`: local-app availability checks, auto-save toggle state/UI, Save local button target selection/injection, and content-script runtime scheduling;
-- `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, and runtime modules together;
+- `content.js`: small bootstrap/coordinator that wires the DOM, message-save, autosave, sidebar, composer, compaction workflow, and runtime modules together;
 - `popup.*`: loopback local API URL and pairing-code configuration.
 
 The content-script runtime remains the largest maintenance risk because provider UIs change often. Reduced DOM fixtures cover provider extraction and Save local injection behavior, mutation tests vary neutral wrappers and presentation-oriented attributes, and the popup can request a privacy-preserving live adapter diagnostic report from the active provider tab. Provider-specific selectors and sender/container preferences now live in `providers/*.js`, `content-dom.js` keeps shared extraction and markdown conversion testable, `content-message-save.js` isolates clipboard/manual extraction behavior, `content-autosave.js` isolates autosave timing/dedupe state, `content-sidebar.js` isolates local sidebar replacement, `content-composer.js` isolates composer loading plus modal/search behavior, and `content-runtime.js` isolates app availability, auto-send toggle coordination, and Save local injection from the bootstrap coordinator.
@@ -111,8 +113,9 @@ The repo now has public-portfolio quality gates:
 
 - ESLint flat config in `eslint.config.mjs` for Node, browser, WebExtension, CommonJS, and native ES module files.
 - Prettier config in `.prettierrc.json` with `.prettierignore` for generated/runtime artifacts.
-- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, the required web Playwright smoke test, and a packaged-Electron launch smoke test built with `electron-builder --dir`.
+- `npm run verify` runs linting, format checks, syntax checks, unit/jsdom tests, the required web Playwright smoke test, the real browser-extension compaction E2E workflow, and a packaged-Electron launch smoke test built with `electron-builder --dir`.
 - `e2e/playwright-smoke.mjs` starts the real local server against an isolated temporary data directory and drives the actual web UI in Chromium, including accessible-name/ARIA checks and modal focus containment/restoration.
+- `e2e/compaction-workflow.mjs` loads the real Manifest V3 extension in an isolated Chromium profile, pairs it to an isolated server, and drives the compact/continue/export/render/lifecycle plus malformed-response and cancellation paths against a controlled ChatGPT fixture.
 - The required smoke test fails when Chromium is unavailable and also rejects uncaught page errors, browser `console.error` messages, and failed network requests.
 - `npm run test:smoke:optional` is available only for lightweight local development where a missing browser may be skipped.
 - CI installs Chromium with Playwright and runs `xvfb-run -a npm run verify` on Linux so the packaged Electron smoke test has a display; it never uses the optional smoke command.
