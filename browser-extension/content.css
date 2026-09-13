@@ -289,6 +289,7 @@
 }
 
 .local-chat-modal-input {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   min-height: 42px;
@@ -581,7 +582,7 @@
 }
 
 /* The floating Local On control belongs to the composer, not to modal UI. */
-html:has(.local-chat-modal-backdrop) [data-local-chat-auto-send-mount] {
+html:has(.local-chat-modal-backdrop) .local-chat-auto-send-mount {
   visibility: hidden !important;
   pointer-events: none !important;
 }

@@ -42,6 +42,6 @@ test('ChatGPT modal isolation pins dialog geometry above provider page styles', 
   );
   assert.match(
     css,
-    /html:has\(\.local-chat-modal-backdrop\) \[data-local-chat-auto-send-mount\][\s\S]*?visibility:\s*hidden\s*!important;/
+    /html:has\(\.local-chat-modal-backdrop\) \.local-chat-auto-send-mount[\s\S]*?visibility:\s*hidden\s*!important;/
   );
 });
