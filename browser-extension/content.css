@@ -227,6 +227,10 @@
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.46);
 }
 
+.local-chat-modal-card--compact {
+  width: min(460px, calc(100vw - 32px));
+}
+
 .local-chat-modal-header {
   display: flex;
   justify-content: space-between;
@@ -276,6 +280,84 @@
 
 .local-chat-modal-close:hover {
   background: rgba(255, 255, 255, 0.14);
+}
+
+.local-chat-modal-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.local-chat-modal-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font: inherit;
+  outline: none;
+}
+
+.local-chat-modal-input:focus {
+  border-color: rgba(16, 163, 127, 0.8);
+}
+
+.local-chat-modal-actions,
+.local-chat-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.local-chat-modal-footer {
+  padding: 16px 20px 20px;
+}
+
+.local-chat-modal-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.local-chat-modal-button:hover,
+.local-chat-modal-button:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+
+.local-chat-modal-button--primary {
+  background: rgba(16, 163, 127, 0.9);
+}
+
+.local-chat-modal-button--primary:hover,
+.local-chat-modal-button--primary:focus-visible {
+  background: rgba(16, 163, 127, 1);
+}
+
+.local-chat-modal-button--danger {
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.local-chat-modal-button--danger:hover,
+.local-chat-modal-button--danger:focus-visible {
+  background: rgba(220, 38, 38, 1);
 }
 
 .local-chat-modal-search {
@@ -362,6 +444,146 @@
   line-height: 1.35;
   max-height: 3.9em;
   overflow: hidden;
+}
+
+/* ChatGPT periodically changes global dialog/control styles. Keep only the
+   extension-owned modal geometry pinned so provider CSS cannot stretch it. */
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: grid !important;
+  place-items: center !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 22px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-card {
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(720px, calc(100vw - 44px)) !important;
+  min-width: 0 !important;
+  max-width: min(720px, calc(100vw - 44px)) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: min(760px, calc(100vh - 44px)) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-card--compact {
+  width: min(460px, calc(100vw - 44px)) !important;
+  max-width: min(460px, calc(100vw - 44px)) !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 20px 20px 14px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-header > div {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-form,
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-footer,
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-actions {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-form {
+  display: grid !important;
+  gap: 12px !important;
+  padding: 16px 20px 20px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-actions,
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-footer {
+  padding: 16px 20px 20px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-input {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 42px !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 11px 12px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-search {
+  width: calc(100% - 40px) !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  margin: 14px 20px !important;
+  padding: 11px 12px !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-close {
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-button {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 38px !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-list,
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] .local-chat-modal-item {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* The floating Local On control belongs to the composer, not to modal UI. */
+html:has(.local-chat-modal-backdrop) [data-local-chat-auto-send-mount] {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 [data-local-chat-auto-send-layout='true'] {

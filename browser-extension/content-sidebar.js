@@ -1070,8 +1070,9 @@
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'local-chat-modal-backdrop';
+        overlay.dataset.localChatProvider = providerInfo().key || 'unknown';
         overlay.innerHTML = `
-      <div class="local-chat-modal-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(title || 'Local Chat input')}" style="max-width: 460px;">
+      <div class="local-chat-modal-card local-chat-modal-card--compact" role="dialog" aria-modal="true" aria-label="${escapeHtml(title || 'Local Chat input')}">
         <div class="local-chat-modal-header">
           <div>
             <div class="local-chat-modal-eyebrow">Local Chat</div>
@@ -1080,11 +1081,11 @@
           </div>
           <button type="button" class="local-chat-modal-close" aria-label="Close">×</button>
         </div>
-        <div style="padding: 16px 20px 20px; display: grid; gap: 12px;">
-          <input class="local-chat-modal-search" style="width: 100%; margin: 0; box-sizing: border-box;" type="text" autocomplete="off" />
-          <div style="display: flex; justify-content: flex-end; gap: 8px;">
-            <button type="button" class="local-chat-modal-close" data-local-chat-dialog-cancel style="width: auto; height: auto; padding: 8px 12px; font-size: 13px;">Cancel</button>
-            <button type="button" class="local-chat-modal-close" data-local-chat-dialog-submit style="width: auto; height: auto; padding: 8px 12px; font-size: 13px; background: rgba(16, 163, 127, 0.9);">${escapeHtml(submitText)}</button>
+        <div class="local-chat-modal-form">
+          <input class="local-chat-modal-input" type="text" autocomplete="off" />
+          <div class="local-chat-modal-actions">
+            <button type="button" class="local-chat-modal-button" data-local-chat-dialog-cancel>Cancel</button>
+            <button type="button" class="local-chat-modal-button local-chat-modal-button--primary" data-local-chat-dialog-submit>${escapeHtml(submitText)}</button>
           </div>
         </div>
       </div>
@@ -1130,8 +1131,9 @@
       return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'local-chat-modal-backdrop';
+        overlay.dataset.localChatProvider = providerInfo().key || 'unknown';
         overlay.innerHTML = `
-      <div class="local-chat-modal-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(title || 'Confirm action')}" style="max-width: 460px;">
+      <div class="local-chat-modal-card local-chat-modal-card--compact" role="dialog" aria-modal="true" aria-label="${escapeHtml(title || 'Confirm action')}">
         <div class="local-chat-modal-header">
           <div>
             <div class="local-chat-modal-eyebrow">Local Chat</div>
@@ -1140,9 +1142,9 @@
           </div>
           <button type="button" class="local-chat-modal-close" aria-label="Close">×</button>
         </div>
-        <div style="padding: 16px 20px 20px; display: flex; justify-content: flex-end; gap: 8px;">
-          <button type="button" class="local-chat-modal-close" data-local-chat-dialog-cancel style="width: auto; height: auto; padding: 8px 12px; font-size: 13px;">Cancel</button>
-          <button type="button" class="local-chat-modal-close" data-local-chat-dialog-submit style="width: auto; height: auto; padding: 8px 12px; font-size: 13px; background: rgba(220, 38, 38, 0.9);">${escapeHtml(confirmText)}</button>
+        <div class="local-chat-modal-footer">
+          <button type="button" class="local-chat-modal-button" data-local-chat-dialog-cancel>Cancel</button>
+          <button type="button" class="local-chat-modal-button local-chat-modal-button--danger" data-local-chat-dialog-submit>${escapeHtml(confirmText)}</button>
         </div>
       </div>
     `;

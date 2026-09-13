@@ -51,6 +51,7 @@
     const shouldExposeLocalChatUi = deps.shouldExposeLocalChatUi || (() => true);
     const showToast = deps.showToast || (() => {});
     const resetComposerSnapshot = deps.resetComposerSnapshot || (() => {});
+    const providerInfo = deps.providerInfo || (() => ({ name: 'AI Chat', key: 'unknown' }));
     const getSidebarData = deps.getSidebarData || (() => ({ folders: [], sessions: [], activeSessionId: null }));
     const getActiveLocalSidebarSession = deps.getActiveLocalSidebarSession || (() => null);
     const setActiveSessionFromExport = deps.setActiveSessionFromExport || (() => {});
@@ -694,6 +695,7 @@
       const overlay = document.createElement('div');
       overlay.id = LOAD_PAST_MODAL_ID;
       overlay.className = 'local-chat-modal-backdrop';
+      overlay.dataset.localChatProvider = providerInfo().key || 'unknown';
       overlay.innerHTML = `
       <div class="local-chat-modal-card" role="dialog" aria-modal="true" aria-label="Load past local conversations">
         <div class="local-chat-modal-header">
