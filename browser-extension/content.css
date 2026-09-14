@@ -449,6 +449,11 @@
 
 /* ChatGPT periodically changes global dialog/control styles. Keep only the
    extension-owned modal geometry pinned so provider CSS cannot stretch it. */
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'],
+.local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] * {
+  box-sizing: border-box !important;
+}
+
 .local-chat-modal-backdrop[data-local-chat-provider='chatgpt'] {
   position: fixed !important;
   inset: 0 !important;

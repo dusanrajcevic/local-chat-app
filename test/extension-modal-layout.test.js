@@ -21,6 +21,7 @@ test('compact create and confirm dialogs use dedicated modal layout classes', ()
   assert.match(sidebar, /class="local-chat-modal-button local-chat-modal-button--primary"/);
   assert.match(sidebar, /class="local-chat-modal-footer"/);
   assert.match(sidebar, /class="local-chat-modal-button local-chat-modal-button--danger"/);
+  assert.match(sidebar, /aria-label="\$\{escapeHtml\(label\)\}"/);
 });
 
 test('ChatGPT modal isolation pins dialog geometry above provider page styles', () => {
@@ -42,7 +43,11 @@ test('ChatGPT modal isolation pins dialog geometry above provider page styles', 
   );
   assert.match(
     css,
-    /html:has\(\.local-chat-modal-backdrop\[data-local-chat-provider=['"]chatgpt['"]\]\)[\s\S]*?\.local-chat-auto-send-mount[\s\S]*?visibility:\s*hidden\s*!important;/
+    /html:has\(\.local-chat-modal-backdrop\[data-local-chat-provider=['"]chatgpt['"]\]\)\s+\.local-chat-auto-send-mount\s*\{[\s\S]*?visibility:\s*hidden\s*!important;/
+  );
+  assert.match(
+    css,
+    /\.local-chat-modal-backdrop\[data-local-chat-provider='chatgpt'\],\s*\.local-chat-modal-backdrop\[data-local-chat-provider='chatgpt'\] \*\s*\{[\s\S]*?box-sizing:\s*border-box\s*!important;/
   );
   assert.doesNotMatch(css, /html:has\(\.local-chat-modal-backdrop\)\s+\.local-chat-auto-send-mount/);
 });

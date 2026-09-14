@@ -1082,7 +1082,7 @@
           <button type="button" class="local-chat-modal-close" aria-label="Close">×</button>
         </div>
         <div class="local-chat-modal-form">
-          <input class="local-chat-modal-input" type="text" autocomplete="off" />
+          <input class="local-chat-modal-input" type="text" autocomplete="off" aria-label="${escapeHtml(label)}" />
           <div class="local-chat-modal-actions">
             <button type="button" class="local-chat-modal-button" data-local-chat-dialog-cancel>Cancel</button>
             <button type="button" class="local-chat-modal-button local-chat-modal-button--primary" data-local-chat-dialog-submit>${escapeHtml(submitText)}</button>
