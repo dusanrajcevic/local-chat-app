@@ -367,6 +367,7 @@ composerController = LocalChatContentComposer.createComposerController({
   sleep,
   shouldExposeLocalChatUi,
   showToast,
+  providerInfo,
   resetComposerSnapshot: () => autosaveController?.resetComposerSnapshot?.(),
   getSidebarData: () => sidebarController.getData(),
   getActiveLocalSidebarSession: () => sidebarController.getActiveLocalSidebarSession(),
