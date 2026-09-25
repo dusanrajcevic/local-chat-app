@@ -93,7 +93,42 @@ function createControllers({
     announceStatus
   });
 
+  let pairingCopyResetTimer = null;
+
+  function resetExtensionPairingCopyFeedback() {
+    if (pairingCopyResetTimer) {
+      clearTimeout(pairingCopyResetTimer);
+      pairingCopyResetTimer = null;
+    }
+
+    const button = el.copyExtensionPairingCodeBtn;
+    if (!button) return;
+    delete button.dataset.copied;
+    button.textContent = 'Copy code';
+    button.setAttribute('aria-label', 'Copy pairing code');
+    button.title = 'Copy pairing code';
+  }
+
+  function showExtensionPairingCopiedFeedback() {
+    const button = el.copyExtensionPairingCodeBtn;
+    if (!button) return;
+
+    button.dataset.copied = 'true';
+    button.textContent = '✓ Copied!';
+    button.setAttribute('aria-label', 'Pairing code copied');
+    button.title = 'Pairing code copied';
+
+    if (pairingCopyResetTimer) clearTimeout(pairingCopyResetTimer);
+    pairingCopyResetTimer = setTimeout(() => {
+      pairingCopyResetTimer = null;
+      if (!button.isConnected) return;
+      resetExtensionPairingCopyFeedback();
+    }, 1600);
+    pairingCopyResetTimer?.unref?.();
+  }
+
   function closeExtensionPairing() {
+    resetExtensionPairingCopyFeedback();
     modal.closeExtensionPairingModal();
   }
 
@@ -102,6 +137,7 @@ function createControllers({
       method: 'POST',
       body: '{}'
     });
+    resetExtensionPairingCopyFeedback();
     el.extensionPairingCode.textContent = pairing.code;
     el.extensionPairingExpires.textContent = `Expires ${new Date(pairing.expiresAt).toLocaleTimeString([], {
       hour: '2-digit',
@@ -119,6 +155,7 @@ function createControllers({
       throw new Error('Clipboard access is unavailable.');
     }
     await copyTextToClipboard(code);
+    showExtensionPairingCopiedFeedback();
     announceStatus('Pairing code copied to clipboard.');
     return true;
   }

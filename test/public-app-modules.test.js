@@ -736,8 +736,14 @@ test('extension pairing code controller renders a short-lived code in the local 
   assert.equal(await harness.controllers.copyExtensionPairingCode(), true);
   assert.equal(harness.clipboard.lastText, 'ABCDEF123456');
   assert.equal(harness.el.appStatus.textContent, 'Pairing code copied to clipboard.');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, '✓ Copied!');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, 'true');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Pairing code copied');
 
   harness.controllers.closeExtensionPairing();
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, 'Copy code');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, undefined);
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Copy pairing code');
   assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'true');
   assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), false);
 });
