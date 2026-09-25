@@ -669,11 +669,21 @@ html:has(.local-chat-modal-backdrop[data-local-chat-provider='chatgpt']) .local-
   background: rgba(127, 127, 127, 0.16);
 }
 
-.local-chat-auto-send-toggle input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
+.local-chat-auto-send-toggle input[type='checkbox'] {
+  -webkit-appearance: checkbox !important;
+  appearance: auto !important;
+  display: inline-block !important;
+  flex: 0 0 auto;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
   accent-color: #10a37f;
+  box-shadow: none !important;
+  filter: none !important;
   cursor: pointer;
 }
 
