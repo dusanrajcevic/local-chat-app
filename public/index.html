@@ -201,7 +201,15 @@
         <output id="extensionPairingCode" class="pairing-code" aria-live="polite"></output>
         <div class="modal-actions">
           <span id="extensionPairingExpires" class="modal-hint"></span>
-          <button id="copyExtensionPairingCodeBtn" class="ghost-btn compact" type="button">Copy code</button>
+          <button
+            id="copyExtensionPairingCodeBtn"
+            class="ghost-btn compact pairing-copy-btn"
+            type="button"
+            aria-label="Copy pairing code"
+            title="Copy pairing code"
+          >
+            Copy code
+          </button>
           <button id="closeExtensionPairingModalBtn" class="primary-btn compact" type="button">Close</button>
         </div>
       </div>

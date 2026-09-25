@@ -1459,6 +1459,20 @@ body.modal-open {
   line-height: 1.5;
 }
 
+.pairing-copy-btn {
+  min-width: 92px;
+}
+
+.pairing-copy-btn[data-copied='true'] {
+  border-color: rgba(16, 163, 127, 0.55);
+  background: rgba(16, 163, 127, 0.14);
+  color: #7ee8c7;
+}
+
+.pairing-copy-btn[data-copied='true']:hover {
+  background: rgba(16, 163, 127, 0.2);
+}
+
 .pairing-code {
   display: block;
   width: 100%;
