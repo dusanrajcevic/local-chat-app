@@ -434,7 +434,9 @@ test('ChatGPT September 2026 search-unit DOM resolves assistant action row and i
 
   const saveButton = content.saveButtonForCopyButton(assistantTarget.copyButton);
   assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
-  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.textContent.trim(), '');
+  assert.equal(saveButton.getAttribute('aria-label'), 'Save local');
+  assert.ok(saveButton.querySelector('.local-chat-save-icon'));
   assert.equal(saveButton.dataset.localChatProvider, 'chatgpt');
   assert.equal(saveButton.__localChatContainer, assistantTarget.container);
   assert.equal(saveButton.previousElementSibling, assistantTarget.copyButton.parentElement);

@@ -33,6 +33,50 @@
   opacity: 0.7;
 }
 
+/* ChatGPT's response action row is icon-only. Render Local Chat as the same
+   kind of compact icon control so it does not interrupt or wrap the row. */
+.local-chat-save-btn[data-local-chat-provider='chatgpt'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+  opacity: 0.78;
+}
+
+.local-chat-save-btn[data-local-chat-provider='chatgpt']:hover {
+  background: rgba(127, 127, 127, 0.14);
+  opacity: 1;
+}
+
+.local-chat-save-btn[data-local-chat-provider='chatgpt']:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.local-chat-save-btn[data-local-chat-provider='chatgpt']:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.local-chat-save-btn[data-local-chat-provider='chatgpt'] .local-chat-save-icon {
+  display: block;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
 /* Gemini's Copy action is an Angular Material icon component. Keep Local Chat
    as a compact sibling chip instead of inheriting the icon component's layout
    and typography. */

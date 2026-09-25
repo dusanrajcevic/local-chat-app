@@ -289,7 +289,9 @@ test('content runtime injects Save local buttons and delegates clicks to autosav
 
   const saveButton = document.querySelector(`[${contentDom.markers.EXT_MARKER}]`);
   assert.ok(saveButton, 'expected Save local button to be injected');
-  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.textContent.trim(), '');
+  assert.equal(saveButton.getAttribute('aria-label'), 'Save local');
+  assert.ok(saveButton.querySelector('.local-chat-save-icon'));
   assert.equal(controller.saveButtonForCopyButton(document.querySelector('[aria-label="Copy message"]')), saveButton);
 
   saveButton.click();

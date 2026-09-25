@@ -276,13 +276,32 @@
       return false;
     }
 
+    function setSaveButtonLabel(button, label) {
+      if (!button) return;
+      if (button.dataset?.localChatIconButton === 'true') {
+        button.setAttribute('aria-label', label);
+        button.title = label;
+        button.dataset.localChatSaveState = label;
+        return;
+      }
+      button.textContent = label;
+    }
+
+    function getSaveButtonLabel(button) {
+      if (!button) return '';
+      if (button.dataset?.localChatIconButton === 'true') {
+        return button.getAttribute('aria-label') || button.title || 'Save local';
+      }
+      return button.textContent || '';
+    }
+
     async function saveContainer(container, button, copyButton = null, options = {}) {
       const isAuto = Boolean(options.auto);
-      const originalText = button.textContent;
+      const originalText = getSaveButtonLabel(button);
       const { name, key } = providerInfo();
 
       button.disabled = true;
-      button.textContent = isAuto ? 'Auto-saving…' : 'Saving…';
+      setSaveButtonLabel(button, isAuto ? 'Auto-saving…' : 'Saving…');
 
       try {
         const sender = inferSender(container);
@@ -294,7 +313,7 @@
         }
 
         if (isCompactionProtocolText(text)) {
-          button.textContent = originalText;
+          setSaveButtonLabel(button, originalText);
           return { ok: true, skipped: true, reason: 'compaction-protocol' };
         }
 
@@ -306,7 +325,7 @@
 
         const fingerprint = messageFingerprint(key, sender, text);
         if (isAuto && sender === 'bot' && autoSavedAssistantFingerprints.has(fingerprint)) {
-          button.textContent = 'Saved local';
+          setSaveButtonLabel(button, 'Saved local');
           button.dataset.localChatAutoSaved = 'true';
           return { ok: true, skipped: true, reason: 'duplicate' };
         }
@@ -324,14 +343,14 @@
 
         if (sender === 'bot') rememberAutoSavedAssistant(fingerprint);
 
-        button.textContent = isAuto ? 'Saved local' : 'Saved';
+        setSaveButtonLabel(button, isAuto ? 'Saved local' : 'Saved');
         button.dataset.localChatAutoSaved = 'true';
         showToast(
           `${isAuto ? 'Auto-saved response' : 'Saved to Local Chat'} → ${response.sessionTitle || 'active session'}`
         );
         return { ok: true, response };
       } catch (error) {
-        button.textContent = isAuto ? 'Save local' : 'Error';
+        setSaveButtonLabel(button, isAuto ? 'Save local' : 'Error');
         if (isAuto) {
           button.dataset.localChatAutoSaveError = error.message || 'Auto-save failed';
           showToast(`AI response auto-save failed: ${error.message || 'Could not save message.'}`, true);
@@ -343,7 +362,7 @@
         setTimeout(
           () => {
             button.disabled = false;
-            if (!button.dataset.localChatAutoSaved) button.textContent = originalText;
+            if (!button.dataset.localChatAutoSaved) setSaveButtonLabel(button, originalText);
           },
           isAuto ? 650 : 1200
         );
