@@ -15,7 +15,9 @@ function createControllers({
   win = window,
   doc = document,
   announceStatus = () => {},
-  copyTextToClipboard
+  copyTextToClipboard,
+  setTimeoutFn = setTimeout,
+  clearTimeoutFn = clearTimeout
 }) {
   const alertUser = win.alert?.bind(win) || (typeof alert !== 'undefined' ? alert : () => {});
   const confirmUser = win.confirm?.bind(win) || (typeof confirm !== 'undefined' ? confirm : () => true);
@@ -97,7 +99,7 @@ function createControllers({
 
   function resetExtensionPairingCopyFeedback() {
     if (pairingCopyResetTimer) {
-      clearTimeout(pairingCopyResetTimer);
+      clearTimeoutFn(pairingCopyResetTimer);
       pairingCopyResetTimer = null;
     }
 
@@ -118,8 +120,8 @@ function createControllers({
     button.setAttribute('aria-label', 'Pairing code copied');
     button.title = 'Pairing code copied';
 
-    if (pairingCopyResetTimer) clearTimeout(pairingCopyResetTimer);
-    pairingCopyResetTimer = setTimeout(() => {
+    if (pairingCopyResetTimer) clearTimeoutFn(pairingCopyResetTimer);
+    pairingCopyResetTimer = setTimeoutFn(() => {
       pairingCopyResetTimer = null;
       if (!button.isConnected) return;
       resetExtensionPairingCopyFeedback();
