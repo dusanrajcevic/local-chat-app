@@ -419,10 +419,7 @@ test('ChatGPT September 2026 search-unit DOM resolves assistant action row and i
 
   const assistantTarget = targets.find((target) => target.sender === 'bot');
   assert.ok(assistantTarget);
-  assert.match(
-    assistantTarget.container.getAttribute('data-content-search-unit-key') || '',
-    /:assistant$/
-  );
+  assert.match(assistantTarget.container.getAttribute('data-content-search-unit-key') || '', /:assistant$/);
   assert.equal(assistantTarget.copyButton.getAttribute('aria-label'), 'Copy');
   assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
   assert.equal(
@@ -452,22 +449,14 @@ test('ChatGPT September 2026 multi-turn DOM keeps action bars associated with th
   );
   assert.deepEqual(
     targets.map((target) => target.container.getAttribute('data-content-search-unit-key')),
-    [
-      'fallback-turn-0:0:user',
-      'fallback-turn-0:2:assistant',
-      'fallback-turn-1:0:user',
-      'fallback-turn-1:1:assistant'
-    ]
+    ['fallback-turn-0:0:user', 'fallback-turn-0:2:assistant', 'fallback-turn-1:0:user', 'fallback-turn-1:1:assistant']
   );
 
   const assistantTargets = targets.filter((target) => target.sender === 'bot');
   assert.equal(assistantTargets.length, 2);
   assert.deepEqual(
     assistantTargets.map((target) => content.extractMessageTextFallback(target.container, 'bot')),
-    [
-      'Hi! 😊 How can I help you today?',
-      'I’m doing well too, thanks 😊 What are we working on today?'
-    ]
+    ['Hi! 😊 How can I help you today?', 'I’m doing well too, thanks 😊 What are we working on today?']
   );
 
   content.injectButtons();
