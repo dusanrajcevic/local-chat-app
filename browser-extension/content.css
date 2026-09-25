@@ -41,8 +41,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  white-space: nowrap;
+  box-sizing: border-box;
+  width: auto !important;
+  min-width: 82px;
+  max-width: none !important;
+  min-height: 28px;
+  aspect-ratio: auto !important;
+  flex: 0 0 auto;
+  padding: 5px 10px !important;
   margin-left: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* Gemini's Copy action is an Angular Material icon component. Keep Local Chat
