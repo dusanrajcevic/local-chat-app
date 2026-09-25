@@ -20,6 +20,7 @@
   cursor: pointer;
   background: rgba(127, 127, 127, 0.08);
   color: inherit;
+  white-space: nowrap;
 }
 
 .local-chat-save-btn:hover,
@@ -33,55 +34,15 @@
   opacity: 0.7;
 }
 
-/* ChatGPT's response action row is icon-only. Keep the real button text in the
-   DOM so the existing save/autosave behavior and accessible name remain
-   unchanged, and render only a compact visual icon with CSS. */
+/* Keep ChatGPT's Local Chat action as a text button. The provider action
+   row is compact, so prevent the label from wrapping while retaining the
+   generic Save local styling and behavior. */
 .local-chat-save-btn[data-local-chat-provider='chatgpt'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font-size: 0;
-  line-height: 1;
   white-space: nowrap;
-  vertical-align: middle;
-  opacity: 0.78;
-}
-
-.local-chat-save-btn[data-local-chat-provider='chatgpt']::before {
-  content: '⇩';
-  display: block;
-  font-family: Arial, sans-serif;
-  font-size: 19px;
-  font-weight: 400;
-  line-height: 1;
-  transform: translateY(-1px);
-}
-
-.local-chat-save-btn[data-local-chat-provider='chatgpt']:hover {
-  background: rgba(127, 127, 127, 0.14);
-  opacity: 1;
-}
-
-.local-chat-save-btn[data-local-chat-provider='chatgpt']:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-
-.local-chat-save-btn[data-local-chat-provider='chatgpt']:disabled {
-  cursor: wait;
-  opacity: 0.5;
+  margin-left: 4px;
 }
 
 /* Gemini's Copy action is an Angular Material icon component. Keep Local Chat

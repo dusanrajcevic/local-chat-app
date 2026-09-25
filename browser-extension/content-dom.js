@@ -204,8 +204,14 @@
     )
       return subtree;
 
-    for (const selector of adapter.turnContainerSelectors || []) {
-      try {
+    // Query all provider turn selectors together so candidates are returned in
+    // actual DOM order. Checking selectors one-by-one can pick an older user
+    // message just because its selector appears before the assistant selector
+    // in the adapter (ChatGPT's current action bar is a sibling after a block
+    // that contains both message units).
+    try {
+      const selector = (adapter.turnContainerSelectors || []).join(',');
+      if (selector) {
         const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
           const text = normalizeText(element.innerText || element.textContent || '');
           return (
@@ -216,9 +222,9 @@
           );
         });
         if (turns.length) return turns[turns.length - 1];
-      } catch {
-        // Ignore invalid selectors from stale provider adapters.
       }
+    } catch {
+      // Ignore invalid selectors from stale provider adapters.
     }
 
     if (!hasContentRoot || !hasEnoughText) return null;

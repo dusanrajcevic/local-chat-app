@@ -437,5 +437,6 @@ test('ChatGPT September 2026 search-unit DOM resolves assistant action row and i
   assert.equal(saveButton.textContent, 'Save local');
   assert.equal(saveButton.dataset.localChatProvider, 'chatgpt');
   assert.equal(saveButton.__localChatContainer, assistantTarget.container);
+  assert.equal(content.inferSender(saveButton.__localChatContainer), 'bot');
   assert.equal(saveButton.previousElementSibling, assistantTarget.copyButton.parentElement);
 });
