@@ -638,7 +638,10 @@ test('content runtime keeps the Local toggle floating with the current ChatGPT d
   assert.equal(mount.parentElement, document.documentElement);
   assert.equal(mount.classList.contains('is-floating'), true);
   assert.equal(body.hasAttribute(contentDom.markers.AUTO_SEND_LAYOUT_MARKER), false);
-  assert.equal(document.querySelector('#current-composer-footer').hasAttribute(contentDom.markers.AUTO_SEND_COMPOSER_MARKER), false);
+  assert.equal(
+    document.querySelector('#current-composer-footer').hasAttribute(contentDom.markers.AUTO_SEND_COMPOSER_MARKER),
+    false
+  );
   assert.equal(body.contains(mount), false);
   assert.equal(mount.style.left, '608px');
 });

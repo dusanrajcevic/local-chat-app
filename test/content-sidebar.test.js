@@ -317,8 +317,12 @@ test('content sidebar mounts inside the current ChatGPT conversation scroll host
 
   if (!Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, 'innerText')) {
     Object.defineProperty(window.HTMLElement.prototype, 'innerText', {
-      get() { return this.textContent; },
-      set(value) { this.textContent = value; }
+      get() {
+        return this.textContent;
+      },
+      set(value) {
+        this.textContent = value;
+      }
     });
   }
 

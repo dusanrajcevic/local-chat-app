@@ -282,6 +282,15 @@
       return containingTurn;
     }
 
+    // When an action bar is rendered as a sibling after the message content
+    // (as in ChatGPT's September 2026 DOM), resolve the nearest preceding turn
+    // in document order before walking broader sibling subtrees. A sibling
+    // subtree can contain both the user and assistant units, which makes a
+    // selector-driven nested lookup vulnerable to binding the response toolbar
+    // to the older user message.
+    const precedingTurn = precedingTurnContainer(actionBar, adapter, { allowShortText });
+    if (precedingTurn) return precedingTurn;
+
     let branch = actionBar;
     let parent = actionBar.parentElement;
     let depth = 0;
@@ -302,7 +311,7 @@
       depth += 1;
     }
 
-    return precedingTurnContainer(actionBar, adapter, { allowShortText });
+    return null;
   }
 
   function providerActionBarForControl(startNode) {

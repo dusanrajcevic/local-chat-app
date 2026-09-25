@@ -419,10 +419,7 @@ test('ChatGPT September 2026 search-unit DOM resolves assistant action row and i
 
   const assistantTarget = targets.find((target) => target.sender === 'bot');
   assert.ok(assistantTarget);
-  assert.match(
-    assistantTarget.container.getAttribute('data-content-search-unit-key') || '',
-    /:assistant$/
-  );
+  assert.match(assistantTarget.container.getAttribute('data-content-search-unit-key') || '', /:assistant$/);
   assert.equal(assistantTarget.copyButton.getAttribute('aria-label'), 'Copy');
   assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
   assert.equal(

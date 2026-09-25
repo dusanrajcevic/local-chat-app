@@ -505,11 +505,7 @@
       // ChatGPT has used several composer wrappers over time. Prefer semantic/data
       // attributes instead of generated class names so React layout changes do not
       // make the Local toggle alternate between inline and floating placement.
-      const selectors = [
-        '[data-composer-surface="true"]',
-        '[data-composer-body]',
-        'form[data-chatgpt-composer]'
-      ];
+      const selectors = ['[data-composer-surface="true"]', '[data-composer-body]', 'form[data-chatgpt-composer]'];
 
       for (const selector of selectors) {
         if (composer.matches?.(selector)) return composer;
