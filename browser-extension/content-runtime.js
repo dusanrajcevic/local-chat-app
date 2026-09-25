@@ -659,21 +659,10 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'local-chat-save-btn';
-      const providerKey = providerInfo().key || 'unknown';
-      button.dataset.localChatProvider = providerKey;
-      if (providerKey === 'chatgpt') {
-        button.dataset.localChatIconButton = 'true';
-        button.setAttribute('aria-label', 'Save local');
-        button.title = 'Save local';
-        button.innerHTML = `
-          <svg aria-hidden="true" class="local-chat-save-icon" viewBox="0 0 20 20" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 2.25V12.25M10 12.25L6.75 9M10 12.25L13.25 9M4 13.5V15.25C4 16.2165 4.7835 17 5.75 17H14.25C15.2165 17 16 16.2165 16 15.25V13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>`;
-      } else {
-        button.textContent = 'Save local';
-        button.title = 'Save this whole message to your local chat app using the original copy button when possible';
-      }
+      button.textContent = 'Save local';
+      button.title = 'Save this whole message to your local chat app using the original copy button when possible';
       button.setAttribute(EXT_MARKER, 'true');
+      button.dataset.localChatProvider = providerInfo().key || 'unknown';
       button.__localChatContainer = container || null;
       button.__localChatCopyButton = copyButton || null;
 
