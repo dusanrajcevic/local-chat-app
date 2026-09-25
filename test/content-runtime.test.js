@@ -586,3 +586,62 @@ test('content runtime does not autosave an older assistant while a newer user tu
   assert.equal(assistantScheduleCalls.length, 0);
   assert.equal(document.querySelectorAll(`[${contentDom.markers.EXT_MARKER}]`).length, 2);
 });
+
+test('content runtime keeps the Local toggle floating with the current ChatGPT data-composer-body layout', () => {
+  installRuntimeDom(`
+    <main>
+      <form id="composer-form" data-chatgpt-composer>
+        <div data-composer-layout="multiline">
+          <div class="ComposerModeSurface-current">
+            <div id="current-composer-body" data-composer-body data-composer-layout="single-line">
+              <div id="current-composer-footer" data-composer-footer-responsive data-composer-layout="single-line">
+                <div contenteditable="true" aria-label="Ask ChatGPT"></div>
+                <button type="submit" aria-label="Send">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </main>
+  `);
+
+  const body = document.querySelector('#current-composer-body');
+  body.getBoundingClientRect = () => ({
+    x: 100,
+    y: 640,
+    top: 640,
+    left: 100,
+    right: 600,
+    bottom: 720,
+    width: 500,
+    height: 80
+  });
+
+  const { controller } = createController({
+    deps: {
+      findComposerContainer: () => document.querySelector('#current-composer-footer')
+    }
+  });
+  controller.setStateForTest({
+    localChatAppAvailable: true,
+    localChatAppAvailabilityLoaded: true,
+    localChatAutoSendEnabled: true,
+    autoSendPreferenceLoaded: true
+  });
+
+  controller.injectAutoSendToggle();
+  controller.injectAutoSendToggle();
+
+  const mounts = document.querySelectorAll(`[${contentDom.markers.AUTO_SEND_TOGGLE_MOUNT_MARKER}]`);
+  const mount = mounts[0];
+  assert.equal(mounts.length, 1);
+  assert.equal(mount.parentElement, document.documentElement);
+  assert.equal(mount.classList.contains('is-floating'), true);
+  assert.equal(body.hasAttribute(contentDom.markers.AUTO_SEND_LAYOUT_MARKER), false);
+  assert.equal(
+    document.querySelector('#current-composer-footer').hasAttribute(contentDom.markers.AUTO_SEND_COMPOSER_MARKER),
+    false
+  );
+  assert.equal(body.contains(mount), false);
+  assert.equal(mount.style.left, '608px');
+});

@@ -352,7 +352,7 @@
 
     function scheduleAssistantAutoSave(container, button, copyButton, options = {}) {
       if (!isAutoSendEnabled()) return;
-      if (!container || !button || !copyButton) return;
+      if (!container || !button) return;
       if (inferSender(container) !== 'bot') return;
       if (!options.assumeNewest && !isLikelyNewestAssistantContainer(container)) return;
       if (!hasActiveAssistantAutoSaveSlot()) return;

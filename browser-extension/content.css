@@ -20,6 +20,7 @@
   cursor: pointer;
   background: rgba(127, 127, 127, 0.08);
   color: inherit;
+  white-space: nowrap;
 }
 
 .local-chat-save-btn:hover,
@@ -31,6 +32,26 @@
 .local-chat-new-session-btn:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+/* Keep ChatGPT's Local Chat action as a text button. The provider action
+   row is compact, so prevent the label from wrapping while retaining the
+   generic Save local styling and behavior. */
+.local-chat-save-btn[data-local-chat-provider='chatgpt'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: auto !important;
+  min-width: 82px;
+  max-width: none !important;
+  min-height: 28px;
+  aspect-ratio: auto !important;
+  flex: 0 0 auto;
+  padding: 5px 10px !important;
+  margin-left: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* Gemini's Copy action is an Angular Material icon component. Keep Local Chat
@@ -648,11 +669,21 @@ html:has(.local-chat-modal-backdrop[data-local-chat-provider='chatgpt']) .local-
   background: rgba(127, 127, 127, 0.16);
 }
 
-.local-chat-auto-send-toggle input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
+.local-chat-auto-send-toggle input[type='checkbox'] {
+  -webkit-appearance: checkbox !important;
+  appearance: auto !important;
+  display: inline-block !important;
+  flex: 0 0 auto;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
   accent-color: #10a37f;
+  box-shadow: none !important;
+  filter: none !important;
   cursor: pointer;
 }
 

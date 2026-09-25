@@ -204,8 +204,14 @@
     )
       return subtree;
 
-    for (const selector of adapter.turnContainerSelectors || []) {
-      try {
+    // Query all provider turn selectors together so candidates are returned in
+    // actual DOM order. Checking selectors one-by-one can pick an older user
+    // message just because its selector appears before the assistant selector
+    // in the adapter (ChatGPT's current action bar is a sibling after a block
+    // that contains both message units).
+    try {
+      const selector = (adapter.turnContainerSelectors || []).join(',');
+      if (selector) {
         const turns = Array.from(subtree.querySelectorAll?.(selector) || []).filter((element) => {
           const text = normalizeText(element.innerText || element.textContent || '');
           return (
@@ -216,9 +222,9 @@
           );
         });
         if (turns.length) return turns[turns.length - 1];
-      } catch {
-        // Ignore invalid selectors from stale provider adapters.
       }
+    } catch {
+      // Ignore invalid selectors from stale provider adapters.
     }
 
     if (!hasContentRoot || !hasEnoughText) return null;
@@ -276,6 +282,15 @@
       return containingTurn;
     }
 
+    // When an action bar is rendered as a sibling after the message content
+    // (as in ChatGPT's September 2026 DOM), resolve the nearest preceding turn
+    // in document order before walking broader sibling subtrees. A sibling
+    // subtree can contain both the user and assistant units, which makes a
+    // selector-driven nested lookup vulnerable to binding the response toolbar
+    // to the older user message.
+    const precedingTurn = precedingTurnContainer(actionBar, adapter, { allowShortText });
+    if (precedingTurn) return precedingTurn;
+
     let branch = actionBar;
     let parent = actionBar.parentElement;
     let depth = 0;
@@ -296,7 +311,7 @@
       depth += 1;
     }
 
-    return precedingTurnContainer(actionBar, adapter, { allowShortText });
+    return null;
   }
 
   function providerActionBarForControl(startNode) {
