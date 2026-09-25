@@ -241,6 +241,17 @@
     function findProviderSidebarRoot() {
       if (!supportsLocalSidebarReplacement()) return null;
 
+      // ChatGPT's 2026 app shell split the narrow app rail from the conversation
+      // sidebar. Target the conversation navigation explicitly when it is present;
+      // the generic heuristics below remain as fallbacks for older layouts/providers.
+      if (isChatGptProvider()) {
+        const scrollHost = document.querySelector('[data-app-action-sidebar-scroll]');
+        const conversationSidebar =
+          scrollHost?.closest?.('nav[role="navigation"], .sidebar-navigation, aside') ||
+          document.querySelector('#app-shell-sidebar .sidebar-navigation');
+        if (conversationSidebar && isVisibleElement(conversationSidebar)) return conversationSidebar;
+      }
+
       const candidates = [
         document.querySelector('nav[aria-label*="chat" i]'),
         document.querySelector('nav[aria-label*="history" i]'),
@@ -943,6 +954,22 @@
 
     function placeLocalSidebarPanel(root, panel, hiddenSections = []) {
       if (!root || !panel) return;
+
+      if (isChatGptProvider()) {
+        // In the current ChatGPT app shell, only children of this scrolling host are
+        // visible as conversation content. Appending to the outer left-panel shell
+        // leaves the Local Chat panel in the DOM but outside the visible chat list.
+        const scrollHost =
+          (root.matches?.('[data-app-action-sidebar-scroll]') ? root : null) ||
+          root.querySelector?.('[data-app-action-sidebar-scroll]') ||
+          document.querySelector?.('[data-app-action-sidebar-scroll]');
+
+        if (scrollHost) {
+          if (panel.parentElement !== scrollHost) scrollHost.prepend(panel);
+          return;
+        }
+      }
+
       const insertionTarget =
         hiddenSections.find((section) => section.parentElement === root) || hiddenSections[0] || null;
 

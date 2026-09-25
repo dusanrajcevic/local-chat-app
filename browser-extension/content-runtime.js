@@ -36,6 +36,12 @@
       'button',
       '[role="button"]',
       '[data-message-author-role]',
+      '[data-content-search-unit-key$=":user"]',
+      '[data-content-search-unit-key$=":assistant"]',
+      '[data-chatgpt-search-unit-key$=":user"]',
+      '[data-chatgpt-search-unit-key$=":assistant"]',
+      '[data-conversation-role]',
+      '.turn-action-controls',
       '[data-testid^="conversation-turn"]',
       '[data-testid="message-content"]',
       'article',
@@ -495,8 +501,23 @@
 
     function chatGptComposerSurface(composer) {
       if (!isChatGptProvider() || !composer) return null;
-      if (composer.matches?.('[data-composer-surface="true"]')) return composer;
-      return composer.closest?.('[data-composer-surface="true"]') || null;
+
+      // ChatGPT has used several composer wrappers over time. Prefer semantic/data
+      // attributes instead of generated class names so React layout changes do not
+      // make the Local toggle alternate between inline and floating placement.
+      const selectors = [
+        '[data-composer-surface="true"]',
+        '[data-composer-body]',
+        'form[data-chatgpt-composer]'
+      ];
+
+      for (const selector of selectors) {
+        if (composer.matches?.(selector)) return composer;
+        const match = composer.closest?.(selector);
+        if (match) return match;
+      }
+
+      return null;
     }
 
     function canUseAutoSendSiblingLayout(composer) {
@@ -673,6 +694,15 @@
 
     function saveButtonInsertionAnchor(copyButton) {
       if (!copyButton) return null;
+
+      // ChatGPT's current action row wraps each native icon button in a
+      // display:contents span. Insert Local Chat beside that wrapper instead of
+      // mutating the wrapper's internal button-only structure.
+      if (providerInfo().key === 'chatgpt') {
+        const wrapper = copyButton.parentElement;
+        const actionBar = providerActionBarForControl(copyButton);
+        if (wrapper?.tagName === 'SPAN' && wrapper.parentElement && actionBar?.contains(wrapper)) return wrapper;
+      }
 
       // Gemini wraps its real Copy <button> in copy-button > gem-icon-button.
       // Inserting our button next to the inner <button> makes Angular Material

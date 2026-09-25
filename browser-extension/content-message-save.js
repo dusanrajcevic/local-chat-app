@@ -37,11 +37,23 @@
     const messageCandidateSelector = [
       '[data-message-author-role="user"]',
       '[data-message-author-role="assistant"]',
+      '[data-content-search-unit-key$=":user"]',
+      '[data-content-search-unit-key$=":assistant"]',
+      '[data-chatgpt-search-unit-key$=":user"]',
+      '[data-chatgpt-search-unit-key$=":assistant"]',
       '[data-testid^="conversation-turn"]',
       '[data-testid="message-content"]',
       'article'
     ].join(',');
-    const turnLikeSelector = ['[data-message-author-role]', '[data-testid^="conversation-turn"]', 'article'].join(',');
+    const turnLikeSelector = [
+      '[data-message-author-role]',
+      '[data-content-search-unit-key$=":user"]',
+      '[data-content-search-unit-key$=":assistant"]',
+      '[data-chatgpt-search-unit-key$=":user"]',
+      '[data-chatgpt-search-unit-key$=":assistant"]',
+      '[data-testid^="conversation-turn"]',
+      'article'
+    ].join(',');
 
     function sleep(ms) {
       return new Promise((resolve) => setTimeoutImpl(resolve, ms));

@@ -275,3 +275,79 @@ test('content sidebar hides native provider history sections and restores them o
   assert.equal(nativeHistory.hasAttribute(contentDom.markers.LOCAL_SIDEBAR_NATIVE_HIDDEN_MARKER), false);
   assert.equal(nativeHistory.style.getPropertyValue('display'), '');
 });
+
+test('content sidebar mounts inside the current ChatGPT conversation scroll host', async () => {
+  const dom = new JSDOM(
+    `<!doctype html><html><body>
+      <aside id="chatgpt-left-panel" class="app-shell-left-panel">
+        <div id="app-shell-sidebar">
+          <nav aria-label="App navigation"><button>Home</button></nav>
+          <div id="conversation-sidebar" class="sidebar-navigation ConversationSidebar-current">
+            <nav role="navigation" aria-label="Home">
+              <button>New chat</button>
+              <div id="chat-scroll" data-app-action-sidebar-scroll>
+                <section data-app-action-sidebar-section data-app-action-sidebar-section-heading="Projects">
+                  <div><div>Projects</div><button>Project one</button></div>
+                </section>
+                <div data-sidebar-project-container-id="chats">
+                  <section data-app-action-sidebar-section data-app-action-sidebar-section-heading="Recents">
+                    <div id="current-recents"><div>Recents</div><button>Native recent one</button><button>Native recent two</button></div>
+                  </section>
+                </div>
+              </div>
+            </nav>
+          </div>
+        </div>
+      </aside>
+      <main><textarea id="composer"></textarea></main>
+    </body></html>`,
+    { url: 'https://chatgpt.com/?temporary-chat=true', pretendToBeVisual: true }
+  );
+
+  const { window } = dom;
+  global.window = window;
+  global.document = window.document;
+  global.Node = window.Node;
+  global.Element = window.Element;
+  global.HTMLElement = window.HTMLElement;
+  global.navigator = window.navigator;
+  global.location = window.location;
+  global.sessionStorage = window.sessionStorage;
+  global.requestAnimationFrame = (callback) => setTimeout(callback, 0);
+
+  if (!Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, 'innerText')) {
+    Object.defineProperty(window.HTMLElement.prototype, 'innerText', {
+      get() { return this.textContent; },
+      set(value) { this.textContent = value; }
+    });
+  }
+
+  window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    if (this.style?.getPropertyValue('display') === 'none') {
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+    }
+    if (this.id === 'conversation-sidebar' || this.getAttribute('aria-label') === 'Home') {
+      return { x: 52, y: 0, top: 0, left: 52, right: 340, bottom: 760, width: 288, height: 760 };
+    }
+    if (this.id === 'chat-scroll') {
+      return { x: 52, y: 80, top: 80, left: 52, right: 340, bottom: 740, width: 288, height: 660 };
+    }
+    return { x: 60, y: 100, top: 100, left: 60, right: 330, bottom: 300, width: 270, height: 200 };
+  };
+
+  const chromeApi = createChromeMock({ LIST_LOCAL_SIDEBAR: sidebarPayload });
+  const { controller } = createController(chromeApi);
+
+  await controller.refreshLocalSidebarReplacement(true);
+
+  const panel = document.querySelector(`[${contentDom.markers.LOCAL_SIDEBAR_MARKER}]`);
+  const scrollHost = document.querySelector('[data-app-action-sidebar-scroll]');
+  assert.ok(panel);
+  assert.equal(panel.parentElement, scrollHost);
+  assert.equal(scrollHost.firstElementChild, panel);
+  assert.match(panel.textContent, /Local chats/);
+  assert.match(panel.textContent, /Alpha/);
+
+  await controller.refreshLocalSidebarReplacement(false);
+  assert.equal(panel.parentElement, scrollHost, 'refresh must not move the panel back to the outer shell');
+});

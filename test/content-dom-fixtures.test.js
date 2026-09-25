@@ -385,3 +385,57 @@ test('provider transcript and transient assistant status text are rejected befor
   );
   assert.equal(content.shouldSkipExtractedMessageText('A real answer with enough context.', 'bot', 'assistant'), false);
 });
+
+test('ChatGPT current response-actions layout maps Copy response to its assistant turn', () => {
+  installDomFixture('chatgpt-current', 'https://chatgpt.com/c/test');
+
+  const copyButton = document.querySelector('[data-testid="copy-turn-action-button"]');
+  assert.ok(copyButton);
+  assert.equal(content.isCopyButton(copyButton), true);
+
+  const container = content.findMessageContainer(copyButton);
+  assert.ok(container);
+  assert.equal(container.hasAttribute('data-conversation-screenshot-content'), true);
+  assert.equal(content.inferSender(container), 'bot');
+  assert.match(content.extractMessageTextFallback(container, 'bot'), /Current ChatGPT response/i);
+
+  assert.equal(content.markAssistantContainerReadyForTest(container), true);
+  content.injectButtons();
+
+  const saveButton = document.querySelector(`[${content.markers.EXT_MARKER}]`);
+  assert.ok(saveButton, 'expected Save local beside ChatGPT response actions');
+  assert.equal(saveButton.previousElementSibling, copyButton);
+});
+
+test('ChatGPT September 2026 search-unit DOM resolves assistant action row and injects Save local', () => {
+  installDomFixture('chatgpt-sep-2026', 'https://chatgpt.com/c/test');
+
+  const targets = contentDom.providerActionBarSaveTargets();
+  assert.equal(targets.length, 2);
+  assert.deepEqual(
+    targets.map((target) => target.sender),
+    ['me', 'bot']
+  );
+
+  const assistantTarget = targets.find((target) => target.sender === 'bot');
+  assert.ok(assistantTarget);
+  assert.match(
+    assistantTarget.container.getAttribute('data-content-search-unit-key') || '',
+    /:assistant$/
+  );
+  assert.equal(assistantTarget.copyButton.getAttribute('aria-label'), 'Copy');
+  assert.equal(content.isProviderActionBarControl(assistantTarget.copyButton), true);
+  assert.equal(
+    content.extractMessageTextFallback(assistantTarget.container, 'bot'),
+    'Hi! 😊 How can I help you today?'
+  );
+
+  content.injectButtons();
+
+  const saveButton = content.saveButtonForCopyButton(assistantTarget.copyButton);
+  assert.ok(saveButton?.hasAttribute(content.markers.EXT_MARKER));
+  assert.equal(saveButton.textContent, 'Save local');
+  assert.equal(saveButton.dataset.localChatProvider, 'chatgpt');
+  assert.equal(saveButton.__localChatContainer, assistantTarget.container);
+  assert.equal(saveButton.previousElementSibling, assistantTarget.copyButton.parentElement);
+});
