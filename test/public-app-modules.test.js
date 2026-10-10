@@ -75,7 +75,7 @@ function createMemoryStorage(seed = {}) {
   };
 }
 
-function createHarness({ routes = {} } = {}) {
+function createHarness({ routes = {}, controllerOptions = {} } = {}) {
   const dom = loadDom();
   const storage = createMemoryStorage();
   const calls = [];
@@ -147,7 +147,8 @@ function createHarness({ routes = {} } = {}) {
     win: dom.window,
     doc: dom.window.document,
     announceStatus,
-    copyTextToClipboard: clipboard.copyTextToClipboard
+    copyTextToClipboard: clipboard.copyTextToClipboard,
+    ...controllerOptions
   });
 
   return { dom, storage, calls, state, el, api, view, modal, clipboard, controllers, messageNavigator };
@@ -718,11 +719,16 @@ test('clipboard falls back when Clipboard API write permission is denied', async
   assert.deepEqual(copiedValues, ['ABCDEF123456']);
 });
 
-test('extension pairing code controller renders a short-lived code in the local app', async () => {
+test('extension pairing code controller renders a short-lived code and resets copy feedback for a new code', async () => {
+  let pairingRequestCount = 0;
+  const pairings = [
+    { code: 'ABCDEF123456', expiresAt: '2026-08-11T03:00:00.000Z' },
+    { code: 'ZYXWVU654321', expiresAt: '2026-08-11T03:05:00.000Z' }
+  ];
   const harness = createHarness({
     routes: {
       'POST /api/extension/pairing-code': {
-        body: { code: 'ABCDEF123456', expiresAt: '2026-08-11T03:00:00.000Z' }
+        body: () => pairings[pairingRequestCount++]
       }
     }
   });
@@ -736,10 +742,61 @@ test('extension pairing code controller renders a short-lived code in the local 
   assert.equal(await harness.controllers.copyExtensionPairingCode(), true);
   assert.equal(harness.clipboard.lastText, 'ABCDEF123456');
   assert.equal(harness.el.appStatus.textContent, 'Pairing code copied to clipboard.');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, '✓ Copied!');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, 'true');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Pairing code copied');
 
+  const nextResult = await harness.controllers.createExtensionPairingCode();
+  assert.equal(nextResult.code, 'ZYXWVU654321');
+  assert.equal(harness.el.extensionPairingCode.textContent, 'ZYXWVU654321');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, 'Copy code');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, undefined);
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Copy pairing code');
+
+  assert.equal(await harness.controllers.copyExtensionPairingCode(), true);
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, '✓ Copied!');
   harness.controllers.closeExtensionPairing();
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, 'Copy code');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, undefined);
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Copy pairing code');
   assert.equal(harness.el.extensionPairingModal.getAttribute('aria-hidden'), 'true');
   assert.equal(harness.dom.window.document.body.classList.contains('modal-open'), false);
+});
+
+test('extension pairing copied feedback resets automatically after 1.6 seconds', async () => {
+  let scheduled = null;
+  const setTimeoutFn = (callback, delay) => {
+    const handle = { unref() {} };
+    scheduled = { callback, delay, handle };
+    return handle;
+  };
+  const clearTimeoutFn = (handle) => {
+    if (scheduled?.handle === handle) scheduled = null;
+  };
+  const harness = createHarness({
+    routes: {
+      'POST /api/extension/pairing-code': {
+        body: { code: 'ABCDEF123456', expiresAt: '2026-08-11T03:00:00.000Z' }
+      }
+    },
+    controllerOptions: { setTimeoutFn, clearTimeoutFn }
+  });
+
+  await harness.controllers.createExtensionPairingCode();
+  await harness.controllers.copyExtensionPairingCode();
+
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, '✓ Copied!');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, 'true');
+  assert.equal(scheduled?.delay, 1600);
+
+  const timeoutCallback = scheduled.callback;
+  scheduled = null;
+  timeoutCallback();
+
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.textContent, 'Copy code');
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.dataset.copied, undefined);
+  assert.equal(harness.el.copyExtensionPairingCodeBtn.getAttribute('aria-label'), 'Copy pairing code');
+  assert.equal(scheduled, null);
 });
 
 test('text prompt modal resolves values and toggles the global modal class', async () => {
