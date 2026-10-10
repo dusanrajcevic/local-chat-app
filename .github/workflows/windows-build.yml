@@ -1,0 +1,56 @@
+name: Windows desktop build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test packaged Windows Electron application
+        run: npm run test:electron-smoke
+
+      - name: Build Windows installer and portable app
+        run: npm run build:win -- --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Check release artifacts
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -File -Filter 'Local Chat App Setup *.exe' | Select-Object -First 1
+          $portable = Get-ChildItem dist -File -Filter 'Local Chat App *.exe' |
+            Where-Object { $_.Name -notlike '* Setup *' } | Select-Object -First 1
+          if (-not $installer) { throw 'Windows NSIS installer was not created.' }
+          if (-not $portable) { throw 'Windows portable executable was not created.' }
+          if (-not (Test-Path 'dist/win-unpacked/Local Chat App.exe')) {
+            throw 'Windows unpacked executable was not created.'
+          }
+          Write-Host "Installer: $($installer.Name)"
+          Write-Host "Portable: $($portable.Name)"
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-chat-app-windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
+          retention-days: 14
