@@ -21,8 +21,24 @@ Platform-specific commands:
 
 ```bash
 npm run build:mac
-npm run build:win
+npm run build:win -- --x64 --publish never
 ```
+
+### Building and validating Windows releases
+
+Use a Windows x64 machine, Windows VM, or the **Windows desktop build** GitHub Actions workflow (`Actions` → `Windows desktop build` → `Run workflow`). The workflow builds the NSIS installer and portable executable on a Windows runner and uploads them as `local-chat-app-windows-x64` after running the packaged Electron launch smoke test.
+
+From PowerShell on Windows:
+
+```powershell
+npm ci
+npm run test:electron-smoke
+npm run build:win -- --x64 --publish never
+```
+
+Before testing the installer, launch `dist/win-unpacked/Local Chat App.exe` on Windows to distinguish application startup problems from installer/shortcut problems. The `dist/Local Chat App <version>.exe` artifact is portable and does not install the application. Test `dist/Local Chat App Setup <version>.exe` separately on a clean Windows installation. Check **Windows Security → Virus & threat protection → Protection history** if an installed executable or shortcut target disappears. Do not disable antivirus as a workaround; inspect the detection and verify the package first.
+
+The workflow verifies the _unpacked packaged app_ launches and the installer/portable outputs exist. It does not replace a clean Windows NSIS install/uninstall acceptance test. Neither artifact is code-signed by the default configuration, so Windows may show an unknown-publisher or SmartScreen warning.
 
 Artifacts are written to `dist/` and should not be committed. With the current Electron Builder targets, release builds produce a macOS DMG/ZIP and Windows NSIS/portable executables. Typical filenames are `Local Chat App-<version>-<arch>.dmg`, `Local Chat App Setup <version>.exe`, and `Local Chat App <version>.exe`; unpacked `mac-*`, `win-unpacked/`, and test-only directory builds are intermediate output rather than release assets.
 
