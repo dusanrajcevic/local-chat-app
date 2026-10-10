@@ -79,12 +79,20 @@ export function electronLaunchArgs({
   return platform === 'linux' && (ci || uid === 0) ? ['--no-sandbox'] : [];
 }
 
-export function electronBuilderCommand({ outputDir, platform = process.platform } = {}) {
+export function electronBuilderCommand({ outputDir } = {}) {
   if (!outputDir) throw new Error('An Electron smoke build output directory is required.');
 
+  // Spawn Node directly instead of npm.cmd: Windows cannot execute .cmd files
+  // through child_process.spawn() without a shell. Avoid shell quoting as well.
   return {
-    command: platform === 'win32' ? 'npm.cmd' : 'npm',
-    args: ['run', 'build:desktop:dir', '--', `--config.directories.output=${outputDir}`]
+    command: process.execPath,
+    args: [
+      path.resolve(import.meta.dirname, '../node_modules/electron-builder/cli.js'),
+      '--dir',
+      '--publish',
+      'never',
+      `--config.directories.output=${outputDir}`
+    ]
   };
 }
 

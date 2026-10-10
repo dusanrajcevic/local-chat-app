@@ -17,17 +17,23 @@ function withTempDir(callback) {
   }
 }
 
-test('Electron smoke builder uses an unpacked package in an isolated output directory', async () => {
+test('Electron smoke builder directly launches Node with an unpacked build and isolated output', async () => {
   const { electronBuilderCommand } = await loadSupport();
-  const command = electronBuilderCommand({ outputDir: '/tmp/local-chat-electron-dist', platform: 'linux' });
+  const command = electronBuilderCommand({ outputDir: '/tmp/local-chat-electron-dist' });
 
-  assert.equal(command.command, 'npm');
+  assert.equal(command.command, process.execPath);
   assert.deepEqual(command.args, [
-    'run',
-    'build:desktop:dir',
-    '--',
+    path.resolve(__dirname, '../node_modules/electron-builder/cli.js'),
+    '--dir',
+    '--publish',
+    'never',
     '--config.directories.output=/tmp/local-chat-electron-dist'
   ]);
+});
+
+test('Electron smoke builder requires an output directory', async () => {
+  const { electronBuilderCommand } = await loadSupport();
+  assert.throws(() => electronBuilderCommand(), /output directory is required/);
 });
 
 test('packaged executable discovery resolves macOS app bundles', async () => {
